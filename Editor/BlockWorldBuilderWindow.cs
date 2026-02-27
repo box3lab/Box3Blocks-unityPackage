@@ -90,6 +90,7 @@ namespace BlockWorldMVP.Editor
 
         private void OnGUI()
         {
+            HandleToolHotkeys(Event.current);
             DrawRootSection();
             EditorGUILayout.Space(6f);
             DrawToolSection();
@@ -330,6 +331,8 @@ namespace BlockWorldMVP.Editor
 
         private void OnSceneGUI(SceneView sceneView)
         {
+            HandleToolHotkeys(Event.current);
+
             if (_root == null)
             {
                 return;
@@ -380,6 +383,45 @@ namespace BlockWorldMVP.Editor
 
                 e.Use();
             }
+        }
+
+        private void HandleToolHotkeys(Event e)
+        {
+            if (e == null || e.type != EventType.KeyDown || !e.shift)
+            {
+                return;
+            }
+
+            EditTool? nextTool = null;
+            switch (e.keyCode)
+            {
+                case KeyCode.Alpha1:
+                case KeyCode.Keypad1:
+                    nextTool = EditTool.Place;
+                    break;
+                case KeyCode.Alpha2:
+                case KeyCode.Keypad2:
+                    nextTool = EditTool.Erase;
+                    break;
+                case KeyCode.Alpha3:
+                case KeyCode.Keypad3:
+                    nextTool = EditTool.Replace;
+                    break;
+                case KeyCode.Alpha4:
+                case KeyCode.Keypad4:
+                    nextTool = EditTool.Rotate;
+                    break;
+            }
+
+            if (!nextTool.HasValue || _tool == nextTool.Value)
+            {
+                return;
+            }
+
+            _tool = nextTool.Value;
+            Repaint();
+            SceneView.RepaintAll();
+            e.Use();
         }
 
         private bool TryGetTargetPosition(Vector2 mousePosition, out Vector3Int target, out PlacedBlock hitBlock)
