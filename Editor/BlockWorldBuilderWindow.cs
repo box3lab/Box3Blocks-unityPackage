@@ -14,9 +14,87 @@ namespace BlockWorldMVP.Editor
         private const string BlockSpecPath = "Packages/com.box3.blockworld-mvp/Assets/block-spec.json";
         private const string BlockIdPath = "Packages/com.box3.blockworld-mvp/Assets/block-id.json";
         private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
+        private const string CategoryAll = "All";
+        private const string CategoryRecent = "Recent";
+        private const string CategoryUncategorized = "Uncategorized";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
         private static readonly Regex SideRegex = new Regex(@"^(.*)_(back|bottom|front|left|right|top)\.png$", RegexOptions.Compiled);
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
+        private static readonly Dictionary<string, string> UiTextEn = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["window.title"] = "Block World Builder",
+            ["section.world_root"] = "World Root",
+            ["section.editor_tool"] = "Editor Tool",
+            ["section.block_library"] = "Block Library",
+            ["root.root"] = "Root",
+            ["root.create"] = "Create Root",
+            ["root.clear"] = "Clear Root",
+            ["root.clean_materials"] = "Clean Materials",
+            ["dialog.ok"] = "OK",
+            ["dialog.clean_materials_message"] = "Removed {0} unused generated materials.",
+            ["tool.place"] = "Place",
+            ["tool.erase"] = "Erase",
+            ["tool.replace"] = "Replace",
+            ["tool.rotate"] = "Rotate",
+            ["tool.horizontal"] = "Horizontal (X/Z)",
+            ["tool.height"] = "Height (Y)",
+            ["tool.brush_volume"] = "Brush Volume: {0}x{1}x{2}",
+            ["tool.assign_root_help"] = "Assign or create Root first. Scene click edit works only when Root exists.",
+            ["library.search"] = "Search",
+            ["library.blocks_layout"] = "Blocks: {0}  |  Layout: {1} columns",
+            ["card.anim"] = "Anim",
+            ["card.glow"] = "Glow",
+            ["card.transparent"] = "Transparent",
+            ["card.selected"] = "SELECTED",
+            ["category.all"] = "All",
+            ["category.recent"] = "Recent",
+            ["category.uncategorized"] = "Uncategorized"
+        };
+        private static readonly Dictionary<string, string> UiTextZh = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["window.title"] = "方块世界构建器",
+            ["section.world_root"] = "世界根节点",
+            ["section.editor_tool"] = "编辑工具",
+            ["section.block_library"] = "方块库",
+            ["root.root"] = "根节点",
+            ["root.create"] = "创建根节点",
+            ["root.clear"] = "清空根节点",
+            ["root.clean_materials"] = "清理材质",
+            ["dialog.ok"] = "确定",
+            ["dialog.clean_materials_message"] = "已删除 {0} 个未使用的生成材质。",
+            ["tool.place"] = "放置",
+            ["tool.erase"] = "擦除",
+            ["tool.replace"] = "替换",
+            ["tool.rotate"] = "旋转",
+            ["tool.horizontal"] = "水平 (X/Z)",
+            ["tool.height"] = "高度 (Y)",
+            ["tool.brush_volume"] = "笔刷体积: {0}x{1}x{2}",
+            ["tool.assign_root_help"] = "请先指定或创建根节点。只有存在根节点时才支持场景点击编辑。",
+            ["library.search"] = "搜索",
+            ["library.blocks_layout"] = "方块: {0}  |  布局: {1} 列",
+            ["card.anim"] = "动画",
+            ["card.glow"] = "发光",
+            ["card.transparent"] = "透明",
+            ["card.selected"] = "已选择",
+            ["category.all"] = "全部",
+            ["category.recent"] = "最近",
+            ["category.uncategorized"] = "未分类"
+        };
+        private static readonly Dictionary<string, string> CategoryZhMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["color"] = "颜色",
+            ["element"] = "元素",
+            ["food"] = "食物",
+            ["letter"] = "字母",
+            ["light"] = "光源",
+            ["nature"] = "自然",
+            ["number"] = "数字",
+            ["structure"] = "结构",
+            ["symbol"] = "符号",
+            ["misc"] = "杂项",
+            ["building"] = "建筑",
+            ["glass"] = "玻璃"
+        };
 
         private class BlockDefinition
         {
@@ -26,7 +104,7 @@ namespace BlockWorldMVP.Editor
             public bool hasAnimation;
             public Texture2D previewTexture;
             public int numericId = -1;
-            public string category = "Uncategorized";
+            public string category = CategoryUncategorized;
             public bool emitsLight;
             public bool transparent;
             public Color lightColor = new Color(1f, 0.8f, 0.2f, 1f);
@@ -61,7 +139,7 @@ namespace BlockWorldMVP.Editor
         private List<BlockDefinition> _allBlocks = new List<BlockDefinition>();
         private List<BlockDefinition> _filteredBlocks = new List<BlockDefinition>();
         private List<string> _recentBlockIds = new List<string>();
-        private List<string> _categories = new List<string> { "All" };
+        private List<string> _categories = new List<string> { CategoryAll };
         private int _selectedIndex;
         private int _selectedCategory;
         private string _search = string.Empty;
@@ -82,7 +160,7 @@ namespace BlockWorldMVP.Editor
         [MenuItem("Tools/Block World MVP/World Builder")]
         public static void Open()
         {
-            GetWindow<BlockWorldBuilderWindow>("Block World Builder");
+            GetWindow<BlockWorldBuilderWindow>(L("window.title"));
         }
 
         private void OnEnable()
@@ -96,15 +174,68 @@ namespace BlockWorldMVP.Editor
             SceneView.duringSceneGui -= OnSceneGUI;
         }
 
+        private static bool IsChineseUI()
+        {
+            SystemLanguage language = Application.systemLanguage;
+            return language == SystemLanguage.ChineseSimplified || language == SystemLanguage.ChineseTraditional;
+        }
+
+        private static string L(string key)
+        {
+            Dictionary<string, string> table = IsChineseUI() ? UiTextZh : UiTextEn;
+            if (table.TryGetValue(key, out string value))
+            {
+                return value;
+            }
+
+            return UiTextEn.TryGetValue(key, out value) ? value : key;
+        }
+
+        private static string Lf(string key, params object[] args)
+        {
+            return string.Format(CultureInfo.InvariantCulture, L(key), args);
+        }
+
+        private static string LocalizeCategoryLabel(string category)
+        {
+            if (string.IsNullOrWhiteSpace(category))
+            {
+                return L("category.uncategorized");
+            }
+
+            if (string.Equals(category, CategoryAll, StringComparison.OrdinalIgnoreCase))
+            {
+                return L("category.all");
+            }
+
+            if (string.Equals(category, CategoryRecent, StringComparison.OrdinalIgnoreCase))
+            {
+                return L("category.recent");
+            }
+
+            if (string.Equals(category, CategoryUncategorized, StringComparison.OrdinalIgnoreCase))
+            {
+                return L("category.uncategorized");
+            }
+
+            if (IsChineseUI() && CategoryZhMap.TryGetValue(category.Trim(), out string zh))
+            {
+                return zh;
+            }
+
+            return category;
+        }
+
         private void OnGUI()
         {
             EnsureStyles();
             HandleToolHotkeys(Event.current);
-            DrawSection("World Root", DrawRootSection);
+            titleContent = new GUIContent(L("window.title"));
+            DrawSection(L("section.world_root"), DrawRootSection);
             EditorGUILayout.Space(6f);
-            DrawSection("Editor Tool", DrawToolSection);
+            DrawSection(L("section.editor_tool"), DrawToolSection);
             EditorGUILayout.Space(6f);
-            DrawSection("Block Library", DrawBlockListSection);
+            DrawSection(L("section.block_library"), DrawBlockListSection);
         }
 
         private void EnsureStyles()
@@ -192,36 +323,36 @@ namespace BlockWorldMVP.Editor
 
         private void DrawRootSection()
         {
-            _root = (Transform)EditorGUILayout.ObjectField("Root", _root, typeof(Transform), true);
+            _root = (Transform)EditorGUILayout.ObjectField(L("root.root"), _root, typeof(Transform), true);
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button("Create Root", _primaryButtonStyle))
+                if (GUILayout.Button(L("root.create"), _primaryButtonStyle))
                 {
                     CreateRoot();
                 }
 
-                if (GUILayout.Button("Clear Root", _dangerButtonStyle))
+                if (GUILayout.Button(L("root.clear"), _dangerButtonStyle))
                 {
                     ClearRoot();
                 }
 
-                if (GUILayout.Button("Clean Materials", _primaryButtonStyle))
+                if (GUILayout.Button(L("root.clean_materials"), _primaryButtonStyle))
                 {
                     int deleted = CleanupUnusedGeneratedMaterials();
-                    EditorUtility.DisplayDialog("Block World Builder", $"Removed {deleted} unused generated materials.", "OK");
+                    EditorUtility.DisplayDialog(L("window.title"), Lf("dialog.clean_materials_message", deleted), L("dialog.ok"));
                 }
             }
         }
 
         private void DrawToolSection()
         {
-            _tool = (EditTool)GUILayout.Toolbar((int)_tool, new[] { "Place", "Erase", "Replace", "Rotate" });
+            _tool = (EditTool)GUILayout.Toolbar((int)_tool, new[] { L("tool.place"), L("tool.erase"), L("tool.replace"), L("tool.rotate") });
             EditorGUILayout.Space(4f);
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                EditorGUILayout.LabelField("Horizontal (X/Z)", _subtleLabelStyle, GUILayout.Width(104f));
+                EditorGUILayout.LabelField(L("tool.horizontal"), _subtleLabelStyle, GUILayout.Width(104f));
                 int horizontalInput = Mathf.Max(1, EditorGUILayout.IntField(_brushHorizontalSize, GUILayout.Width(52f)));
                 float horizontalSliderMax = Mathf.Max(16f, horizontalInput);
                 _brushHorizontalSize = Mathf.Max(1, Mathf.RoundToInt(GUILayout.HorizontalSlider(horizontalInput, 1f, horizontalSliderMax)));
@@ -231,16 +362,16 @@ namespace BlockWorldMVP.Editor
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                EditorGUILayout.LabelField("Height (Y)", _subtleLabelStyle, GUILayout.Width(70f));
+                EditorGUILayout.LabelField(L("tool.height"), _subtleLabelStyle, GUILayout.Width(70f));
                 int heightInput = Mathf.Max(1, EditorGUILayout.IntField(_brushHeight, GUILayout.Width(52f)));
                 float heightSliderMax = Mathf.Max(16f, heightInput);
                 _brushHeight = Mathf.Max(1, Mathf.RoundToInt(GUILayout.HorizontalSlider(heightInput, 1f, heightSliderMax)));
             }
-            EditorGUILayout.LabelField($"Brush Volume: {_brushHorizontalSize}x{_brushHorizontalSize}x{_brushHeight}", _subtleLabelStyle);
+            EditorGUILayout.LabelField(Lf("tool.brush_volume", _brushHorizontalSize, _brushHorizontalSize, _brushHeight), _subtleLabelStyle);
 
             if (_root == null)
             {
-                EditorGUILayout.HelpBox("Assign or create Root first. Scene click edit works only when Root exists.", MessageType.Info);
+                EditorGUILayout.HelpBox(L("tool.assign_root_help"), MessageType.Info);
             }
         }
 
@@ -248,7 +379,7 @@ namespace BlockWorldMVP.Editor
         {
             using (new EditorGUILayout.HorizontalScope())
             {
-                string newSearch = EditorGUILayout.TextField("Search", _search, _searchFieldStyle);
+                string newSearch = EditorGUILayout.TextField(L("library.search"), _search, _searchFieldStyle);
                 if (!string.Equals(newSearch, _search, StringComparison.Ordinal))
                 {
                     _search = newSearch;
@@ -263,7 +394,7 @@ namespace BlockWorldMVP.Editor
             }
 
             int columns = CalculateColumnCount();
-            EditorGUILayout.LabelField($"Blocks: {_filteredBlocks.Count}  |  Layout: {columns} columns", _subtleLabelStyle);
+            EditorGUILayout.LabelField(Lf("library.blocks_layout", _filteredBlocks.Count, columns), _subtleLabelStyle);
             EditorGUILayout.Space(2f);
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
             DrawBlockGrid(columns);
@@ -301,20 +432,21 @@ namespace BlockWorldMVP.Editor
             string info = string.Empty;
             if (block.hasAnimation)
             {
-                info = "Anim";
+                info = L("card.anim");
             }
 
             if (block.emitsLight)
             {
-                info = string.IsNullOrEmpty(info) ? "Glow" : $"{info} | Glow";
+                info = string.IsNullOrEmpty(info) ? L("card.glow") : $"{info} | {L("card.glow")}";
             }
             if (block.transparent)
             {
-                info = string.IsNullOrEmpty(info) ? "Transparent" : $"{info} | Transparent";
+                info = string.IsNullOrEmpty(info) ? L("card.transparent") : $"{info} | {L("card.transparent")}";
             }
 
             string title = string.IsNullOrWhiteSpace(block.displayName) ? block.id : block.displayName;
-            string subtitle = string.IsNullOrWhiteSpace(info) ? block.category : $"{block.category} | {info}";
+            string categoryLabel = LocalizeCategoryLabel(block.category);
+            string subtitle = string.IsNullOrWhiteSpace(info) ? categoryLabel : $"{categoryLabel} | {info}";
             GUIStyle cardStyle = new GUIStyle(EditorStyles.miniButton)
             {
                 fixedHeight = Mathf.Max(132f, PreviewSize + 60f),
@@ -382,7 +514,7 @@ namespace BlockWorldMVP.Editor
 
             Rect badgeRect = new Rect(rect.x + 6f, rect.y + 6f, 62f, 16f);
             EditorGUI.DrawRect(badgeRect, new Color(0.05f, 0.18f, 0.08f, 0.95f));
-            EditorGUI.LabelField(badgeRect, "SELECTED", new GUIStyle(EditorStyles.miniLabel)
+            EditorGUI.LabelField(badgeRect, L("card.selected"), new GUIStyle(EditorStyles.miniLabel)
             {
                 alignment = TextAnchor.MiddleCenter,
                 normal = { textColor = new Color(0.5f, 1f, 0.55f, 1f) },
@@ -407,7 +539,8 @@ namespace BlockWorldMVP.Editor
             EditorGUILayout.BeginHorizontal();
             for (int i = 0; i < _categories.Count; i++)
             {
-                string label = _categories[i];
+                string categoryKey = _categories[i];
+                string label = LocalizeCategoryLabel(categoryKey);
                 float buttonWidth = Mathf.Clamp(EditorStyles.miniButton.CalcSize(new GUIContent(label)).x + padX, 52f, 220f);
 
                 if (lineWidth > 0f && lineWidth + buttonWidth > availableWidth)
@@ -1093,7 +1226,7 @@ namespace BlockWorldMVP.Editor
         {
             _filteredBlocks.Clear();
             string selectedCategory = _categories[Mathf.Clamp(_selectedCategory, 0, _categories.Count - 1)];
-            IEnumerable<BlockDefinition> source = string.Equals(selectedCategory, "Recent", StringComparison.OrdinalIgnoreCase)
+            IEnumerable<BlockDefinition> source = string.Equals(selectedCategory, CategoryRecent, StringComparison.OrdinalIgnoreCase)
                 ? EnumerateRecentBlocks()
                 : _allBlocks;
 
@@ -1102,8 +1235,8 @@ namespace BlockWorldMVP.Editor
                 bool matchSearch = string.IsNullOrWhiteSpace(_search)
                     || block.id.IndexOf(_search, StringComparison.OrdinalIgnoreCase) >= 0
                     || (!string.IsNullOrWhiteSpace(block.displayName) && block.displayName.IndexOf(_search, StringComparison.OrdinalIgnoreCase) >= 0);
-                bool matchCategory = selectedCategory == "All"
-                    || string.Equals(selectedCategory, "Recent", StringComparison.OrdinalIgnoreCase)
+                bool matchCategory = selectedCategory == CategoryAll
+                    || string.Equals(selectedCategory, CategoryRecent, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(block.category, selectedCategory, StringComparison.OrdinalIgnoreCase);
                 if (matchSearch && matchCategory)
                 {
@@ -1210,10 +1343,10 @@ namespace BlockWorldMVP.Editor
 
             List<string> categories = new List<string>(categorySet);
             categories.Sort(StringComparer.OrdinalIgnoreCase);
-            categories.Insert(0, "All");
-            categories.Insert(1, "Recent");
+            categories.Insert(0, CategoryAll);
+            categories.Insert(1, CategoryRecent);
 
-            string current = _categories.Count > 0 && _selectedCategory < _categories.Count ? _categories[_selectedCategory] : "All";
+            string current = _categories.Count > 0 && _selectedCategory < _categories.Count ? _categories[_selectedCategory] : CategoryAll;
             _categories = categories;
             int nextIndex = _categories.FindIndex(c => string.Equals(c, current, StringComparison.OrdinalIgnoreCase));
             _selectedCategory = nextIndex >= 0 ? nextIndex : 0;
@@ -1385,7 +1518,7 @@ namespace BlockWorldMVP.Editor
         {
             if (string.IsNullOrWhiteSpace(id))
             {
-                return "Uncategorized";
+                return CategoryUncategorized;
             }
 
             string lower = id.ToLowerInvariant();
