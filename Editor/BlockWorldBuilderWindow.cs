@@ -1628,31 +1628,22 @@ namespace BlockWorldMVP.Editor
                     return null;
                 }
 
+                EnsureCrispTextureImport(texturePath, transparent);
+
                 string fileName = Path.GetFileNameWithoutExtension(texturePath);
                 string variant = transparent ? "trans" : "opaque";
                 string materialAssetPath = $"{MaterialFolder}/{fileName}_{variant}.mat";
                 Material material = AssetDatabase.LoadAssetAtPath<Material>(materialAssetPath);
                 if (material != null)
                 {
+                    RefreshTextureSampling(material.mainTexture as Texture2D);
                     return material;
                 }
 
                 Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
                 if (texture != null)
                 {
-                    if (transparent)
-                    {
-                        TextureImporter importer = AssetImporter.GetAtPath(texturePath) as TextureImporter;
-                        if (importer != null && !importer.alphaIsTransparency)
-                        {
-                            importer.alphaIsTransparency = true;
-                            importer.SaveAndReimport();
-                            texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
-                        }
-                    }
-
-                    texture.filterMode = FilterMode.Point;
-                    texture.anisoLevel = 0;
+                    RefreshTextureSampling(texture);
                 }
 
                 Shader shader = transparent ? Shader.Find("Unlit/Transparent") : Shader.Find("Unlit/Texture");
@@ -1674,6 +1665,80 @@ namespace BlockWorldMVP.Editor
 
                 AssetDatabase.CreateAsset(material, materialAssetPath);
                 return material;
+            }
+
+            private static void EnsureCrispTextureImport(string texturePath, bool transparent)
+            {
+                TextureImporter importer = AssetImporter.GetAtPath(texturePath) as TextureImporter;
+                if (importer == null)
+                {
+                    return;
+                }
+
+                bool changed = false;
+                if (importer.textureType != TextureImporterType.Default)
+                {
+                    importer.textureType = TextureImporterType.Default;
+                    changed = true;
+                }
+
+                if (importer.filterMode != FilterMode.Point)
+                {
+                    importer.filterMode = FilterMode.Point;
+                    changed = true;
+                }
+
+                if (importer.textureCompression != TextureImporterCompression.Uncompressed)
+                {
+                    importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    changed = true;
+                }
+
+                if (importer.mipmapEnabled)
+                {
+                    importer.mipmapEnabled = false;
+                    changed = true;
+                }
+
+                if (importer.streamingMipmaps)
+                {
+                    importer.streamingMipmaps = false;
+                    changed = true;
+                }
+
+                if (importer.anisoLevel != 0)
+                {
+                    importer.anisoLevel = 0;
+                    changed = true;
+                }
+
+                if (importer.npotScale != TextureImporterNPOTScale.None)
+                {
+                    importer.npotScale = TextureImporterNPOTScale.None;
+                    changed = true;
+                }
+
+                if (transparent && !importer.alphaIsTransparency)
+                {
+                    importer.alphaIsTransparency = true;
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    importer.SaveAndReimport();
+                }
+            }
+
+            private static void RefreshTextureSampling(Texture2D texture)
+            {
+                if (texture == null)
+                {
+                    return;
+                }
+
+                texture.filterMode = FilterMode.Point;
+                texture.anisoLevel = 0;
             }
 
             private static void SetupTransparentMaterial(Material material)
