@@ -371,7 +371,7 @@ namespace BlockWorldMVP.Editor
                 }
                 else if (_tool == EditTool.Rotate)
                 {
-                    RotateBlock(hitBlock, target);
+                    RotateBlockBrush(hitBlock, target);
                 }
                 else
                 {
@@ -595,17 +595,22 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private void RotateBlock(PlacedBlock hitBlock, Vector3Int fallbackPosition)
+        private void RotateBlockBrush(PlacedBlock hitBlock, Vector3Int fallbackPosition)
         {
-            GameObject target = hitBlock != null ? hitBlock.gameObject : FindBlockAt(fallbackPosition);
-            if (target == null)
+            Vector3Int origin = hitBlock != null ? Vector3Int.RoundToInt(hitBlock.transform.position) : fallbackPosition;
+            List<Vector3Int> positions = BuildBrushPositions(origin);
+            for (int i = 0; i < positions.Count; i++)
             {
-                return;
-            }
+                GameObject target = FindBlockAt(positions[i]);
+                if (target == null)
+                {
+                    continue;
+                }
 
-            Undo.RecordObject(target.transform, "Rotate Block 90");
-            target.transform.Rotate(0f, 90f, 0f, Space.World);
-            EditorUtility.SetDirty(target.transform);
+                Undo.RecordObject(target.transform, "Rotate Block 90");
+                target.transform.Rotate(0f, 90f, 0f, Space.World);
+                EditorUtility.SetDirty(target.transform);
+            }
         }
 
         private GameObject FindBlockAt(Vector3Int position)
@@ -773,6 +778,7 @@ namespace BlockWorldMVP.Editor
 
         private void ReloadBlockLibrary()
         {
+            EnforceCrispImportForAllBlockTextures();
             _allBlocks.Clear();
             Dictionary<string, BlockMetadata> metadataMap = LoadBlockMetadata();
 
@@ -834,6 +840,108 @@ namespace BlockWorldMVP.Editor
             _allBlocks.Sort((a, b) => string.CompareOrdinal(a.id, b.id));
             BuildCategories();
             ApplyFilter();
+        }
+
+        private static void EnforceCrispImportForAllBlockTextures()
+        {
+            string[] guids = AssetDatabase.FindAssets("t:Texture2D", new[] { BlockTextureFolder });
+            bool changedAny = false;
+            for (int i = 0; i < guids.Length; i++)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guids[i]);
+                TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+                if (importer == null)
+                {
+                    continue;
+                }
+
+                if (ApplyCrispTextureImportSettings(importer))
+                {
+                    importer.SaveAndReimport();
+                    changedAny = true;
+                }
+            }
+
+            if (changedAny)
+            {
+                AssetDatabase.Refresh();
+            }
+        }
+
+        private static bool ApplyCrispTextureImportSettings(TextureImporter importer)
+        {
+            bool changed = false;
+
+            if (importer.textureType != TextureImporterType.Default)
+            {
+                importer.textureType = TextureImporterType.Default;
+                changed = true;
+            }
+
+            if (importer.filterMode != FilterMode.Point)
+            {
+                importer.filterMode = FilterMode.Point;
+                changed = true;
+            }
+
+            if (importer.textureCompression != TextureImporterCompression.Uncompressed)
+            {
+                importer.textureCompression = TextureImporterCompression.Uncompressed;
+                changed = true;
+            }
+
+            if (importer.mipmapEnabled)
+            {
+                importer.mipmapEnabled = false;
+                changed = true;
+            }
+
+            if (importer.streamingMipmaps)
+            {
+                importer.streamingMipmaps = false;
+                changed = true;
+            }
+
+            if (importer.anisoLevel != 0)
+            {
+                importer.anisoLevel = 0;
+                changed = true;
+            }
+
+            if (importer.npotScale != TextureImporterNPOTScale.None)
+            {
+                importer.npotScale = TextureImporterNPOTScale.None;
+                changed = true;
+            }
+
+            // Remove platform overrides that can force compression back on.
+            if (ClearPlatformOverride(importer, "Standalone"))
+            {
+                changed = true;
+            }
+            if (ClearPlatformOverride(importer, "Android"))
+            {
+                changed = true;
+            }
+            if (ClearPlatformOverride(importer, "iPhone"))
+            {
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        private static bool ClearPlatformOverride(TextureImporter importer, string platform)
+        {
+            TextureImporterPlatformSettings settings = importer.GetPlatformTextureSettings(platform);
+            if (!settings.overridden)
+            {
+                return false;
+            }
+
+            settings.overridden = false;
+            importer.SetPlatformTextureSettings(settings);
+            return true;
         }
 
         private void ApplyFilter()
