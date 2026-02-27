@@ -20,6 +20,7 @@ namespace BlockWorldMVP.Editor
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
         private static readonly Regex SideRegex = new Regex(@"^(.*)_(back|bottom|front|left|right|top)\.png$", RegexOptions.Compiled);
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
+        private static readonly int MainTexStShaderId = Shader.PropertyToID("_MainTex_ST");
 
         private class BlockDefinition
         {
@@ -41,6 +42,12 @@ namespace BlockWorldMVP.Editor
             public int frameCount = 1;
             public float frameDuration = 0.05f;
             public int[] frames = Array.Empty<int>();
+        }
+
+        private sealed class AnimatedPreviewCacheEntry
+        {
+            public int signature;
+            public Texture2D texture;
         }
 
         private class BlockMetadata
@@ -81,6 +88,11 @@ namespace BlockWorldMVP.Editor
         private GUIStyle _searchFieldStyle;
         private GUIStyle _categoryTabStyle;
         private GUIStyle _categoryTabSelectedStyle;
+        private readonly Dictionary<string, Mesh> _staticBlockMeshCache = new Dictionary<string, Mesh>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Texture2D> _blockCardPreviewCache = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, AnimatedPreviewCacheEntry> _animatedBlockCardPreviewCache = new Dictionary<string, AnimatedPreviewCacheEntry>(StringComparer.OrdinalIgnoreCase);
+        private PreviewRenderUtility _blockCardPreviewUtility;
+        private double _nextAnimatedPreviewRepaintTime;
 
         [MenuItem("Tools/Block World MVP/World Builder")]
         public static void Open()
@@ -97,6 +109,13 @@ namespace BlockWorldMVP.Editor
         private void OnDisable()
         {
             SceneView.duringSceneGui -= OnSceneGUI;
+            _staticBlockMeshCache.Clear();
+            ClearBlockCardPreviewCache();
+            if (_blockCardPreviewUtility != null)
+            {
+                _blockCardPreviewUtility.Cleanup();
+                _blockCardPreviewUtility = null;
+            }
         }
 
         private static string L(string key)
@@ -308,6 +327,7 @@ namespace BlockWorldMVP.Editor
             DrawBlockGrid(columns);
 
             EditorGUILayout.EndScrollView();
+            RequestAnimatedCardPreviewRepaint();
         }
 
         private void DrawBlockGrid(int columns)
@@ -373,9 +393,10 @@ namespace BlockWorldMVP.Editor
                 rect.y + 10f,
                 PreviewSize,
                 PreviewSize);
-            if (block.previewTexture != null)
+            Texture2D cardPreview = GetOrBuildBlockCardPreview(block);
+            if (cardPreview != null)
             {
-                EditorGUI.DrawPreviewTexture(previewRect, block.previewTexture, null, ScaleMode.ScaleToFit);
+                GUI.DrawTexture(previewRect, cardPreview, ScaleMode.ScaleToFit, true);
             }
 
             Rect textRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, rect.height - (PreviewSize + 20f));
@@ -697,9 +718,16 @@ namespace BlockWorldMVP.Editor
                 return false;
             }
 
-            Material[] materials = BlockAssetFactory.GetFaceMaterials(definition.sideTexturePaths, definition.transparent);
-            Mesh cubeMesh = BlockAssetFactory.GetOrCreateCubeMesh();
-            if (cubeMesh == null || materials == null)
+            if (!BlockAssetFactory.TryGetFaceRenderData(definition.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData))
+            {
+                return false;
+            }
+
+            bool hasAnimatedFaces = HasAnimatedFaces(definition);
+            Mesh meshToUse = hasAnimatedFaces
+                ? BlockAssetFactory.GetOrCreateCubeMesh()
+                : GetOrCreateStaticBlockMesh(definition, renderData);
+            if (meshToUse == null || renderData == null || renderData.materials == null)
             {
                 return false;
             }
@@ -711,17 +739,24 @@ namespace BlockWorldMVP.Editor
             go.transform.position = position;
 
             MeshFilter meshFilter = go.AddComponent<MeshFilter>();
-            meshFilter.sharedMesh = cubeMesh;
+            meshFilter.sharedMesh = meshToUse;
 
             MeshRenderer meshRenderer = go.AddComponent<MeshRenderer>();
-            ConfigureRendererMaterials(meshRenderer, materials, definition);
+            if (hasAnimatedFaces)
+            {
+                ConfigureRendererMaterials(meshRenderer, renderData, definition);
+            }
+            else
+            {
+                meshRenderer.sharedMaterial = renderData.materials[0];
+            }
 
             MeshCollider meshCollider = go.AddComponent<MeshCollider>();
-            meshCollider.sharedMesh = cubeMesh;
+            meshCollider.sharedMesh = meshToUse;
 
             PlacedBlock marker = go.AddComponent<PlacedBlock>();
             marker.BlockId = definition.id;
-            marker.HasAnimation = definition.hasAnimation;
+            marker.HasAnimation = hasAnimatedFaces;
 
             EditorUtility.SetDirty(go);
             return true;
@@ -855,7 +890,28 @@ namespace BlockWorldMVP.Editor
             GameObject go = new GameObject("BlockWorldRoot");
             Undo.RegisterCreatedObjectUndo(go, "Create Block Root");
             _root = go.transform;
+            EnsureRuntimeCuller(_root);
             Selection.activeObject = go;
+        }
+
+        private static void EnsureRuntimeCuller(Transform root)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            BlockWorldOcclusionCuller culler = root.GetComponent<BlockWorldOcclusionCuller>();
+            if (culler == null)
+            {
+                culler = Undo.AddComponent<BlockWorldOcclusionCuller>(root.gameObject);
+            }
+
+            if (culler != null)
+            {
+                culler.Rebuild();
+                EditorUtility.SetDirty(culler);
+            }
         }
 
         private void ClearRoot()
@@ -966,6 +1022,9 @@ namespace BlockWorldMVP.Editor
         private void ReloadBlockLibrary()
         {
             EnforceCrispImportForAllBlockTextures();
+            BlockAssetFactory.InvalidateCaches();
+            _staticBlockMeshCache.Clear();
+            ClearBlockCardPreviewCache();
             _allBlocks.Clear();
             Dictionary<string, BlockMetadata> metadataMap = LoadBlockMetadata();
 
@@ -1156,24 +1215,35 @@ namespace BlockWorldMVP.Editor
             _selectedIndex = Mathf.Clamp(_selectedIndex, 0, Mathf.Max(0, _filteredBlocks.Count - 1));
         }
 
-        private static void ConfigureRendererMaterials(MeshRenderer renderer, Material[] baseMaterials, BlockDefinition definition)
+        private static void ConfigureRendererMaterials(MeshRenderer renderer, BlockAssetFactory.FaceRenderData renderData, BlockDefinition definition)
         {
-            if (renderer == null)
+            if (renderer == null || renderData == null || renderData.materials == null || renderData.faceMainTexSt == null)
             {
                 return;
             }
+
+            renderer.sharedMaterials = renderData.materials;
 
             if (!definition.hasAnimation || definition.sideAnimations.Count == 0)
             {
-                renderer.sharedMaterials = baseMaterials;
+                ApplyFaceMainTexSt(renderer, renderData.faceMainTexSt);
+                BlockTextureAnimator existingAnimator = renderer.GetComponent<BlockTextureAnimator>();
+                if (existingAnimator != null)
+                {
+                    if (Application.isPlaying)
+                    {
+                        UnityEngine.Object.Destroy(existingAnimator);
+                    }
+                    else
+                    {
+                        UnityEngine.Object.DestroyImmediate(existingAnimator);
+                    }
+                }
                 return;
             }
 
-            Material[] instanceMaterials = new Material[baseMaterials.Length];
-            Array.Copy(baseMaterials, instanceMaterials, baseMaterials.Length);
             List<BlockTextureAnimator.FaceAnimation> runtimeAnimations = new List<BlockTextureAnimator.FaceAnimation>();
-
-            for (int i = 0; i < SideOrder.Length && i < instanceMaterials.Length; i++)
+            for (int i = 0; i < SideOrder.Length && i < renderData.faceMainTexSt.Length; i++)
             {
                 string side = SideOrder[i];
                 if (!definition.sideAnimations.TryGetValue(side, out FaceAnimationSpec spec))
@@ -1181,35 +1251,506 @@ namespace BlockWorldMVP.Editor
                     continue;
                 }
 
-                if (spec == null || spec.frameCount <= 1 || instanceMaterials[i] == null)
+                if (spec == null || spec.frameCount <= 1)
                 {
                     continue;
                 }
-
-                Material instance = new Material(instanceMaterials[i])
-                {
-                    name = instanceMaterials[i].name + "_anim"
-                };
-                instanceMaterials[i] = instance;
 
                 runtimeAnimations.Add(new BlockTextureAnimator.FaceAnimation
                 {
                     materialIndex = i,
                     frameCount = spec.frameCount,
                     frameDuration = Mathf.Max(0.01f, spec.frameDuration),
-                    frames = spec.frames
+                    frames = spec.frames,
+                    baseMainTexSt = renderData.faceMainTexSt[i]
                 });
             }
 
             if (runtimeAnimations.Count == 0)
             {
-                renderer.sharedMaterials = baseMaterials;
+                ApplyFaceMainTexSt(renderer, renderData.faceMainTexSt);
+                BlockTextureAnimator existingAnimator = renderer.GetComponent<BlockTextureAnimator>();
+                if (existingAnimator != null)
+                {
+                    if (Application.isPlaying)
+                    {
+                        UnityEngine.Object.Destroy(existingAnimator);
+                    }
+                    else
+                    {
+                        UnityEngine.Object.DestroyImmediate(existingAnimator);
+                    }
+                }
                 return;
             }
 
-            renderer.sharedMaterials = instanceMaterials;
-            BlockTextureAnimator animator = renderer.gameObject.AddComponent<BlockTextureAnimator>();
-            animator.SetAnimations(runtimeAnimations.ToArray());
+            BlockTextureAnimator animator = renderer.GetComponent<BlockTextureAnimator>();
+            if (animator == null)
+            {
+                animator = renderer.gameObject.AddComponent<BlockTextureAnimator>();
+            }
+
+            animator.SetAnimations(runtimeAnimations.ToArray(), renderData.faceMainTexSt);
+        }
+
+        private static bool HasAnimatedFaces(BlockDefinition definition)
+        {
+            if (definition == null || !definition.hasAnimation || definition.sideAnimations == null || definition.sideAnimations.Count == 0)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < SideOrder.Length; i++)
+            {
+                string side = SideOrder[i];
+                if (!definition.sideAnimations.TryGetValue(side, out FaceAnimationSpec spec))
+                {
+                    continue;
+                }
+
+                if (spec != null && spec.frameCount > 1)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private Mesh GetOrCreateStaticBlockMesh(BlockDefinition definition, BlockAssetFactory.FaceRenderData renderData)
+        {
+            if (definition == null || renderData == null || renderData.faceMainTexSt == null)
+            {
+                return null;
+            }
+
+            if (_staticBlockMeshCache.TryGetValue(definition.id, out Mesh cached) && cached != null)
+            {
+                return cached;
+            }
+
+            Mesh mesh = BuildStaticBlockMesh(definition.id, renderData.faceMainTexSt);
+            _staticBlockMeshCache[definition.id] = mesh;
+            return mesh;
+        }
+
+        private static Mesh BuildStaticBlockMesh(string id, Vector4[] faceMainTexSt)
+        {
+            if (faceMainTexSt == null || faceMainTexSt.Length < SideOrder.Length)
+            {
+                return null;
+            }
+
+            Vector3[] vertices = new Vector3[24]
+            {
+                new Vector3(-0.5f, -0.5f, -0.5f), new Vector3(0.5f, -0.5f, -0.5f), new Vector3(0.5f, 0.5f, -0.5f), new Vector3(-0.5f, 0.5f, -0.5f),
+                new Vector3(-0.5f, -0.5f, 0.5f), new Vector3(0.5f, -0.5f, 0.5f), new Vector3(0.5f, -0.5f, -0.5f), new Vector3(-0.5f, -0.5f, -0.5f),
+                new Vector3(0.5f, -0.5f, 0.5f), new Vector3(-0.5f, -0.5f, 0.5f), new Vector3(-0.5f, 0.5f, 0.5f), new Vector3(0.5f, 0.5f, 0.5f),
+                new Vector3(-0.5f, -0.5f, 0.5f), new Vector3(-0.5f, -0.5f, -0.5f), new Vector3(-0.5f, 0.5f, -0.5f), new Vector3(-0.5f, 0.5f, 0.5f),
+                new Vector3(0.5f, -0.5f, -0.5f), new Vector3(0.5f, -0.5f, 0.5f), new Vector3(0.5f, 0.5f, 0.5f), new Vector3(0.5f, 0.5f, -0.5f),
+                new Vector3(-0.5f, 0.5f, -0.5f), new Vector3(0.5f, 0.5f, -0.5f), new Vector3(0.5f, 0.5f, 0.5f), new Vector3(-0.5f, 0.5f, 0.5f)
+            };
+
+            Vector2[] uvs = new Vector2[24];
+            for (int face = 0; face < SideOrder.Length; face++)
+            {
+                Vector4 st = faceMainTexSt[face];
+                int offset = face * 4;
+                uvs[offset + 0] = new Vector2(st.z, st.w);
+                uvs[offset + 1] = new Vector2(st.z + st.x, st.w);
+                uvs[offset + 2] = new Vector2(st.z + st.x, st.w + st.y);
+                uvs[offset + 3] = new Vector2(st.z, st.w + st.y);
+            }
+
+            int[] triangles = new int[36]
+            {
+                0, 2, 1, 0, 3, 2,
+                4, 6, 5, 4, 7, 6,
+                8, 10, 9, 8, 11, 10,
+                12, 14, 13, 12, 15, 14,
+                16, 18, 17, 16, 19, 18,
+                20, 22, 21, 20, 23, 22
+            };
+
+            Mesh mesh = new Mesh
+            {
+                name = $"StaticBlock_{id}"
+            };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0, true);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private Texture2D GetOrBuildBlockCardPreview(BlockDefinition block)
+        {
+            if (block == null || string.IsNullOrWhiteSpace(block.id))
+            {
+                return null;
+            }
+
+            if (HasAnimatedFaces(block))
+            {
+                return GetOrBuildAnimatedBlockCardPreview(block);
+            }
+
+            if (_blockCardPreviewCache.TryGetValue(block.id, out Texture2D cached) && cached != null)
+            {
+                return cached;
+            }
+
+            if (!BlockAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData)
+                || renderData == null
+                || renderData.materials == null
+                || renderData.materials.Length == 0
+                || renderData.materials[0] == null)
+            {
+                return block.previewTexture;
+            }
+
+            Mesh mesh = GetOrCreateStaticBlockMesh(block, renderData);
+            if (mesh == null)
+            {
+                return block.previewTexture;
+            }
+
+            Texture2D preview = RenderBlockCardPreview(mesh, renderData.materials[0]);
+            if (preview != null)
+            {
+                _blockCardPreviewCache[block.id] = preview;
+                return preview;
+            }
+
+            return block.previewTexture;
+        }
+
+        private Texture2D GetOrBuildAnimatedBlockCardPreview(BlockDefinition block)
+        {
+            if (block == null || string.IsNullOrWhiteSpace(block.id))
+            {
+                return null;
+            }
+
+            if (!BlockAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData)
+                || renderData == null
+                || renderData.materials == null
+                || renderData.materials.Length == 0
+                || renderData.materials[0] == null
+                || renderData.faceMainTexSt == null
+                || renderData.faceMainTexSt.Length < SideOrder.Length)
+            {
+                return block.previewTexture;
+            }
+
+            float now = Time.realtimeSinceStartup;
+            int signature = ComputeAnimatedPreviewSignature(block, now);
+            if (_animatedBlockCardPreviewCache.TryGetValue(block.id, out AnimatedPreviewCacheEntry entry)
+                && entry != null
+                && entry.signature == signature
+                && entry.texture != null)
+            {
+                return entry.texture;
+            }
+
+            Mesh animatedMesh = BuildAnimatedPreviewMesh(block.id, renderData.faceMainTexSt, block.sideAnimations, now);
+            if (animatedMesh == null)
+            {
+                return block.previewTexture;
+            }
+
+            Texture2D nextTexture = RenderBlockCardPreview(animatedMesh, renderData.materials[0]);
+            DestroyImmediate(animatedMesh);
+            if (nextTexture == null)
+            {
+                return block.previewTexture;
+            }
+
+            if (entry == null)
+            {
+                entry = new AnimatedPreviewCacheEntry();
+                _animatedBlockCardPreviewCache[block.id] = entry;
+            }
+            else if (entry.texture != null)
+            {
+                DestroyImmediate(entry.texture);
+            }
+
+            entry.signature = signature;
+            entry.texture = nextTexture;
+            return nextTexture;
+        }
+
+        private static int ComputeAnimatedPreviewSignature(BlockDefinition block, float timeNow)
+        {
+            if (block == null)
+            {
+                return 0;
+            }
+
+            unchecked
+            {
+                int hash = 17;
+                for (int i = 0; i < SideOrder.Length; i++)
+                {
+                    int frame = ResolveAnimationFrameIndexForSide(block, SideOrder[i], timeNow);
+                    hash = hash * 31 + frame;
+                }
+
+                return hash;
+            }
+        }
+
+        private static int ResolveAnimationFrameIndexForSide(BlockDefinition block, string side, float timeNow)
+        {
+            if (block == null
+                || block.sideAnimations == null
+                || !block.sideAnimations.TryGetValue(side, out FaceAnimationSpec spec)
+                || spec == null
+                || spec.frameCount <= 1)
+            {
+                return 0;
+            }
+
+            return ResolveAnimationFrameIndex(spec, timeNow);
+        }
+
+        private static int ResolveAnimationFrameIndex(FaceAnimationSpec spec, float timeNow)
+        {
+            if (spec == null || spec.frameCount <= 1)
+            {
+                return 0;
+            }
+
+            int[] sequence = spec.frames;
+            int sequenceLength = sequence != null && sequence.Length > 0 ? sequence.Length : spec.frameCount;
+            float frameDuration = Mathf.Max(0.01f, spec.frameDuration);
+            int step = Mathf.FloorToInt(Mathf.Max(0f, timeNow) / frameDuration) % sequenceLength;
+            int frameIndex = sequence != null && sequence.Length > 0 ? sequence[step] : step;
+            return Mathf.Clamp(frameIndex, 0, spec.frameCount - 1);
+        }
+
+        private static Mesh BuildAnimatedPreviewMesh(string id, Vector4[] baseFaceSt, Dictionary<string, FaceAnimationSpec> sideAnimations, float timeNow)
+        {
+            if (baseFaceSt == null || baseFaceSt.Length < SideOrder.Length)
+            {
+                return null;
+            }
+
+            Vector4[] animatedFaceSt = new Vector4[SideOrder.Length];
+            for (int i = 0; i < SideOrder.Length; i++)
+            {
+                Vector4 st = baseFaceSt[i];
+                string side = SideOrder[i];
+                if (sideAnimations != null
+                    && sideAnimations.TryGetValue(side, out FaceAnimationSpec spec)
+                    && spec != null
+                    && spec.frameCount > 1)
+                {
+                    int frameIndex = ResolveAnimationFrameIndex(spec, timeNow);
+                    float scaleY = st.y / spec.frameCount;
+                    float offsetY = st.w + st.y - (frameIndex + 1f) * scaleY;
+                    st = new Vector4(st.x, scaleY, st.z, offsetY);
+                }
+
+                animatedFaceSt[i] = st;
+            }
+
+            return BuildStaticBlockMesh(id + "_animPreview", animatedFaceSt);
+        }
+
+        private Texture2D RenderBlockCardPreview(Mesh mesh, Material material)
+        {
+            if (mesh == null || material == null)
+            {
+                return null;
+            }
+
+            if (_blockCardPreviewUtility == null)
+            {
+                _blockCardPreviewUtility = new PreviewRenderUtility();
+                _blockCardPreviewUtility.cameraFieldOfView = 22f;
+            }
+
+            Texture2D onBlack = RenderPreviewWithBackground(mesh, material, new Color(0f, 0f, 0f, 1f));
+            Texture2D onWhite = RenderPreviewWithBackground(mesh, material, new Color(1f, 1f, 1f, 1f));
+            if (onBlack == null || onWhite == null)
+            {
+                if (onBlack != null)
+                {
+                    DestroyImmediate(onBlack);
+                }
+
+                if (onWhite != null)
+                {
+                    DestroyImmediate(onWhite);
+                }
+
+                return onBlack ?? onWhite;
+            }
+
+            Texture2D composed = ComposeTransparentPreview(onBlack, onWhite);
+            DestroyImmediate(onBlack);
+            DestroyImmediate(onWhite);
+            return composed;
+        }
+
+        private Texture2D RenderPreviewWithBackground(Mesh mesh, Material material, Color backgroundColor)
+        {
+            const int size = 128;
+            Rect r = new Rect(0f, 0f, size, size);
+            _blockCardPreviewUtility.BeginStaticPreview(r);
+
+            Camera cam = _blockCardPreviewUtility.camera;
+            cam.clearFlags = CameraClearFlags.Color;
+            cam.backgroundColor = backgroundColor;
+            cam.nearClipPlane = 0.01f;
+            cam.farClipPlane = 50f;
+
+            _blockCardPreviewUtility.lights[0].intensity = 1.2f;
+            _blockCardPreviewUtility.lights[0].transform.rotation = Quaternion.Euler(40f, 35f, 0f);
+            _blockCardPreviewUtility.lights[1].intensity = 0.9f;
+            _blockCardPreviewUtility.lights[1].transform.rotation = Quaternion.Euler(340f, 220f, 0f);
+            _blockCardPreviewUtility.ambientColor = new Color(0.55f, 0.55f, 0.55f, 1f);
+
+            Bounds b = mesh.bounds;
+            float radius = Mathf.Max(0.5f, b.extents.magnitude);
+            Quaternion viewRot = Quaternion.Euler(22f, -30f, 0f);
+            Vector3 target = b.center;
+            Vector3 camDir = viewRot * new Vector3(0f, 0f, 1.1f);
+            cam.transform.position = target - camDir * radius * 4.6f;
+            cam.transform.rotation = viewRot;
+            cam.transform.LookAt(target);
+
+            _blockCardPreviewUtility.DrawMesh(mesh, Matrix4x4.identity, material, 0);
+            cam.Render();
+            return _blockCardPreviewUtility.EndStaticPreview();
+        }
+
+        private static Texture2D ComposeTransparentPreview(Texture2D onBlack, Texture2D onWhite)
+        {
+            if (onBlack == null || onWhite == null || onBlack.width != onWhite.width || onBlack.height != onWhite.height)
+            {
+                return onBlack ?? onWhite;
+            }
+
+            int w = onBlack.width;
+            int h = onBlack.height;
+            Color32[] bPixels = onBlack.GetPixels32();
+            Color32[] wPixels = onWhite.GetPixels32();
+            Color32[] outPixels = new Color32[bPixels.Length];
+
+            for (int i = 0; i < bPixels.Length; i++)
+            {
+                Color32 cb = bPixels[i];
+                Color32 cw = wPixels[i];
+
+                float cbR = cb.r / 255f;
+                float cbG = cb.g / 255f;
+                float cbB = cb.b / 255f;
+                float cwR = cw.r / 255f;
+                float cwG = cw.g / 255f;
+                float cwB = cw.b / 255f;
+
+                // Derived from:
+                // Cblack = A * F
+                // Cwhite = A * F + (1 - A)
+                float aR = 1f - (cwR - cbR);
+                float aG = 1f - (cwG - cbG);
+                float aB = 1f - (cwB - cbB);
+                float alpha = Mathf.Clamp01((aR + aG + aB) / 3f);
+
+                float outR = 0f;
+                float outG = 0f;
+                float outB = 0f;
+                if (alpha > 1e-5f)
+                {
+                    outR = Mathf.Clamp01(cbR / alpha);
+                    outG = Mathf.Clamp01(cbG / alpha);
+                    outB = Mathf.Clamp01(cbB / alpha);
+                }
+
+                outPixels[i] = new Color(outR, outG, outB, alpha);
+            }
+
+            Texture2D outTex = new Texture2D(w, h, TextureFormat.RGBA32, false, false);
+            outTex.SetPixels32(outPixels);
+            outTex.Apply(false, false);
+            return outTex;
+        }
+
+        private void ClearBlockCardPreviewCache()
+        {
+            foreach (KeyValuePair<string, Texture2D> kv in _blockCardPreviewCache)
+            {
+                if (kv.Value != null)
+                {
+                    DestroyImmediate(kv.Value);
+                }
+            }
+
+            _blockCardPreviewCache.Clear();
+
+            foreach (KeyValuePair<string, AnimatedPreviewCacheEntry> kv in _animatedBlockCardPreviewCache)
+            {
+                if (kv.Value != null && kv.Value.texture != null)
+                {
+                    DestroyImmediate(kv.Value.texture);
+                }
+            }
+
+            _animatedBlockCardPreviewCache.Clear();
+        }
+
+        private void RequestAnimatedCardPreviewRepaint()
+        {
+            bool hasAnimatedVisible = false;
+            for (int i = 0; i < _filteredBlocks.Count; i++)
+            {
+                if (HasAnimatedFaces(_filteredBlocks[i]))
+                {
+                    hasAnimatedVisible = true;
+                    break;
+                }
+            }
+
+            if (!hasAnimatedVisible)
+            {
+                return;
+            }
+
+            double now = EditorApplication.timeSinceStartup;
+            if (now < _nextAnimatedPreviewRepaintTime)
+            {
+                return;
+            }
+
+            _nextAnimatedPreviewRepaintTime = now + (1.0 / 12.0);
+            Repaint();
+        }
+
+        private static void ApplyFaceMainTexSt(Renderer renderer, Vector4[] faceMainTexSt)
+        {
+            if (renderer == null || faceMainTexSt == null)
+            {
+                return;
+            }
+
+            Material[] shared = renderer.sharedMaterials;
+            if (shared == null || shared.Length == 0)
+            {
+                return;
+            }
+
+            MaterialPropertyBlock block = new MaterialPropertyBlock();
+            int count = Mathf.Min(shared.Length, faceMainTexSt.Length);
+            for (int i = 0; i < count; i++)
+            {
+                renderer.GetPropertyBlock(block, i);
+                block.SetVector(MainTexStShaderId, faceMainTexSt[i]);
+                renderer.SetPropertyBlock(block, i);
+            }
         }
 
         private static Texture2D ResolvePreviewTexture(BlockDefinition definition)
