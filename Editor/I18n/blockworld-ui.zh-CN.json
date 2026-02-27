@@ -1,0 +1,48 @@
+{
+  "entries": [
+    { "key": "window.title", "value": "方块世界构建器" },
+    { "key": "section.world_root", "value": "世界根节点" },
+    { "key": "section.editor_tool", "value": "编辑工具" },
+    { "key": "section.block_library", "value": "方块库" },
+    { "key": "root.root", "value": "根节点" },
+    { "key": "root.create", "value": "创建根节点" },
+    { "key": "root.clear", "value": "清空根节点" },
+    { "key": "root.clean_materials", "value": "清理材质" },
+    { "key": "dialog.ok", "value": "确定" },
+    { "key": "dialog.clean_materials_message", "value": "已删除 {0} 个未使用的生成材质。" },
+    { "key": "tool.place", "value": "放置" },
+    { "key": "tool.erase", "value": "擦除" },
+    { "key": "tool.replace", "value": "替换" },
+    { "key": "tool.rotate", "value": "旋转" },
+    { "key": "tool.horizontal", "value": "水平 (X/Z)" },
+    { "key": "tool.height", "value": "高度 (Y)" },
+    { "key": "tool.brush_volume", "value": "笔刷体积: {0}x{1}x{2}" },
+    { "key": "tool.assign_root_help", "value": "请先指定或创建根节点。只有存在根节点时才支持场景点击编辑。" },
+    { "key": "library.search", "value": "搜索" },
+    { "key": "library.blocks_layout", "value": "方块: {0}  |  布局: {1} 列" },
+    { "key": "card.anim", "value": "动画" },
+    { "key": "card.glow", "value": "发光" },
+    { "key": "card.transparent", "value": "透明" },
+    { "key": "card.selected", "value": "已选择" },
+    { "key": "category.all", "value": "全部" },
+    { "key": "category.recent", "value": "最近" },
+    { "key": "category.uncategorized", "value": "未分类" }
+  ],
+  "categories": [
+    { "key": "color", "value": "颜色" },
+    { "key": "element", "value": "元素" },
+    { "key": "food", "value": "食物" },
+    { "key": "letter", "value": "字母" },
+    { "key": "light", "value": "光源" },
+    { "key": "nature", "value": "自然" },
+    { "key": "number", "value": "数字" },
+    { "key": "structure", "value": "结构" },
+    { "key": "symbol", "value": "符号" },
+    { "key": "misc", "value": "杂项" },
+    { "key": "building", "value": "建筑" },
+    { "key": "glass", "value": "玻璃" }
+  ],
+  "blocks": [
+    { "key": "blue_grass", "value": "蓝色草地" }
+  ]
+}
