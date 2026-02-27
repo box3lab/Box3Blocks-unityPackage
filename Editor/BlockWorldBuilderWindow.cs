@@ -52,7 +52,8 @@ namespace BlockWorldMVP.Editor
         private enum EditTool
         {
             Place,
-            Erase
+            Erase,
+            Replace
         }
 
         private Transform _root;
@@ -121,7 +122,7 @@ namespace BlockWorldMVP.Editor
         private void DrawToolSection()
         {
             EditorGUILayout.LabelField("Editor Tool", EditorStyles.boldLabel);
-            _tool = (EditTool)GUILayout.Toolbar((int)_tool, new[] { "Place", "Erase" });
+            _tool = (EditTool)GUILayout.Toolbar((int)_tool, new[] { "Place", "Erase", "Replace" });
 
             if (_root == null)
             {
@@ -328,7 +329,8 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
-            if (_tool == EditTool.Place && (_selectedIndex < 0 || _selectedIndex >= _filteredBlocks.Count))
+            bool needsSelectedBlock = _tool == EditTool.Place || _tool == EditTool.Replace;
+            if (needsSelectedBlock && (_selectedIndex < 0 || _selectedIndex >= _filteredBlocks.Count))
             {
                 return;
             }
@@ -357,6 +359,10 @@ namespace BlockWorldMVP.Editor
                 {
                     PlaceBlock(target);
                 }
+                else if (_tool == EditTool.Replace)
+                {
+                    ReplaceBlock(hitBlock, target);
+                }
                 else
                 {
                     EraseBlock(hitBlock, target);
@@ -378,7 +384,7 @@ namespace BlockWorldMVP.Editor
                 if (hitBlock != null)
                 {
                     Vector3Int blockPos = Vector3Int.RoundToInt(hitBlock.transform.position);
-                    if (_tool == EditTool.Erase)
+                    if (_tool == EditTool.Erase || _tool == EditTool.Replace)
                     {
                         target = blockPos;
                         return true;
@@ -395,7 +401,7 @@ namespace BlockWorldMVP.Editor
                 }
             }
 
-            if (_tool == EditTool.Erase)
+            if (_tool == EditTool.Erase || _tool == EditTool.Replace)
             {
                 return false;
             }
@@ -414,7 +420,7 @@ namespace BlockWorldMVP.Editor
 
         private void DrawScenePreview(Vector3Int target)
         {
-            Handles.color = _tool == EditTool.Place ? Color.green : Color.red;
+            Handles.color = _tool == EditTool.Place ? Color.green : (_tool == EditTool.Replace ? Color.yellow : Color.red);
             Handles.DrawWireCube(target, Vector3.one);
             SceneView.RepaintAll();
         }
@@ -471,6 +477,31 @@ namespace BlockWorldMVP.Editor
             }
 
             Undo.DestroyObjectImmediate(target);
+        }
+
+        private void ReplaceBlock(PlacedBlock hitBlock, Vector3Int fallbackPosition)
+        {
+            if (_selectedIndex < 0 || _selectedIndex >= _filteredBlocks.Count)
+            {
+                return;
+            }
+
+            BlockDefinition replacement = _filteredBlocks[_selectedIndex];
+            GameObject target = hitBlock != null ? hitBlock.gameObject : FindBlockAt(fallbackPosition);
+            if (target == null)
+            {
+                return;
+            }
+
+            PlacedBlock existing = target.GetComponent<PlacedBlock>();
+            if (existing != null && string.Equals(existing.BlockId, replacement.id, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            Vector3Int replacePos = Vector3Int.RoundToInt(target.transform.position);
+            Undo.DestroyObjectImmediate(target);
+            PlaceBlock(replacePos);
         }
 
         private GameObject FindBlockAt(Vector3Int position)
