@@ -44,7 +44,7 @@
     { "key": "voxel.option.ignore_barrier", "value": "Ignore Barrier blocks" },
     { "key": "voxel.option.replace_previous", "value": "Replace previous __VoxelImportGz" },
     { "key": "voxel.option.surface_collider", "value": "Add Surface Collider (Top Faces Only)" },
-    { "key": "voxel.option.chunk_size", "value": "Chunk Size" },
+    { "key": "voxel.option.chunk_size", "value": "Chunk Size (1 = Whole Scene)" },
     { "key": "voxel.option.chunks_per_tick", "value": "Chunks / Tick" },
     { "key": "voxel.option.alpha_clip", "value": "Chunk: Use Alpha Clip (fix transparent artifacts)" },
     { "key": "voxel.option.alpha_cutoff", "value": "Chunk Alpha Cutoff" },

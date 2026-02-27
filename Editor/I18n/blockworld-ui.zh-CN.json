@@ -44,7 +44,7 @@
     { "key": "voxel.option.ignore_barrier", "value": "忽略 Barrier 方块" },
     { "key": "voxel.option.replace_previous", "value": "替换上一次 __VoxelImportGz" },
     { "key": "voxel.option.surface_collider", "value": "添加表面碰撞（仅顶面）" },
-    { "key": "voxel.option.chunk_size", "value": "Chunk 尺寸" },
+    { "key": "voxel.option.chunk_size", "value": "Chunk 尺寸（1=整体）" },
     { "key": "voxel.option.chunks_per_tick", "value": "每 Tick Chunk 数" },
     { "key": "voxel.option.alpha_clip", "value": "Chunk 使用 Alpha Clip（修复透明伪影）" },
     { "key": "voxel.option.alpha_cutoff", "value": "Chunk Alpha 阈值" },

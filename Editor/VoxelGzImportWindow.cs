@@ -41,7 +41,7 @@ namespace BlockWorldMVP.Editor
             ["voxel.option.ignore_barrier"] = "Ignore Barrier blocks",
             ["voxel.option.replace_previous"] = "Replace previous __VoxelImportGz",
             ["voxel.option.surface_collider"] = "Add Surface Collider (Top Faces Only)",
-            ["voxel.option.chunk_size"] = "Chunk Size",
+            ["voxel.option.chunk_size"] = "Chunk Size (1 = Whole Scene)",
             ["voxel.option.chunks_per_tick"] = "Chunks / Tick",
             ["voxel.option.alpha_clip"] = "Chunk: Use Alpha Clip (fix transparent artifacts)",
             ["voxel.option.alpha_cutoff"] = "Chunk Alpha Cutoff",
@@ -91,7 +91,7 @@ namespace BlockWorldMVP.Editor
             ["voxel.option.ignore_barrier"] = "忽略 Barrier 方块",
             ["voxel.option.replace_previous"] = "替换上一次 __VoxelImportGz",
             ["voxel.option.surface_collider"] = "添加表面碰撞（仅顶面）",
-            ["voxel.option.chunk_size"] = "Chunk 尺寸",
+            ["voxel.option.chunk_size"] = "Chunk 尺寸（1=整体）",
             ["voxel.option.chunks_per_tick"] = "每 Tick Chunk 数",
             ["voxel.option.alpha_clip"] = "Chunk 使用 Alpha Clip（修复透明伪影）",
             ["voxel.option.alpha_cutoff"] = "Chunk Alpha 阈值",
@@ -424,7 +424,7 @@ namespace BlockWorldMVP.Editor
             _ignoreBarrier = EditorGUILayout.ToggleLeft(L("voxel.option.ignore_barrier"), _ignoreBarrier);
             _clearPrevious = EditorGUILayout.ToggleLeft(L("voxel.option.replace_previous"), _clearPrevious);
             _addSurfaceCollider = EditorGUILayout.ToggleLeft(L("voxel.option.surface_collider"), _addSurfaceCollider);
-            _chunkSize = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.chunk_size"), _chunkSize), 4, 64);
+            _chunkSize = Mathf.Max(1, EditorGUILayout.IntField(L("voxel.option.chunk_size"), _chunkSize));
             _chunksPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.chunks_per_tick"), _chunksPerTick), 1, 64);
             _chunkUseAlphaClip = EditorGUILayout.ToggleLeft(L("voxel.option.alpha_clip"), _chunkUseAlphaClip);
             _chunkAlphaCutoff = Mathf.Clamp01(EditorGUILayout.Slider(L("voxel.option.alpha_cutoff"), _chunkAlphaCutoff, 0.01f, 0.9f));
@@ -603,10 +603,7 @@ namespace BlockWorldMVP.Editor
                 int rot = (_payload.rot != null && _payload.rot.Length > i) ? (_payload.rot[i] & 3) : 0;
                 Vector3 worldPos = new Vector3(wx, wy, wz);
                 Quaternion worldRot = _rotLookup[rot];
-                ChunkKey key = new ChunkKey(
-                    FloorDiv(wx, _chunkSize),
-                    FloorDiv(wy, _chunkSize),
-                    FloorDiv(wz, _chunkSize));
+                ChunkKey key = BuildChunkKey(wx, wy, wz, _chunkSize);
                 if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket))
                 {
                     bucket = new ChunkBucket();
@@ -1195,6 +1192,19 @@ namespace BlockWorldMVP.Editor
             }
 
             return -((-value + divisor - 1) / divisor);
+        }
+
+        private static ChunkKey BuildChunkKey(int x, int y, int z, int chunkSize)
+        {
+            if (chunkSize <= 1)
+            {
+                return new ChunkKey(0, 0, 0);
+            }
+
+            return new ChunkKey(
+                FloorDiv(x, chunkSize),
+                FloorDiv(y, chunkSize),
+                FloorDiv(z, chunkSize));
         }
 
         private static string GetProjectAbsolutePath(string assetPath)
