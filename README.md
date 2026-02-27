@@ -28,6 +28,8 @@ Notes:
 - If texture has `.png.mcmeta`, block face animation is played (supports multi-frame strips such as 4-frame textures).
 - Glow blocks show a color strip on the card bottom.
 - Generated mesh/material assets are stored in `Assets/BlockWorldGenerated`.
+- World Builder now uses atlas UV + one shared transparent material (`WorldBuilderAtlas_Transparent`), and animated faces use property blocks (no per-block material clone).
+- World Builder non-animated blocks now use single-submesh baked-UV mesh + single shared material (further draw-call reduction).
 
 ## JSON format
 ```json

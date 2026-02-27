@@ -20,6 +20,7 @@ namespace BlockWorldMVP.Editor
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
         private static readonly Regex SideRegex = new Regex(@"^(.*)_(back|bottom|front|left|right|top)\.png$", RegexOptions.Compiled);
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
+        private static readonly int MainTexStShaderId = Shader.PropertyToID("_MainTex_ST");
 
         private class BlockDefinition
         {
@@ -81,6 +82,7 @@ namespace BlockWorldMVP.Editor
         private GUIStyle _searchFieldStyle;
         private GUIStyle _categoryTabStyle;
         private GUIStyle _categoryTabSelectedStyle;
+        private readonly Dictionary<string, Mesh> _staticBlockMeshCache = new Dictionary<string, Mesh>(StringComparer.OrdinalIgnoreCase);
 
         [MenuItem("Tools/Block World MVP/World Builder")]
         public static void Open()
@@ -97,6 +99,7 @@ namespace BlockWorldMVP.Editor
         private void OnDisable()
         {
             SceneView.duringSceneGui -= OnSceneGUI;
+            _staticBlockMeshCache.Clear();
         }
 
         private static string L(string key)
@@ -697,9 +700,16 @@ namespace BlockWorldMVP.Editor
                 return false;
             }
 
-            Material[] materials = BlockAssetFactory.GetFaceMaterials(definition.sideTexturePaths, definition.transparent);
-            Mesh cubeMesh = BlockAssetFactory.GetOrCreateCubeMesh();
-            if (cubeMesh == null || materials == null)
+            if (!BlockAssetFactory.TryGetFaceRenderData(definition.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData))
+            {
+                return false;
+            }
+
+            bool hasAnimatedFaces = HasAnimatedFaces(definition);
+            Mesh meshToUse = hasAnimatedFaces
+                ? BlockAssetFactory.GetOrCreateCubeMesh()
+                : GetOrCreateStaticBlockMesh(definition, renderData);
+            if (meshToUse == null || renderData == null || renderData.materials == null)
             {
                 return false;
             }
@@ -711,17 +721,24 @@ namespace BlockWorldMVP.Editor
             go.transform.position = position;
 
             MeshFilter meshFilter = go.AddComponent<MeshFilter>();
-            meshFilter.sharedMesh = cubeMesh;
+            meshFilter.sharedMesh = meshToUse;
 
             MeshRenderer meshRenderer = go.AddComponent<MeshRenderer>();
-            ConfigureRendererMaterials(meshRenderer, materials, definition);
+            if (hasAnimatedFaces)
+            {
+                ConfigureRendererMaterials(meshRenderer, renderData, definition);
+            }
+            else
+            {
+                meshRenderer.sharedMaterial = renderData.materials[0];
+            }
 
             MeshCollider meshCollider = go.AddComponent<MeshCollider>();
-            meshCollider.sharedMesh = cubeMesh;
+            meshCollider.sharedMesh = meshToUse;
 
             PlacedBlock marker = go.AddComponent<PlacedBlock>();
             marker.BlockId = definition.id;
-            marker.HasAnimation = definition.hasAnimation;
+            marker.HasAnimation = hasAnimatedFaces;
 
             EditorUtility.SetDirty(go);
             return true;
@@ -966,6 +983,8 @@ namespace BlockWorldMVP.Editor
         private void ReloadBlockLibrary()
         {
             EnforceCrispImportForAllBlockTextures();
+            BlockAssetFactory.InvalidateCaches();
+            _staticBlockMeshCache.Clear();
             _allBlocks.Clear();
             Dictionary<string, BlockMetadata> metadataMap = LoadBlockMetadata();
 
@@ -1156,24 +1175,35 @@ namespace BlockWorldMVP.Editor
             _selectedIndex = Mathf.Clamp(_selectedIndex, 0, Mathf.Max(0, _filteredBlocks.Count - 1));
         }
 
-        private static void ConfigureRendererMaterials(MeshRenderer renderer, Material[] baseMaterials, BlockDefinition definition)
+        private static void ConfigureRendererMaterials(MeshRenderer renderer, BlockAssetFactory.FaceRenderData renderData, BlockDefinition definition)
         {
-            if (renderer == null)
+            if (renderer == null || renderData == null || renderData.materials == null || renderData.faceMainTexSt == null)
             {
                 return;
             }
+
+            renderer.sharedMaterials = renderData.materials;
 
             if (!definition.hasAnimation || definition.sideAnimations.Count == 0)
             {
-                renderer.sharedMaterials = baseMaterials;
+                ApplyFaceMainTexSt(renderer, renderData.faceMainTexSt);
+                BlockTextureAnimator existingAnimator = renderer.GetComponent<BlockTextureAnimator>();
+                if (existingAnimator != null)
+                {
+                    if (Application.isPlaying)
+                    {
+                        UnityEngine.Object.Destroy(existingAnimator);
+                    }
+                    else
+                    {
+                        UnityEngine.Object.DestroyImmediate(existingAnimator);
+                    }
+                }
                 return;
             }
 
-            Material[] instanceMaterials = new Material[baseMaterials.Length];
-            Array.Copy(baseMaterials, instanceMaterials, baseMaterials.Length);
             List<BlockTextureAnimator.FaceAnimation> runtimeAnimations = new List<BlockTextureAnimator.FaceAnimation>();
-
-            for (int i = 0; i < SideOrder.Length && i < instanceMaterials.Length; i++)
+            for (int i = 0; i < SideOrder.Length && i < renderData.faceMainTexSt.Length; i++)
             {
                 string side = SideOrder[i];
                 if (!definition.sideAnimations.TryGetValue(side, out FaceAnimationSpec spec))
@@ -1181,35 +1211,160 @@ namespace BlockWorldMVP.Editor
                     continue;
                 }
 
-                if (spec == null || spec.frameCount <= 1 || instanceMaterials[i] == null)
+                if (spec == null || spec.frameCount <= 1)
                 {
                     continue;
                 }
-
-                Material instance = new Material(instanceMaterials[i])
-                {
-                    name = instanceMaterials[i].name + "_anim"
-                };
-                instanceMaterials[i] = instance;
 
                 runtimeAnimations.Add(new BlockTextureAnimator.FaceAnimation
                 {
                     materialIndex = i,
                     frameCount = spec.frameCount,
                     frameDuration = Mathf.Max(0.01f, spec.frameDuration),
-                    frames = spec.frames
+                    frames = spec.frames,
+                    baseMainTexSt = renderData.faceMainTexSt[i]
                 });
             }
 
             if (runtimeAnimations.Count == 0)
             {
-                renderer.sharedMaterials = baseMaterials;
+                ApplyFaceMainTexSt(renderer, renderData.faceMainTexSt);
+                BlockTextureAnimator existingAnimator = renderer.GetComponent<BlockTextureAnimator>();
+                if (existingAnimator != null)
+                {
+                    if (Application.isPlaying)
+                    {
+                        UnityEngine.Object.Destroy(existingAnimator);
+                    }
+                    else
+                    {
+                        UnityEngine.Object.DestroyImmediate(existingAnimator);
+                    }
+                }
                 return;
             }
 
-            renderer.sharedMaterials = instanceMaterials;
-            BlockTextureAnimator animator = renderer.gameObject.AddComponent<BlockTextureAnimator>();
-            animator.SetAnimations(runtimeAnimations.ToArray());
+            BlockTextureAnimator animator = renderer.GetComponent<BlockTextureAnimator>();
+            if (animator == null)
+            {
+                animator = renderer.gameObject.AddComponent<BlockTextureAnimator>();
+            }
+
+            animator.SetAnimations(runtimeAnimations.ToArray(), renderData.faceMainTexSt);
+        }
+
+        private static bool HasAnimatedFaces(BlockDefinition definition)
+        {
+            if (definition == null || !definition.hasAnimation || definition.sideAnimations == null || definition.sideAnimations.Count == 0)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < SideOrder.Length; i++)
+            {
+                string side = SideOrder[i];
+                if (!definition.sideAnimations.TryGetValue(side, out FaceAnimationSpec spec))
+                {
+                    continue;
+                }
+
+                if (spec != null && spec.frameCount > 1)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private Mesh GetOrCreateStaticBlockMesh(BlockDefinition definition, BlockAssetFactory.FaceRenderData renderData)
+        {
+            if (definition == null || renderData == null || renderData.faceMainTexSt == null)
+            {
+                return null;
+            }
+
+            if (_staticBlockMeshCache.TryGetValue(definition.id, out Mesh cached) && cached != null)
+            {
+                return cached;
+            }
+
+            Mesh mesh = BuildStaticBlockMesh(definition.id, renderData.faceMainTexSt);
+            _staticBlockMeshCache[definition.id] = mesh;
+            return mesh;
+        }
+
+        private static Mesh BuildStaticBlockMesh(string id, Vector4[] faceMainTexSt)
+        {
+            if (faceMainTexSt == null || faceMainTexSt.Length < SideOrder.Length)
+            {
+                return null;
+            }
+
+            Vector3[] vertices = new Vector3[24]
+            {
+                new Vector3(-0.5f, -0.5f, -0.5f), new Vector3(0.5f, -0.5f, -0.5f), new Vector3(0.5f, 0.5f, -0.5f), new Vector3(-0.5f, 0.5f, -0.5f),
+                new Vector3(-0.5f, -0.5f, 0.5f), new Vector3(0.5f, -0.5f, 0.5f), new Vector3(0.5f, -0.5f, -0.5f), new Vector3(-0.5f, -0.5f, -0.5f),
+                new Vector3(0.5f, -0.5f, 0.5f), new Vector3(-0.5f, -0.5f, 0.5f), new Vector3(-0.5f, 0.5f, 0.5f), new Vector3(0.5f, 0.5f, 0.5f),
+                new Vector3(-0.5f, -0.5f, 0.5f), new Vector3(-0.5f, -0.5f, -0.5f), new Vector3(-0.5f, 0.5f, -0.5f), new Vector3(-0.5f, 0.5f, 0.5f),
+                new Vector3(0.5f, -0.5f, -0.5f), new Vector3(0.5f, -0.5f, 0.5f), new Vector3(0.5f, 0.5f, 0.5f), new Vector3(0.5f, 0.5f, -0.5f),
+                new Vector3(-0.5f, 0.5f, -0.5f), new Vector3(0.5f, 0.5f, -0.5f), new Vector3(0.5f, 0.5f, 0.5f), new Vector3(-0.5f, 0.5f, 0.5f)
+            };
+
+            Vector2[] uvs = new Vector2[24];
+            for (int face = 0; face < SideOrder.Length; face++)
+            {
+                Vector4 st = faceMainTexSt[face];
+                int offset = face * 4;
+                uvs[offset + 0] = new Vector2(st.z, st.w);
+                uvs[offset + 1] = new Vector2(st.z + st.x, st.w);
+                uvs[offset + 2] = new Vector2(st.z + st.x, st.w + st.y);
+                uvs[offset + 3] = new Vector2(st.z, st.w + st.y);
+            }
+
+            int[] triangles = new int[36]
+            {
+                0, 2, 1, 0, 3, 2,
+                4, 6, 5, 4, 7, 6,
+                8, 10, 9, 8, 11, 10,
+                12, 14, 13, 12, 15, 14,
+                16, 18, 17, 16, 19, 18,
+                20, 22, 21, 20, 23, 22
+            };
+
+            Mesh mesh = new Mesh
+            {
+                name = $"StaticBlock_{id}"
+            };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0, true);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static void ApplyFaceMainTexSt(Renderer renderer, Vector4[] faceMainTexSt)
+        {
+            if (renderer == null || faceMainTexSt == null)
+            {
+                return;
+            }
+
+            Material[] shared = renderer.sharedMaterials;
+            if (shared == null || shared.Length == 0)
+            {
+                return;
+            }
+
+            MaterialPropertyBlock block = new MaterialPropertyBlock();
+            int count = Mathf.Min(shared.Length, faceMainTexSt.Length);
+            for (int i = 0; i < count; i++)
+            {
+                renderer.GetPropertyBlock(block, i);
+                block.SetVector(MainTexStShaderId, faceMainTexSt[i]);
+                renderer.SetPropertyBlock(block, i);
+            }
         }
 
         private static Texture2D ResolvePreviewTexture(BlockDefinition definition)

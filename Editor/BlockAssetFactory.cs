@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
@@ -7,11 +9,35 @@ namespace BlockWorldMVP.Editor
 {
     internal static class BlockAssetFactory
     {
+        internal sealed class FaceRenderData
+        {
+            public Material[] materials;
+            public Vector4[] faceMainTexSt;
+        }
+
+        private const string BlockTextureFolder = "Packages/com.box3.blockworld-mvp/Assets/block";
         private static readonly string GeneratedRoot = "Assets/BlockWorldGenerated";
         private static readonly string MeshFolder = "Assets/BlockWorldGenerated/Meshes";
         private static readonly string MaterialFolder = "Assets/BlockWorldGenerated/Materials";
+        private static readonly string AtlasFolder = "Assets/BlockWorldGenerated/Atlases";
         private static readonly string MeshAssetPath = "Assets/BlockWorldGenerated/Meshes/BlockCube.asset";
+        private static readonly string AtlasTexturePath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas.asset";
+        private static readonly string AtlasTransparentMaterialPath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Transparent.mat";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
+        private static readonly Regex SideRegex = new Regex("^(.*)_(back|bottom|front|left|right|top)\\.png$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        private static readonly Dictionary<string, Rect> AtlasUvByTexturePath = new Dictionary<string, Rect>(StringComparer.OrdinalIgnoreCase);
+        private static Texture2D _atlasTexture;
+        private static Material _atlasTransparentMaterial;
+        private static bool _atlasReady;
+
+        public static void InvalidateCaches()
+        {
+            _atlasReady = false;
+            _atlasTexture = null;
+            _atlasTransparentMaterial = null;
+            AtlasUvByTexturePath.Clear();
+        }
 
         public static Mesh GetOrCreateCubeMesh()
         {
@@ -28,30 +54,62 @@ namespace BlockWorldMVP.Editor
             return mesh;
         }
 
-        public static Material[] GetFaceMaterials(Dictionary<string, string> sideTexturePaths, bool transparent)
+        public static bool TryGetFaceRenderData(Dictionary<string, string> sideTexturePaths, out FaceRenderData data)
         {
-            EnsureFolders();
+            data = null;
+            if (sideTexturePaths == null)
+            {
+                return false;
+            }
 
-            Material[] materials = new Material[SideOrder.Length];
+            if (!EnsureAtlasResources())
+            {
+                return false;
+            }
+
+            Material shared = _atlasTransparentMaterial;
+            if (shared == null)
+            {
+                return false;
+            }
+
+            string fallbackPath = GetFallbackTexturePath(sideTexturePaths);
+            Material[] mats = new Material[SideOrder.Length];
+            Vector4[] mainTexSt = new Vector4[SideOrder.Length];
             for (int i = 0; i < SideOrder.Length; i++)
             {
                 string side = SideOrder[i];
-                if (!sideTexturePaths.TryGetValue(side, out string texturePath))
+                string texturePath = null;
+                if (!sideTexturePaths.TryGetValue(side, out texturePath) || string.IsNullOrWhiteSpace(texturePath))
                 {
-                    texturePath = GetFallbackTexturePath(sideTexturePaths);
+                    texturePath = fallbackPath;
                 }
 
-                materials[i] = GetOrCreateMaterial(texturePath, transparent);
+                mats[i] = shared;
+                if (!string.IsNullOrWhiteSpace(texturePath) && AtlasUvByTexturePath.TryGetValue(texturePath, out Rect uvRect))
+                {
+                    mainTexSt[i] = new Vector4(uvRect.width, uvRect.height, uvRect.x, uvRect.y);
+                }
+                else
+                {
+                    mainTexSt[i] = new Vector4(1f, 1f, 0f, 0f);
+                }
             }
 
-            return materials;
+            data = new FaceRenderData
+            {
+                materials = mats,
+                faceMainTexSt = mainTexSt
+            };
+            return true;
         }
 
         private static string GetFallbackTexturePath(Dictionary<string, string> sideTexturePaths)
         {
-            foreach (string side in SideOrder)
+            for (int i = 0; i < SideOrder.Length; i++)
             {
-                if (sideTexturePaths.TryGetValue(side, out string path))
+                string side = SideOrder[i];
+                if (sideTexturePaths.TryGetValue(side, out string path) && !string.IsNullOrWhiteSpace(path))
                 {
                     return path;
                 }
@@ -60,124 +118,183 @@ namespace BlockWorldMVP.Editor
             return null;
         }
 
-        private static Material GetOrCreateMaterial(string texturePath, bool transparent)
+        private static bool EnsureAtlasResources()
         {
-            if (string.IsNullOrWhiteSpace(texturePath))
+            if (_atlasReady && _atlasTexture != null && _atlasTransparentMaterial != null)
+            {
+                return true;
+            }
+
+            RebuildAtlasResources();
+            return _atlasTexture != null && _atlasTransparentMaterial != null;
+        }
+
+        private static void RebuildAtlasResources()
+        {
+            EnsureFolders();
+            AtlasUvByTexturePath.Clear();
+            _atlasReady = false;
+
+            string[] guids = AssetDatabase.FindAssets("t:Texture2D", new[] { BlockTextureFolder });
+            List<string> texturePaths = new List<string>(guids.Length);
+            List<Texture2D> readableTextures = new List<Texture2D>(guids.Length);
+
+            for (int i = 0; i < guids.Length; i++)
+            {
+                string assetPath = AssetDatabase.GUIDToAssetPath(guids[i]);
+                string fileName = Path.GetFileName(assetPath);
+                if (string.IsNullOrWhiteSpace(fileName) || !SideRegex.IsMatch(fileName))
+                {
+                    continue;
+                }
+
+                Texture2D readable = LoadReadableTextureFromAsset(assetPath);
+                if (readable == null)
+                {
+                    continue;
+                }
+
+                texturePaths.Add(assetPath);
+                readableTextures.Add(readable);
+            }
+
+            if (readableTextures.Count == 0)
+            {
+                CleanupReadableTextures(readableTextures);
+                return;
+            }
+
+            Texture2D generated = new Texture2D(2, 2, TextureFormat.RGBA32, false, false)
+            {
+                name = "WorldBuilderAtlas",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                anisoLevel = 0
+            };
+
+            int maxSize = Mathf.Clamp(SystemInfo.maxTextureSize, 2048, 8192);
+            Rect[] rects = generated.PackTextures(readableTextures.ToArray(), 0, maxSize, false);
+            for (int i = 0; i < texturePaths.Count && i < rects.Length; i++)
+            {
+                AtlasUvByTexturePath[texturePaths[i]] = rects[i];
+            }
+
+            PersistAtlasTexture(generated, out _atlasTexture);
+            _atlasTransparentMaterial = GetOrCreateTransparentAtlasMaterial(AtlasTransparentMaterialPath, _atlasTexture);
+
+            const string legacyOpaqueMaterialPath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Opaque.mat";
+            if (AssetDatabase.LoadAssetAtPath<Material>(legacyOpaqueMaterialPath) != null)
+            {
+                AssetDatabase.DeleteAsset(legacyOpaqueMaterialPath);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.ImportAsset(AtlasTexturePath, ImportAssetOptions.ForceUpdate);
+            AssetDatabase.ImportAsset(AtlasTransparentMaterialPath, ImportAssetOptions.ForceUpdate);
+
+            CleanupReadableTextures(readableTextures);
+            _atlasReady = _atlasTexture != null;
+        }
+
+        private static void PersistAtlasTexture(Texture2D generatedTexture, out Texture2D atlasTexture)
+        {
+            atlasTexture = null;
+            if (generatedTexture == null)
+            {
+                return;
+            }
+
+            Texture2D existing = AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasTexturePath);
+            if (existing == null)
+            {
+                AssetDatabase.CreateAsset(generatedTexture, AtlasTexturePath);
+                atlasTexture = generatedTexture;
+            }
+            else
+            {
+                EditorUtility.CopySerialized(generatedTexture, existing);
+                EditorUtility.SetDirty(existing);
+                UnityEngine.Object.DestroyImmediate(generatedTexture);
+                atlasTexture = existing;
+            }
+        }
+
+        private static Material GetOrCreateTransparentAtlasMaterial(string materialPath, Texture2D atlasTexture)
+        {
+            if (atlasTexture == null)
             {
                 return null;
             }
 
-            EnsureCrispTextureImport(texturePath, transparent);
-
-            string fileName = Path.GetFileNameWithoutExtension(texturePath);
-            string variant = transparent ? "trans" : "opaque";
-            string materialAssetPath = $"{MaterialFolder}/{fileName}_{variant}.mat";
-            Material material = AssetDatabase.LoadAssetAtPath<Material>(materialAssetPath);
-            if (material != null)
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+            if (material == null)
             {
-                RefreshTextureSampling(material.mainTexture as Texture2D);
-                return material;
+                Shader shader = Shader.Find("Unlit/Transparent");
+                if (shader == null)
+                {
+                    shader = Shader.Find("Standard");
+                }
+
+                material = new Material(shader)
+                {
+                    name = "WorldBuilderAtlas_Transparent"
+                };
+                AssetDatabase.CreateAsset(material, materialPath);
             }
 
-            Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
-            if (texture != null)
-            {
-                RefreshTextureSampling(texture);
-            }
+            material.mainTexture = atlasTexture;
+            SetupTransparentMaterial(material);
 
-            Shader shader = transparent ? Shader.Find("Unlit/Transparent") : Shader.Find("Unlit/Texture");
-            if (shader == null)
-            {
-                shader = Shader.Find("Standard");
-            }
-
-            material = new Material(shader)
-            {
-                name = fileName,
-                mainTexture = texture
-            };
-
-            if (transparent)
-            {
-                SetupTransparentMaterial(material);
-            }
-
-            AssetDatabase.CreateAsset(material, materialAssetPath);
+            EditorUtility.SetDirty(material);
             return material;
         }
 
-        private static void EnsureCrispTextureImport(string texturePath, bool transparent)
+        private static Texture2D LoadReadableTextureFromAsset(string assetPath)
         {
-            TextureImporter importer = AssetImporter.GetAtPath(texturePath) as TextureImporter;
-            if (importer == null)
+            if (string.IsNullOrWhiteSpace(assetPath))
             {
-                return;
+                return null;
             }
 
-            bool changed = false;
-            if (importer.textureType != TextureImporterType.Default)
+            string absPath = GetProjectAbsolutePath(assetPath);
+            if (!File.Exists(absPath))
             {
-                importer.textureType = TextureImporterType.Default;
-                changed = true;
+                return null;
             }
 
-            if (importer.filterMode != FilterMode.Point)
+            try
             {
-                importer.filterMode = FilterMode.Point;
-                changed = true;
-            }
+                byte[] bytes = File.ReadAllBytes(absPath);
+                Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, false)
+                {
+                    filterMode = FilterMode.Point,
+                    wrapMode = TextureWrapMode.Clamp,
+                    anisoLevel = 0
+                };
+                if (!texture.LoadImage(bytes, false))
+                {
+                    UnityEngine.Object.DestroyImmediate(texture);
+                    return null;
+                }
 
-            if (importer.textureCompression != TextureImporterCompression.Uncompressed)
-            {
-                importer.textureCompression = TextureImporterCompression.Uncompressed;
-                changed = true;
+                return texture;
             }
-
-            if (importer.mipmapEnabled)
+            catch
             {
-                importer.mipmapEnabled = false;
-                changed = true;
-            }
-
-            if (importer.streamingMipmaps)
-            {
-                importer.streamingMipmaps = false;
-                changed = true;
-            }
-
-            if (importer.anisoLevel != 0)
-            {
-                importer.anisoLevel = 0;
-                changed = true;
-            }
-
-            if (importer.npotScale != TextureImporterNPOTScale.None)
-            {
-                importer.npotScale = TextureImporterNPOTScale.None;
-                changed = true;
-            }
-
-            if (transparent && !importer.alphaIsTransparency)
-            {
-                importer.alphaIsTransparency = true;
-                changed = true;
-            }
-
-            if (changed)
-            {
-                importer.SaveAndReimport();
+                return null;
             }
         }
 
-        private static void RefreshTextureSampling(Texture2D texture)
+        private static void CleanupReadableTextures(List<Texture2D> textures)
         {
-            if (texture == null)
+            for (int i = 0; i < textures.Count; i++)
             {
-                return;
+                Texture2D tex = textures[i];
+                if (tex != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(tex);
+                }
             }
-
-            texture.filterMode = FilterMode.Point;
-            texture.anisoLevel = 0;
         }
 
         private static void SetupTransparentMaterial(Material material)
@@ -212,6 +329,11 @@ namespace BlockWorldMVP.Editor
             {
                 AssetDatabase.CreateFolder(GeneratedRoot, "Materials");
             }
+
+            if (!AssetDatabase.IsValidFolder(AtlasFolder))
+            {
+                AssetDatabase.CreateFolder(GeneratedRoot, "Atlases");
+            }
         }
 
         private static Mesh BuildCubeMesh()
@@ -223,32 +345,31 @@ namespace BlockWorldMVP.Editor
 
             Vector3[] vertices = new Vector3[24]
             {
-                // Back
                 new Vector3(-0.5f, -0.5f, -0.5f),
                 new Vector3(0.5f, -0.5f, -0.5f),
                 new Vector3(0.5f, 0.5f, -0.5f),
                 new Vector3(-0.5f, 0.5f, -0.5f),
-                // Bottom
+
                 new Vector3(-0.5f, -0.5f, 0.5f),
                 new Vector3(0.5f, -0.5f, 0.5f),
                 new Vector3(0.5f, -0.5f, -0.5f),
                 new Vector3(-0.5f, -0.5f, -0.5f),
-                // Front
+
                 new Vector3(0.5f, -0.5f, 0.5f),
                 new Vector3(-0.5f, -0.5f, 0.5f),
                 new Vector3(-0.5f, 0.5f, 0.5f),
                 new Vector3(0.5f, 0.5f, 0.5f),
-                // Left
+
                 new Vector3(-0.5f, -0.5f, 0.5f),
                 new Vector3(-0.5f, -0.5f, -0.5f),
                 new Vector3(-0.5f, 0.5f, -0.5f),
                 new Vector3(-0.5f, 0.5f, 0.5f),
-                // Right
+
                 new Vector3(0.5f, -0.5f, -0.5f),
                 new Vector3(0.5f, -0.5f, 0.5f),
                 new Vector3(0.5f, 0.5f, 0.5f),
                 new Vector3(0.5f, 0.5f, -0.5f),
-                // Top
+
                 new Vector3(-0.5f, 0.5f, -0.5f),
                 new Vector3(0.5f, 0.5f, -0.5f),
                 new Vector3(0.5f, 0.5f, 0.5f),
@@ -279,6 +400,13 @@ namespace BlockWorldMVP.Editor
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
+        }
+
+        private static string GetProjectAbsolutePath(string assetPath)
+        {
+            string projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;
+            string combined = Path.Combine(projectRoot, assetPath);
+            return combined.Replace("\\", "/");
         }
     }
 }
