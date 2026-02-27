@@ -1404,13 +1404,38 @@ namespace BlockWorldMVP.Editor
                 _blockCardPreviewUtility.cameraFieldOfView = 22f;
             }
 
+            Texture2D onBlack = RenderPreviewWithBackground(mesh, material, new Color(0f, 0f, 0f, 1f));
+            Texture2D onWhite = RenderPreviewWithBackground(mesh, material, new Color(1f, 1f, 1f, 1f));
+            if (onBlack == null || onWhite == null)
+            {
+                if (onBlack != null)
+                {
+                    DestroyImmediate(onBlack);
+                }
+
+                if (onWhite != null)
+                {
+                    DestroyImmediate(onWhite);
+                }
+
+                return onBlack ?? onWhite;
+            }
+
+            Texture2D composed = ComposeTransparentPreview(onBlack, onWhite);
+            DestroyImmediate(onBlack);
+            DestroyImmediate(onWhite);
+            return composed;
+        }
+
+        private Texture2D RenderPreviewWithBackground(Mesh mesh, Material material, Color backgroundColor)
+        {
             const int size = 128;
             Rect r = new Rect(0f, 0f, size, size);
             _blockCardPreviewUtility.BeginStaticPreview(r);
 
             Camera cam = _blockCardPreviewUtility.camera;
             cam.clearFlags = CameraClearFlags.Color;
-            cam.backgroundColor = new Color(0f, 0f, 0f, 1f);
+            cam.backgroundColor = backgroundColor;
             cam.nearClipPlane = 0.01f;
             cam.farClipPlane = 50f;
 
@@ -1432,6 +1457,58 @@ namespace BlockWorldMVP.Editor
             _blockCardPreviewUtility.DrawMesh(mesh, Matrix4x4.identity, material, 0);
             cam.Render();
             return _blockCardPreviewUtility.EndStaticPreview();
+        }
+
+        private static Texture2D ComposeTransparentPreview(Texture2D onBlack, Texture2D onWhite)
+        {
+            if (onBlack == null || onWhite == null || onBlack.width != onWhite.width || onBlack.height != onWhite.height)
+            {
+                return onBlack ?? onWhite;
+            }
+
+            int w = onBlack.width;
+            int h = onBlack.height;
+            Color32[] bPixels = onBlack.GetPixels32();
+            Color32[] wPixels = onWhite.GetPixels32();
+            Color32[] outPixels = new Color32[bPixels.Length];
+
+            for (int i = 0; i < bPixels.Length; i++)
+            {
+                Color32 cb = bPixels[i];
+                Color32 cw = wPixels[i];
+
+                float cbR = cb.r / 255f;
+                float cbG = cb.g / 255f;
+                float cbB = cb.b / 255f;
+                float cwR = cw.r / 255f;
+                float cwG = cw.g / 255f;
+                float cwB = cw.b / 255f;
+
+                // Derived from:
+                // Cblack = A * F
+                // Cwhite = A * F + (1 - A)
+                float aR = 1f - (cwR - cbR);
+                float aG = 1f - (cwG - cbG);
+                float aB = 1f - (cwB - cbB);
+                float alpha = Mathf.Clamp01((aR + aG + aB) / 3f);
+
+                float outR = 0f;
+                float outG = 0f;
+                float outB = 0f;
+                if (alpha > 1e-5f)
+                {
+                    outR = Mathf.Clamp01(cbR / alpha);
+                    outG = Mathf.Clamp01(cbG / alpha);
+                    outB = Mathf.Clamp01(cbB / alpha);
+                }
+
+                outPixels[i] = new Color(outR, outG, outB, alpha);
+            }
+
+            Texture2D outTex = new Texture2D(w, h, TextureFormat.RGBA32, false, false);
+            outTex.SetPixels32(outPixels);
+            outTex.Apply(false, false);
+            return outTex;
         }
 
         private void ClearBlockCardPreviewCache()
