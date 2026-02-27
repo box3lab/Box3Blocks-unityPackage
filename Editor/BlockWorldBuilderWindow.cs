@@ -1410,7 +1410,7 @@ namespace BlockWorldMVP.Editor
 
             Camera cam = _blockCardPreviewUtility.camera;
             cam.clearFlags = CameraClearFlags.Color;
-            cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+            cam.backgroundColor = new Color(0f, 0f, 0f, 1f);
             cam.nearClipPlane = 0.01f;
             cam.farClipPlane = 50f;
 
@@ -1431,14 +1431,7 @@ namespace BlockWorldMVP.Editor
 
             _blockCardPreviewUtility.DrawMesh(mesh, Matrix4x4.identity, material, 0);
             cam.Render();
-            Texture2D raw = _blockCardPreviewUtility.EndStaticPreview();
-            Texture2D processed = MakeBorderBlackTransparent(raw);
-            if (raw != null && raw != processed)
-            {
-                DestroyImmediate(raw);
-            }
-
-            return processed;
+            return _blockCardPreviewUtility.EndStaticPreview();
         }
 
         private void ClearBlockCardPreviewCache()
@@ -1452,130 +1445,6 @@ namespace BlockWorldMVP.Editor
             }
 
             _blockCardPreviewCache.Clear();
-        }
-
-        private static Texture2D MakeBorderBlackTransparent(Texture2D source)
-        {
-            if (source == null)
-            {
-                return null;
-            }
-
-            Color32[] srcPixels;
-            try
-            {
-                srcPixels = source.GetPixels32();
-            }
-            catch
-            {
-                return source;
-            }
-
-            int w = source.width;
-            int h = source.height;
-            if (w <= 0 || h <= 0 || srcPixels == null || srcPixels.Length != w * h)
-            {
-                return source;
-            }
-
-            bool[] background = new bool[srcPixels.Length];
-            Queue<int> q = new Queue<int>(w * 2 + h * 2);
-
-            void TrySeed(int x, int y)
-            {
-                int idx = x + y * w;
-                if (background[idx] || !IsBackgroundCandidate(srcPixels[idx]))
-                {
-                    return;
-                }
-
-                background[idx] = true;
-                q.Enqueue(idx);
-            }
-
-            for (int x = 0; x < w; x++)
-            {
-                TrySeed(x, 0);
-                TrySeed(x, h - 1);
-            }
-
-            for (int y = 0; y < h; y++)
-            {
-                TrySeed(0, y);
-                TrySeed(w - 1, y);
-            }
-
-            while (q.Count > 0)
-            {
-                int idx = q.Dequeue();
-                int x = idx % w;
-                int y = idx / w;
-
-                if (x > 0)
-                {
-                    int n = idx - 1;
-                    if (!background[n] && IsBackgroundCandidate(srcPixels[n]))
-                    {
-                        background[n] = true;
-                        q.Enqueue(n);
-                    }
-                }
-
-                if (x < w - 1)
-                {
-                    int n = idx + 1;
-                    if (!background[n] && IsBackgroundCandidate(srcPixels[n]))
-                    {
-                        background[n] = true;
-                        q.Enqueue(n);
-                    }
-                }
-
-                if (y > 0)
-                {
-                    int n = idx - w;
-                    if (!background[n] && IsBackgroundCandidate(srcPixels[n]))
-                    {
-                        background[n] = true;
-                        q.Enqueue(n);
-                    }
-                }
-
-                if (y < h - 1)
-                {
-                    int n = idx + w;
-                    if (!background[n] && IsBackgroundCandidate(srcPixels[n]))
-                    {
-                        background[n] = true;
-                        q.Enqueue(n);
-                    }
-                }
-            }
-
-            Texture2D outTex = new Texture2D(w, h, TextureFormat.RGBA32, false, false);
-            Color32[] outPixels = new Color32[srcPixels.Length];
-            for (int i = 0; i < srcPixels.Length; i++)
-            {
-                Color32 c = srcPixels[i];
-                if (background[i])
-                {
-                    outPixels[i] = new Color32(0, 0, 0, 0);
-                }
-                else
-                {
-                    outPixels[i] = new Color32(c.r, c.g, c.b, 255);
-                }
-            }
-
-            outTex.SetPixels32(outPixels);
-            outTex.Apply(false, false);
-            return outTex;
-        }
-
-        private static bool IsBackgroundCandidate(Color32 c)
-        {
-            // Treat only near-black as removable background.
-            return c.r <= 10 && c.g <= 10 && c.b <= 10;
         }
 
         private static void ApplyFaceMainTexSt(Renderer renderer, Vector4[] faceMainTexSt)
