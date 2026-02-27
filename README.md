@@ -1,0 +1,38 @@
+# Box3 BlockWorld MVP (UPM)
+
+This package generates a block world from JSON data.
+
+## Setup
+1. Create block prefabs (example: `grass`, `stone`).
+2. Create catalog: `Create -> Block World MVP -> Block Catalog`
+3. Create JSON template: `Assets -> Create -> Block World MVP -> Blocks JSON Template`
+4. Add `BlockWorldGenerator` to a GameObject.
+5. Assign `Catalog` and `Blocks Json`.
+6. Click `Build From JSON` in inspector.
+
+## Visual Builder (recommended)
+1. Open `Tools -> Block World MVP -> World Builder`
+2. Assign/create `Root`
+3. Search + choose `Category`
+4. Pick block cards in a 4-column grid
+5. In Scene view:
+   - `Place` mode: left click to place
+   - `Erase` mode: left click to remove
+
+Notes:
+- Block textures are auto-scanned from `Packages/com.box3.blockworld-mvp/Assets/block`.
+- Block metadata is read from `Packages/com.box3.blockworld-mvp/Assets/block-spec.json` (fallback: `block-id.json`).
+- `transparent: true` uses transparent material, so PNG alpha will render correctly.
+- If texture has `.png.mcmeta`, block face animation is played (supports multi-frame strips such as 4-frame textures).
+- Glow blocks show a color strip on the card bottom.
+- Generated mesh/material assets are stored in `Assets/BlockWorldGenerated`.
+
+## JSON format
+```json
+{
+  "blocks": [
+    { "id": "grass", "x": 0, "y": 0, "z": 0 },
+    { "id": "stone", "x": 1, "y": 0, "z": 0 }
+  ]
+}
+```
