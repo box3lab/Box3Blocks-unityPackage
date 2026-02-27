@@ -228,16 +228,22 @@ namespace BlockWorldMVP.Editor
             }
 
             Rect textRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, rect.height - (PreviewSize + 20f));
-            EditorGUI.LabelField(textRect, $"{title}\n{subtitle}", new GUIStyle(EditorStyles.label)
+            GUIStyle textStyle = new GUIStyle(EditorStyles.label)
             {
                 alignment = TextAnchor.UpperCenter,
                 wordWrap = true,
                 fontSize = 11
-            });
+            };
+            if (_selectedIndex == index)
+            {
+                textStyle.normal.textColor = new Color(0.78f, 1f, 0.8f, 1f);
+                textStyle.fontStyle = FontStyle.Bold;
+            }
+            EditorGUI.LabelField(textRect, $"{title}\n{subtitle}", textStyle);
 
             if (_selectedIndex == index)
             {
-                EditorGUI.DrawRect(new Rect(rect.x, rect.y, rect.width, 2f), new Color(0.1f, 0.95f, 0.25f, 1f));
+                DrawSelectedCardFrame(rect);
             }
 
             if (block.emitsLight)
@@ -250,6 +256,28 @@ namespace BlockWorldMVP.Editor
                 _selectedIndex = index;
                 Repaint();
             }
+        }
+
+        private static void DrawSelectedCardFrame(Rect rect)
+        {
+            Color fill = new Color(0.16f, 0.48f, 0.2f, 0.28f);
+            Color border = new Color(0.15f, 1f, 0.25f, 1f);
+            EditorGUI.DrawRect(new Rect(rect.x + 1f, rect.y + 1f, rect.width - 2f, rect.height - 2f), fill);
+
+            const float t = 3f;
+            EditorGUI.DrawRect(new Rect(rect.x, rect.y, rect.width, t), border);
+            EditorGUI.DrawRect(new Rect(rect.x, rect.yMax - t, rect.width, t), border);
+            EditorGUI.DrawRect(new Rect(rect.x, rect.y, t, rect.height), border);
+            EditorGUI.DrawRect(new Rect(rect.xMax - t, rect.y, t, rect.height), border);
+
+            Rect badgeRect = new Rect(rect.x + 6f, rect.y + 6f, 62f, 16f);
+            EditorGUI.DrawRect(badgeRect, new Color(0.05f, 0.18f, 0.08f, 0.95f));
+            EditorGUI.LabelField(badgeRect, "SELECTED", new GUIStyle(EditorStyles.miniLabel)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = new Color(0.5f, 1f, 0.55f, 1f) },
+                fontStyle = FontStyle.Bold
+            });
         }
 
         private int CalculateColumnCount()
