@@ -44,6 +44,12 @@ namespace BlockWorldMVP.Editor
             public int[] frames = Array.Empty<int>();
         }
 
+        private sealed class AnimatedPreviewCacheEntry
+        {
+            public int signature;
+            public Texture2D texture;
+        }
+
         private class BlockMetadata
         {
             public int numericId = -1;
@@ -84,7 +90,9 @@ namespace BlockWorldMVP.Editor
         private GUIStyle _categoryTabSelectedStyle;
         private readonly Dictionary<string, Mesh> _staticBlockMeshCache = new Dictionary<string, Mesh>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Texture2D> _blockCardPreviewCache = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, AnimatedPreviewCacheEntry> _animatedBlockCardPreviewCache = new Dictionary<string, AnimatedPreviewCacheEntry>(StringComparer.OrdinalIgnoreCase);
         private PreviewRenderUtility _blockCardPreviewUtility;
+        private double _nextAnimatedPreviewRepaintTime;
 
         [MenuItem("Tools/Block World MVP/World Builder")]
         public static void Open()
@@ -319,6 +327,7 @@ namespace BlockWorldMVP.Editor
             DrawBlockGrid(columns);
 
             EditorGUILayout.EndScrollView();
+            RequestAnimatedCardPreviewRepaint();
         }
 
         private void DrawBlockGrid(int columns)
@@ -1361,6 +1370,11 @@ namespace BlockWorldMVP.Editor
                 return null;
             }
 
+            if (HasAnimatedFaces(block))
+            {
+                return GetOrBuildAnimatedBlockCardPreview(block);
+            }
+
             if (_blockCardPreviewCache.TryGetValue(block.id, out Texture2D cached) && cached != null)
             {
                 return cached;
@@ -1389,6 +1403,140 @@ namespace BlockWorldMVP.Editor
             }
 
             return block.previewTexture;
+        }
+
+        private Texture2D GetOrBuildAnimatedBlockCardPreview(BlockDefinition block)
+        {
+            if (block == null || string.IsNullOrWhiteSpace(block.id))
+            {
+                return null;
+            }
+
+            if (!BlockAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData)
+                || renderData == null
+                || renderData.materials == null
+                || renderData.materials.Length == 0
+                || renderData.materials[0] == null
+                || renderData.faceMainTexSt == null
+                || renderData.faceMainTexSt.Length < SideOrder.Length)
+            {
+                return block.previewTexture;
+            }
+
+            float now = Time.realtimeSinceStartup;
+            int signature = ComputeAnimatedPreviewSignature(block, now);
+            if (_animatedBlockCardPreviewCache.TryGetValue(block.id, out AnimatedPreviewCacheEntry entry)
+                && entry != null
+                && entry.signature == signature
+                && entry.texture != null)
+            {
+                return entry.texture;
+            }
+
+            Mesh animatedMesh = BuildAnimatedPreviewMesh(block.id, renderData.faceMainTexSt, block.sideAnimations, now);
+            if (animatedMesh == null)
+            {
+                return block.previewTexture;
+            }
+
+            Texture2D nextTexture = RenderBlockCardPreview(animatedMesh, renderData.materials[0]);
+            DestroyImmediate(animatedMesh);
+            if (nextTexture == null)
+            {
+                return block.previewTexture;
+            }
+
+            if (entry == null)
+            {
+                entry = new AnimatedPreviewCacheEntry();
+                _animatedBlockCardPreviewCache[block.id] = entry;
+            }
+            else if (entry.texture != null)
+            {
+                DestroyImmediate(entry.texture);
+            }
+
+            entry.signature = signature;
+            entry.texture = nextTexture;
+            return nextTexture;
+        }
+
+        private static int ComputeAnimatedPreviewSignature(BlockDefinition block, float timeNow)
+        {
+            if (block == null)
+            {
+                return 0;
+            }
+
+            unchecked
+            {
+                int hash = 17;
+                for (int i = 0; i < SideOrder.Length; i++)
+                {
+                    int frame = ResolveAnimationFrameIndexForSide(block, SideOrder[i], timeNow);
+                    hash = hash * 31 + frame;
+                }
+
+                return hash;
+            }
+        }
+
+        private static int ResolveAnimationFrameIndexForSide(BlockDefinition block, string side, float timeNow)
+        {
+            if (block == null
+                || block.sideAnimations == null
+                || !block.sideAnimations.TryGetValue(side, out FaceAnimationSpec spec)
+                || spec == null
+                || spec.frameCount <= 1)
+            {
+                return 0;
+            }
+
+            return ResolveAnimationFrameIndex(spec, timeNow);
+        }
+
+        private static int ResolveAnimationFrameIndex(FaceAnimationSpec spec, float timeNow)
+        {
+            if (spec == null || spec.frameCount <= 1)
+            {
+                return 0;
+            }
+
+            int[] sequence = spec.frames;
+            int sequenceLength = sequence != null && sequence.Length > 0 ? sequence.Length : spec.frameCount;
+            float frameDuration = Mathf.Max(0.01f, spec.frameDuration);
+            int step = Mathf.FloorToInt(Mathf.Max(0f, timeNow) / frameDuration) % sequenceLength;
+            int frameIndex = sequence != null && sequence.Length > 0 ? sequence[step] : step;
+            return Mathf.Clamp(frameIndex, 0, spec.frameCount - 1);
+        }
+
+        private static Mesh BuildAnimatedPreviewMesh(string id, Vector4[] baseFaceSt, Dictionary<string, FaceAnimationSpec> sideAnimations, float timeNow)
+        {
+            if (baseFaceSt == null || baseFaceSt.Length < SideOrder.Length)
+            {
+                return null;
+            }
+
+            Vector4[] animatedFaceSt = new Vector4[SideOrder.Length];
+            for (int i = 0; i < SideOrder.Length; i++)
+            {
+                Vector4 st = baseFaceSt[i];
+                string side = SideOrder[i];
+                if (sideAnimations != null
+                    && sideAnimations.TryGetValue(side, out FaceAnimationSpec spec)
+                    && spec != null
+                    && spec.frameCount > 1)
+                {
+                    int frameIndex = ResolveAnimationFrameIndex(spec, timeNow);
+                    float scaleY = st.y / spec.frameCount;
+                    float offsetY = st.w + st.y - (frameIndex + 1f) * scaleY;
+                    st = new Vector4(st.x, scaleY, st.z, offsetY);
+                }
+
+                animatedFaceSt[i] = st;
+            }
+
+            return BuildStaticBlockMesh(id + "_animPreview", animatedFaceSt);
         }
 
         private Texture2D RenderBlockCardPreview(Mesh mesh, Material material)
@@ -1449,7 +1597,7 @@ namespace BlockWorldMVP.Editor
             float radius = Mathf.Max(0.5f, b.extents.magnitude);
             Quaternion viewRot = Quaternion.Euler(22f, -30f, 0f);
             Vector3 target = b.center;
-            Vector3 camDir = viewRot * new Vector3(0f, 0f, 1f);
+            Vector3 camDir = viewRot * new Vector3(0f, 0f, 1.1f);
             cam.transform.position = target - camDir * radius * 4.6f;
             cam.transform.rotation = viewRot;
             cam.transform.LookAt(target);
@@ -1522,6 +1670,43 @@ namespace BlockWorldMVP.Editor
             }
 
             _blockCardPreviewCache.Clear();
+
+            foreach (KeyValuePair<string, AnimatedPreviewCacheEntry> kv in _animatedBlockCardPreviewCache)
+            {
+                if (kv.Value != null && kv.Value.texture != null)
+                {
+                    DestroyImmediate(kv.Value.texture);
+                }
+            }
+
+            _animatedBlockCardPreviewCache.Clear();
+        }
+
+        private void RequestAnimatedCardPreviewRepaint()
+        {
+            bool hasAnimatedVisible = false;
+            for (int i = 0; i < _filteredBlocks.Count; i++)
+            {
+                if (HasAnimatedFaces(_filteredBlocks[i]))
+                {
+                    hasAnimatedVisible = true;
+                    break;
+                }
+            }
+
+            if (!hasAnimatedVisible)
+            {
+                return;
+            }
+
+            double now = EditorApplication.timeSinceStartup;
+            if (now < _nextAnimatedPreviewRepaintTime)
+            {
+                return;
+            }
+
+            _nextAnimatedPreviewRepaintTime = now + (1.0 / 12.0);
+            Repaint();
         }
 
         private static void ApplyFaceMainTexSt(Renderer renderer, Vector4[] faceMainTexSt)
