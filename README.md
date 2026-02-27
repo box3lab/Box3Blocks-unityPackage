@@ -13,13 +13,15 @@ This package generates a block world from JSON data.
 ## Visual Builder (recommended)
 1. Open `Tools -> Block World MVP -> World Builder`
 2. Assign/create `Root`
-3. Search + choose `Category`
+3. Search + choose category tabs (including `Recent`)
 4. Pick block cards in a 4-column grid
 5. In Scene view:
    - `Place` mode: left click to place
    - `Erase` mode: left click to remove
+6. Click `Clean Materials` to remove unused generated materials
 
 Notes:
+- `Recent` only updates when a block is actually placed in Scene.
 - Block textures are auto-scanned from `Packages/com.box3.blockworld-mvp/Assets/block`.
 - Block metadata is read from `Packages/com.box3.blockworld-mvp/Assets/block-spec.json` (fallback: `block-id.json`).
 - `transparent: true` uses transparent material, so PNG alpha will render correctly.

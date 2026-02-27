@@ -13,6 +13,7 @@ namespace BlockWorldMVP.Editor
         private const string BlockTextureFolder = "Packages/com.box3.blockworld-mvp/Assets/block";
         private const string BlockSpecPath = "Packages/com.box3.blockworld-mvp/Assets/block-spec.json";
         private const string BlockIdPath = "Packages/com.box3.blockworld-mvp/Assets/block-id.json";
+        private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
         private static readonly Regex SideRegex = new Regex(@"^(.*)_(back|bottom|front|left|right|top)\.png$", RegexOptions.Compiled);
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
@@ -57,6 +58,7 @@ namespace BlockWorldMVP.Editor
         private Transform _root;
         private List<BlockDefinition> _allBlocks = new List<BlockDefinition>();
         private List<BlockDefinition> _filteredBlocks = new List<BlockDefinition>();
+        private List<string> _recentBlockIds = new List<string>();
         private List<string> _categories = new List<string> { "All" };
         private int _selectedIndex;
         private int _selectedCategory;
@@ -107,6 +109,12 @@ namespace BlockWorldMVP.Editor
                 {
                     ClearRoot();
                 }
+
+                if (GUILayout.Button("Clean Materials"))
+                {
+                    int deleted = CleanupUnusedGeneratedMaterials();
+                    EditorUtility.DisplayDialog("Block World Builder", $"Removed {deleted} unused generated materials.", "OK");
+                }
             }
         }
 
@@ -140,12 +148,11 @@ namespace BlockWorldMVP.Editor
                 }
             }
 
-            EditorGUI.BeginChangeCheck();
-            _selectedCategory = EditorGUILayout.Popup("Category", _selectedCategory, _categories.ToArray());
-            if (EditorGUI.EndChangeCheck())
+            if (_categories.Count > 0)
             {
-                ApplyFilter();
+                DrawCategoryTabsWrapped();
             }
+
             int columns = CalculateColumnCount();
             EditorGUILayout.LabelField($"Blocks: {_filteredBlocks.Count}  |  Layout: {columns} columns");
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
@@ -250,6 +257,40 @@ namespace BlockWorldMVP.Editor
             const float minCellWidth = 150f;
             float available = Mathf.Max(1f, position.width - 40f);
             return Mathf.Max(1, Mathf.FloorToInt(available / minCellWidth));
+        }
+
+        private void DrawCategoryTabsWrapped()
+        {
+            float availableWidth = Mathf.Max(120f, position.width - 32f);
+            float lineWidth = 0f;
+            const float padX = 10f;
+            const float spacing = 4f;
+
+            EditorGUILayout.BeginHorizontal();
+            for (int i = 0; i < _categories.Count; i++)
+            {
+                string label = _categories[i];
+                float buttonWidth = Mathf.Clamp(EditorStyles.miniButton.CalcSize(new GUIContent(label)).x + padX, 52f, 220f);
+
+                if (lineWidth > 0f && lineWidth + buttonWidth > availableWidth)
+                {
+                    EditorGUILayout.EndHorizontal();
+                    EditorGUILayout.BeginHorizontal();
+                    lineWidth = 0f;
+                }
+
+                bool selected = i == _selectedCategory;
+                bool clicked = GUILayout.Toggle(selected, label, EditorStyles.miniButton, GUILayout.Width(buttonWidth));
+                if (clicked && !selected)
+                {
+                    _selectedCategory = i;
+                    ApplyFilter();
+                }
+
+                lineWidth += buttonWidth + spacing;
+            }
+
+            EditorGUILayout.EndHorizontal();
         }
 
         private void OnSceneGUI(SceneView sceneView)
@@ -390,6 +431,7 @@ namespace BlockWorldMVP.Editor
             marker.HasAnimation = definition.hasAnimation;
 
             EditorUtility.SetDirty(go);
+            RegisterRecentPlaced(definition.id);
         }
 
         private void EraseBlock(PlacedBlock hitBlock, Vector3Int fallbackPosition)
@@ -437,6 +479,98 @@ namespace BlockWorldMVP.Editor
             {
                 Undo.DestroyObjectImmediate(_root.GetChild(i).gameObject);
             }
+        }
+
+        private int CleanupUnusedGeneratedMaterials()
+        {
+            if (!AssetDatabase.IsValidFolder(GeneratedMaterialFolder))
+            {
+                return 0;
+            }
+
+            HashSet<string> used = CollectUsedGeneratedMaterialPaths();
+            string[] guids = AssetDatabase.FindAssets("t:Material", new[] { GeneratedMaterialFolder });
+            int deleted = 0;
+            for (int i = 0; i < guids.Length; i++)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guids[i]);
+                if (string.IsNullOrWhiteSpace(path) || used.Contains(path))
+                {
+                    continue;
+                }
+
+                if (AssetDatabase.DeleteAsset(path))
+                {
+                    deleted++;
+                }
+            }
+
+            if (deleted > 0)
+            {
+                AssetDatabase.Refresh();
+            }
+
+            return deleted;
+        }
+
+        private static HashSet<string> CollectUsedGeneratedMaterialPaths()
+        {
+            HashSet<string> used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            Renderer[] sceneRenderers = FindObjectsOfType<Renderer>(true);
+            for (int i = 0; i < sceneRenderers.Length; i++)
+            {
+                Material[] mats = sceneRenderers[i].sharedMaterials;
+                for (int m = 0; m < mats.Length; m++)
+                {
+                    Material mat = mats[m];
+                    if (mat == null)
+                    {
+                        continue;
+                    }
+
+                    string path = AssetDatabase.GetAssetPath(mat);
+                    if (!string.IsNullOrWhiteSpace(path) && path.StartsWith(GeneratedMaterialFolder, StringComparison.OrdinalIgnoreCase))
+                    {
+                        used.Add(path);
+                    }
+                }
+            }
+
+            string[] allAssetPaths = AssetDatabase.GetAllAssetPaths();
+            for (int i = 0; i < allAssetPaths.Length; i++)
+            {
+                string assetPath = allAssetPaths[i];
+                if (!assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (assetPath.StartsWith(GeneratedMaterialFolder, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!(assetPath.EndsWith(".unity", StringComparison.OrdinalIgnoreCase)
+                    || assetPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase)
+                    || assetPath.EndsWith(".asset", StringComparison.OrdinalIgnoreCase)
+                    || assetPath.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                string[] deps = AssetDatabase.GetDependencies(assetPath, true);
+                for (int d = 0; d < deps.Length; d++)
+                {
+                    string dep = deps[d];
+                    if (dep.StartsWith(GeneratedMaterialFolder, StringComparison.OrdinalIgnoreCase))
+                    {
+                        used.Add(dep);
+                    }
+                }
+            }
+
+            return used;
         }
 
         private void ReloadBlockLibrary()
@@ -508,13 +642,18 @@ namespace BlockWorldMVP.Editor
         {
             _filteredBlocks.Clear();
             string selectedCategory = _categories[Mathf.Clamp(_selectedCategory, 0, _categories.Count - 1)];
-            for (int i = 0; i < _allBlocks.Count; i++)
+            IEnumerable<BlockDefinition> source = string.Equals(selectedCategory, "Recent", StringComparison.OrdinalIgnoreCase)
+                ? EnumerateRecentBlocks()
+                : _allBlocks;
+
+            foreach (BlockDefinition block in source)
             {
-                BlockDefinition block = _allBlocks[i];
                 bool matchSearch = string.IsNullOrWhiteSpace(_search)
                     || block.id.IndexOf(_search, StringComparison.OrdinalIgnoreCase) >= 0
                     || (!string.IsNullOrWhiteSpace(block.displayName) && block.displayName.IndexOf(_search, StringComparison.OrdinalIgnoreCase) >= 0);
-                bool matchCategory = selectedCategory == "All" || string.Equals(block.category, selectedCategory, StringComparison.OrdinalIgnoreCase);
+                bool matchCategory = selectedCategory == "All"
+                    || string.Equals(selectedCategory, "Recent", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(block.category, selectedCategory, StringComparison.OrdinalIgnoreCase);
                 if (matchSearch && matchCategory)
                 {
                     _filteredBlocks.Add(block);
@@ -621,11 +760,45 @@ namespace BlockWorldMVP.Editor
             List<string> categories = new List<string>(categorySet);
             categories.Sort(StringComparer.OrdinalIgnoreCase);
             categories.Insert(0, "All");
+            categories.Insert(1, "Recent");
 
             string current = _categories.Count > 0 && _selectedCategory < _categories.Count ? _categories[_selectedCategory] : "All";
             _categories = categories;
             int nextIndex = _categories.FindIndex(c => string.Equals(c, current, StringComparison.OrdinalIgnoreCase));
             _selectedCategory = nextIndex >= 0 ? nextIndex : 0;
+        }
+
+        private IEnumerable<BlockDefinition> EnumerateRecentBlocks()
+        {
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < _recentBlockIds.Count; i++)
+            {
+                string id = _recentBlockIds[i];
+                if (string.IsNullOrWhiteSpace(id) || !seen.Add(id))
+                {
+                    continue;
+                }
+
+                for (int j = 0; j < _allBlocks.Count; j++)
+                {
+                    if (string.Equals(_allBlocks[j].id, id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        yield return _allBlocks[j];
+                        break;
+                    }
+                }
+            }
+        }
+
+        private void RegisterRecentPlaced(string blockId)
+        {
+            if (string.IsNullOrWhiteSpace(blockId))
+            {
+                return;
+            }
+
+            _recentBlockIds.RemoveAll(id => string.Equals(id, blockId, StringComparison.OrdinalIgnoreCase));
+            _recentBlockIds.Insert(0, blockId);
         }
 
         private static Dictionary<string, BlockMetadata> LoadBlockMetadata()
