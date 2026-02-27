@@ -83,6 +83,8 @@ namespace BlockWorldMVP.Editor
         private GUIStyle _categoryTabStyle;
         private GUIStyle _categoryTabSelectedStyle;
         private readonly Dictionary<string, Mesh> _staticBlockMeshCache = new Dictionary<string, Mesh>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Texture2D> _blockCardPreviewCache = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
+        private PreviewRenderUtility _blockCardPreviewUtility;
 
         [MenuItem("Tools/Block World MVP/World Builder")]
         public static void Open()
@@ -100,6 +102,12 @@ namespace BlockWorldMVP.Editor
         {
             SceneView.duringSceneGui -= OnSceneGUI;
             _staticBlockMeshCache.Clear();
+            ClearBlockCardPreviewCache();
+            if (_blockCardPreviewUtility != null)
+            {
+                _blockCardPreviewUtility.Cleanup();
+                _blockCardPreviewUtility = null;
+            }
         }
 
         private static string L(string key)
@@ -376,9 +384,10 @@ namespace BlockWorldMVP.Editor
                 rect.y + 10f,
                 PreviewSize,
                 PreviewSize);
-            if (block.previewTexture != null)
+            Texture2D cardPreview = GetOrBuildBlockCardPreview(block);
+            if (cardPreview != null)
             {
-                EditorGUI.DrawPreviewTexture(previewRect, block.previewTexture, null, ScaleMode.ScaleToFit);
+                GUI.DrawTexture(previewRect, cardPreview, ScaleMode.ScaleToFit, true);
             }
 
             Rect textRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, rect.height - (PreviewSize + 20f));
@@ -985,6 +994,7 @@ namespace BlockWorldMVP.Editor
             EnforceCrispImportForAllBlockTextures();
             BlockAssetFactory.InvalidateCaches();
             _staticBlockMeshCache.Clear();
+            ClearBlockCardPreviewCache();
             _allBlocks.Clear();
             Dictionary<string, BlockMetadata> metadataMap = LoadBlockMetadata();
 
@@ -1342,6 +1352,230 @@ namespace BlockWorldMVP.Editor
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
+        }
+
+        private Texture2D GetOrBuildBlockCardPreview(BlockDefinition block)
+        {
+            if (block == null || string.IsNullOrWhiteSpace(block.id))
+            {
+                return null;
+            }
+
+            if (_blockCardPreviewCache.TryGetValue(block.id, out Texture2D cached) && cached != null)
+            {
+                return cached;
+            }
+
+            if (!BlockAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData)
+                || renderData == null
+                || renderData.materials == null
+                || renderData.materials.Length == 0
+                || renderData.materials[0] == null)
+            {
+                return block.previewTexture;
+            }
+
+            Mesh mesh = GetOrCreateStaticBlockMesh(block, renderData);
+            if (mesh == null)
+            {
+                return block.previewTexture;
+            }
+
+            Texture2D preview = RenderBlockCardPreview(mesh, renderData.materials[0]);
+            if (preview != null)
+            {
+                _blockCardPreviewCache[block.id] = preview;
+                return preview;
+            }
+
+            return block.previewTexture;
+        }
+
+        private Texture2D RenderBlockCardPreview(Mesh mesh, Material material)
+        {
+            if (mesh == null || material == null)
+            {
+                return null;
+            }
+
+            if (_blockCardPreviewUtility == null)
+            {
+                _blockCardPreviewUtility = new PreviewRenderUtility();
+                _blockCardPreviewUtility.cameraFieldOfView = 22f;
+            }
+
+            const int size = 128;
+            Rect r = new Rect(0f, 0f, size, size);
+            _blockCardPreviewUtility.BeginStaticPreview(r);
+
+            Camera cam = _blockCardPreviewUtility.camera;
+            cam.clearFlags = CameraClearFlags.Color;
+            cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+            cam.nearClipPlane = 0.01f;
+            cam.farClipPlane = 50f;
+
+            _blockCardPreviewUtility.lights[0].intensity = 1.2f;
+            _blockCardPreviewUtility.lights[0].transform.rotation = Quaternion.Euler(40f, 35f, 0f);
+            _blockCardPreviewUtility.lights[1].intensity = 0.9f;
+            _blockCardPreviewUtility.lights[1].transform.rotation = Quaternion.Euler(340f, 220f, 0f);
+            _blockCardPreviewUtility.ambientColor = new Color(0.55f, 0.55f, 0.55f, 1f);
+
+            Bounds b = mesh.bounds;
+            float radius = Mathf.Max(0.5f, b.extents.magnitude);
+            Quaternion viewRot = Quaternion.Euler(22f, -30f, 0f);
+            Vector3 target = b.center;
+            Vector3 camDir = viewRot * new Vector3(0f, 0f, 1f);
+            cam.transform.position = target - camDir * radius * 4.6f;
+            cam.transform.rotation = viewRot;
+            cam.transform.LookAt(target);
+
+            _blockCardPreviewUtility.DrawMesh(mesh, Matrix4x4.identity, material, 0);
+            cam.Render();
+            Texture2D raw = _blockCardPreviewUtility.EndStaticPreview();
+            Texture2D processed = MakeBorderBlackTransparent(raw);
+            if (raw != null && raw != processed)
+            {
+                DestroyImmediate(raw);
+            }
+
+            return processed;
+        }
+
+        private void ClearBlockCardPreviewCache()
+        {
+            foreach (KeyValuePair<string, Texture2D> kv in _blockCardPreviewCache)
+            {
+                if (kv.Value != null)
+                {
+                    DestroyImmediate(kv.Value);
+                }
+            }
+
+            _blockCardPreviewCache.Clear();
+        }
+
+        private static Texture2D MakeBorderBlackTransparent(Texture2D source)
+        {
+            if (source == null)
+            {
+                return null;
+            }
+
+            Color32[] srcPixels;
+            try
+            {
+                srcPixels = source.GetPixels32();
+            }
+            catch
+            {
+                return source;
+            }
+
+            int w = source.width;
+            int h = source.height;
+            if (w <= 0 || h <= 0 || srcPixels == null || srcPixels.Length != w * h)
+            {
+                return source;
+            }
+
+            bool[] background = new bool[srcPixels.Length];
+            Queue<int> q = new Queue<int>(w * 2 + h * 2);
+
+            void TrySeed(int x, int y)
+            {
+                int idx = x + y * w;
+                if (background[idx] || !IsBackgroundCandidate(srcPixels[idx]))
+                {
+                    return;
+                }
+
+                background[idx] = true;
+                q.Enqueue(idx);
+            }
+
+            for (int x = 0; x < w; x++)
+            {
+                TrySeed(x, 0);
+                TrySeed(x, h - 1);
+            }
+
+            for (int y = 0; y < h; y++)
+            {
+                TrySeed(0, y);
+                TrySeed(w - 1, y);
+            }
+
+            while (q.Count > 0)
+            {
+                int idx = q.Dequeue();
+                int x = idx % w;
+                int y = idx / w;
+
+                if (x > 0)
+                {
+                    int n = idx - 1;
+                    if (!background[n] && IsBackgroundCandidate(srcPixels[n]))
+                    {
+                        background[n] = true;
+                        q.Enqueue(n);
+                    }
+                }
+
+                if (x < w - 1)
+                {
+                    int n = idx + 1;
+                    if (!background[n] && IsBackgroundCandidate(srcPixels[n]))
+                    {
+                        background[n] = true;
+                        q.Enqueue(n);
+                    }
+                }
+
+                if (y > 0)
+                {
+                    int n = idx - w;
+                    if (!background[n] && IsBackgroundCandidate(srcPixels[n]))
+                    {
+                        background[n] = true;
+                        q.Enqueue(n);
+                    }
+                }
+
+                if (y < h - 1)
+                {
+                    int n = idx + w;
+                    if (!background[n] && IsBackgroundCandidate(srcPixels[n]))
+                    {
+                        background[n] = true;
+                        q.Enqueue(n);
+                    }
+                }
+            }
+
+            Texture2D outTex = new Texture2D(w, h, TextureFormat.RGBA32, false, false);
+            Color32[] outPixels = new Color32[srcPixels.Length];
+            for (int i = 0; i < srcPixels.Length; i++)
+            {
+                Color32 c = srcPixels[i];
+                if (background[i])
+                {
+                    outPixels[i] = new Color32(0, 0, 0, 0);
+                }
+                else
+                {
+                    outPixels[i] = new Color32(c.r, c.g, c.b, 255);
+                }
+            }
+
+            outTex.SetPixels32(outPixels);
+            outTex.Apply(false, false);
+            return outTex;
+        }
+
+        private static bool IsBackgroundCandidate(Color32 c)
+        {
+            // Treat only near-black as removable background.
+            return c.r <= 10 && c.g <= 10 && c.b <= 10;
         }
 
         private static void ApplyFaceMainTexSt(Renderer renderer, Vector4[] faceMainTexSt)
