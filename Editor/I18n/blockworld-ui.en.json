@@ -1,0 +1,48 @@
+{
+  "entries": [
+    { "key": "window.title", "value": "Block World Builder" },
+    { "key": "section.world_root", "value": "World Root" },
+    { "key": "section.editor_tool", "value": "Editor Tool" },
+    { "key": "section.block_library", "value": "Block Library" },
+    { "key": "root.root", "value": "Root" },
+    { "key": "root.create", "value": "Create Root" },
+    { "key": "root.clear", "value": "Clear Root" },
+    { "key": "root.clean_materials", "value": "Clean Materials" },
+    { "key": "dialog.ok", "value": "OK" },
+    { "key": "dialog.clean_materials_message", "value": "Removed {0} unused generated materials." },
+    { "key": "tool.place", "value": "Place" },
+    { "key": "tool.erase", "value": "Erase" },
+    { "key": "tool.replace", "value": "Replace" },
+    { "key": "tool.rotate", "value": "Rotate" },
+    { "key": "tool.horizontal", "value": "Horizontal (X/Z)" },
+    { "key": "tool.height", "value": "Height (Y)" },
+    { "key": "tool.brush_volume", "value": "Brush Volume: {0}x{1}x{2}" },
+    { "key": "tool.assign_root_help", "value": "Assign or create Root first. Scene click edit works only when Root exists." },
+    { "key": "library.search", "value": "Search" },
+    { "key": "library.blocks_layout", "value": "Blocks: {0}  |  Layout: {1} columns" },
+    { "key": "card.anim", "value": "Anim" },
+    { "key": "card.glow", "value": "Glow" },
+    { "key": "card.transparent", "value": "Transparent" },
+    { "key": "card.selected", "value": "SELECTED" },
+    { "key": "category.all", "value": "All" },
+    { "key": "category.recent", "value": "Recent" },
+    { "key": "category.uncategorized", "value": "Uncategorized" }
+  ],
+  "categories": [
+    { "key": "color", "value": "color" },
+    { "key": "element", "value": "element" },
+    { "key": "food", "value": "food" },
+    { "key": "letter", "value": "letter" },
+    { "key": "light", "value": "light" },
+    { "key": "nature", "value": "nature" },
+    { "key": "number", "value": "number" },
+    { "key": "structure", "value": "structure" },
+    { "key": "symbol", "value": "symbol" },
+    { "key": "misc", "value": "misc" },
+    { "key": "building", "value": "building" },
+    { "key": "glass", "value": "glass" }
+  ],
+  "blocks": [
+    { "key": "blue_grass", "value": "Blue Grass" }
+  ]
+}
