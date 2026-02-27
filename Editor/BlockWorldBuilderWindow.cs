@@ -66,6 +66,8 @@ namespace BlockWorldMVP.Editor
         private string _search = string.Empty;
         private Vector2 _scroll;
         private EditTool _tool = EditTool.Place;
+        private int _brushHorizontalSize = 1;
+        private int _brushHeight = 1;
         private const float PreviewSize = 75f;
 
         [MenuItem("Tools/Block World MVP/World Builder")]
@@ -123,6 +125,9 @@ namespace BlockWorldMVP.Editor
         {
             EditorGUILayout.LabelField("Editor Tool", EditorStyles.boldLabel);
             _tool = (EditTool)GUILayout.Toolbar((int)_tool, new[] { "Place", "Erase", "Replace" });
+            _brushHorizontalSize = Mathf.Max(1, EditorGUILayout.IntField("Horizontal Size (X/Z)", _brushHorizontalSize));
+            _brushHeight = Mathf.Max(1, EditorGUILayout.IntField("Height (Y)", _brushHeight));
+            EditorGUILayout.LabelField($"Brush Volume: {_brushHorizontalSize}x{_brushHorizontalSize}x{_brushHeight}");
 
             if (_root == null)
             {
@@ -357,15 +362,15 @@ namespace BlockWorldMVP.Editor
             {
                 if (_tool == EditTool.Place)
                 {
-                    PlaceBlock(target);
+                    PlaceBlockBrush(target);
                 }
                 else if (_tool == EditTool.Replace)
                 {
-                    ReplaceBlock(hitBlock, target);
+                    ReplaceBlockBrush(hitBlock, target);
                 }
                 else
                 {
-                    EraseBlock(hitBlock, target);
+                    EraseBlockBrush(hitBlock, target);
                 }
 
                 e.Use();
@@ -403,6 +408,13 @@ namespace BlockWorldMVP.Editor
 
             if (_tool == EditTool.Erase || _tool == EditTool.Replace)
             {
+                if (TryFindClosestBlockFromScreen(mousePosition, out PlacedBlock closest))
+                {
+                    hitBlock = closest;
+                    target = Vector3Int.RoundToInt(closest.transform.position);
+                    return true;
+                }
+
                 return false;
             }
 
@@ -418,31 +430,84 @@ namespace BlockWorldMVP.Editor
             return true;
         }
 
+        private bool TryFindClosestBlockFromScreen(Vector2 mousePosition, out PlacedBlock block)
+        {
+            block = null;
+            if (_root == null)
+            {
+                return false;
+            }
+
+            const float maxPixelDistance = 36f;
+            float bestSq = maxPixelDistance * maxPixelDistance;
+            for (int i = 0; i < _root.childCount; i++)
+            {
+                Transform child = _root.GetChild(i);
+                PlacedBlock candidate = child.GetComponent<PlacedBlock>();
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                Vector2 gui = HandleUtility.WorldToGUIPoint(candidate.transform.position);
+                float sq = (gui - mousePosition).sqrMagnitude;
+                if (sq < bestSq)
+                {
+                    bestSq = sq;
+                    block = candidate;
+                }
+            }
+
+            return block != null;
+        }
+
         private void DrawScenePreview(Vector3Int target)
         {
             Handles.color = _tool == EditTool.Place ? Color.green : (_tool == EditTool.Replace ? Color.yellow : Color.red);
-            Handles.DrawWireCube(target, Vector3.one);
+            List<Vector3Int> positions = BuildBrushPositions(target);
+            for (int i = 0; i < positions.Count; i++)
+            {
+                Handles.DrawWireCube(positions[i], Vector3.one);
+            }
             SceneView.RepaintAll();
         }
 
-        private void PlaceBlock(Vector3Int position)
+        private void PlaceBlockBrush(Vector3Int origin)
         {
-            if (FindBlockAt(position) != null)
-            {
-                return;
-            }
-
             if (_selectedIndex < 0 || _selectedIndex >= _filteredBlocks.Count)
             {
                 return;
             }
 
             BlockDefinition definition = _filteredBlocks[_selectedIndex];
+            bool placedAny = false;
+            List<Vector3Int> positions = BuildBrushPositions(origin);
+            for (int i = 0; i < positions.Count; i++)
+            {
+                if (TryPlaceSingleBlock(definition, positions[i]))
+                {
+                    placedAny = true;
+                }
+            }
+
+            if (placedAny)
+            {
+                RegisterRecentPlaced(definition.id);
+            }
+        }
+
+        private bool TryPlaceSingleBlock(BlockDefinition definition, Vector3Int position)
+        {
+            if (FindBlockAt(position) != null)
+            {
+                return false;
+            }
+
             Material[] materials = BlockAssetFactory.GetFaceMaterials(definition.sideTexturePaths, definition.transparent);
             Mesh cubeMesh = BlockAssetFactory.GetOrCreateCubeMesh();
             if (cubeMesh == null || materials == null)
             {
-                return;
+                return false;
             }
 
             GameObject go = new GameObject($"{definition.id}_{position.x}_{position.y}_{position.z}");
@@ -465,21 +530,26 @@ namespace BlockWorldMVP.Editor
             marker.HasAnimation = definition.hasAnimation;
 
             EditorUtility.SetDirty(go);
-            RegisterRecentPlaced(definition.id);
+            return true;
         }
 
-        private void EraseBlock(PlacedBlock hitBlock, Vector3Int fallbackPosition)
+        private void EraseBlockBrush(PlacedBlock hitBlock, Vector3Int fallbackPosition)
         {
-            GameObject target = hitBlock != null ? hitBlock.gameObject : FindBlockAt(fallbackPosition);
-            if (target == null)
+            Vector3Int origin = hitBlock != null ? Vector3Int.RoundToInt(hitBlock.transform.position) : fallbackPosition;
+            List<Vector3Int> positions = BuildBrushPositions(origin);
+            for (int i = 0; i < positions.Count; i++)
             {
-                return;
-            }
+                GameObject target = FindBlockAt(positions[i]);
+                if (target == null)
+                {
+                    continue;
+                }
 
-            Undo.DestroyObjectImmediate(target);
+                Undo.DestroyObjectImmediate(target);
+            }
         }
 
-        private void ReplaceBlock(PlacedBlock hitBlock, Vector3Int fallbackPosition)
+        private void ReplaceBlockBrush(PlacedBlock hitBlock, Vector3Int fallbackPosition)
         {
             if (_selectedIndex < 0 || _selectedIndex >= _filteredBlocks.Count)
             {
@@ -487,25 +557,55 @@ namespace BlockWorldMVP.Editor
             }
 
             BlockDefinition replacement = _filteredBlocks[_selectedIndex];
-            GameObject target = hitBlock != null ? hitBlock.gameObject : FindBlockAt(fallbackPosition);
-            if (target == null)
+            Vector3Int origin = hitBlock != null ? Vector3Int.RoundToInt(hitBlock.transform.position) : fallbackPosition;
+            List<Vector3Int> positions = BuildBrushPositions(origin);
+            bool replacedAny = false;
+            for (int i = 0; i < positions.Count; i++)
             {
-                return;
+                Vector3Int pos = positions[i];
+                GameObject target = FindBlockAt(pos);
+                if (target == null)
+                {
+                    continue;
+                }
+
+                PlacedBlock existing = target.GetComponent<PlacedBlock>();
+                if (existing != null && string.Equals(existing.BlockId, replacement.id, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                Undo.DestroyObjectImmediate(target);
+                if (TryPlaceSingleBlock(replacement, pos))
+                {
+                    replacedAny = true;
+                }
             }
 
-            PlacedBlock existing = target.GetComponent<PlacedBlock>();
-            if (existing != null && string.Equals(existing.BlockId, replacement.id, StringComparison.OrdinalIgnoreCase))
+            if (replacedAny)
             {
-                return;
+                RegisterRecentPlaced(replacement.id);
             }
-
-            Vector3Int replacePos = Vector3Int.RoundToInt(target.transform.position);
-            Undo.DestroyObjectImmediate(target);
-            PlaceBlock(replacePos);
         }
 
         private GameObject FindBlockAt(Vector3Int position)
         {
+            if (_root != null)
+            {
+                for (int i = 0; i < _root.childCount; i++)
+                {
+                    Transform child = _root.GetChild(i);
+                    if (Vector3Int.RoundToInt(child.position) == position)
+                    {
+                        PlacedBlock marker = child.GetComponent<PlacedBlock>();
+                        if (marker != null)
+                        {
+                            return child.gameObject;
+                        }
+                    }
+                }
+            }
+
             Collider[] colliders = Physics.OverlapBox(position, Vector3.one * 0.45f);
             for (int i = 0; i < colliders.Length; i++)
             {
@@ -517,6 +617,25 @@ namespace BlockWorldMVP.Editor
             }
 
             return null;
+        }
+
+        private List<Vector3Int> BuildBrushPositions(Vector3Int origin)
+        {
+            int size = Mathf.Max(1, _brushHorizontalSize);
+            int height = Mathf.Max(1, _brushHeight);
+            List<Vector3Int> positions = new List<Vector3Int>(size * size * height);
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    for (int z = 0; z < size; z++)
+                    {
+                        positions.Add(new Vector3Int(origin.x + x, origin.y + y, origin.z + z));
+                    }
+                }
+            }
+
+            return positions;
         }
 
         private void CreateRoot()
