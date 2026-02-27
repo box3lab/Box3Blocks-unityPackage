@@ -70,6 +70,14 @@ namespace BlockWorldMVP.Editor
         private int _brushHorizontalSize = 1;
         private int _brushHeight = 1;
         private const float PreviewSize = 75f;
+        private GUIStyle _sectionBoxStyle;
+        private GUIStyle _sectionTitleStyle;
+        private GUIStyle _subtleLabelStyle;
+        private GUIStyle _primaryButtonStyle;
+        private GUIStyle _dangerButtonStyle;
+        private GUIStyle _searchFieldStyle;
+        private GUIStyle _categoryTabStyle;
+        private GUIStyle _categoryTabSelectedStyle;
 
         [MenuItem("Tools/Block World MVP/World Builder")]
         public static void Open()
@@ -90,32 +98,115 @@ namespace BlockWorldMVP.Editor
 
         private void OnGUI()
         {
+            EnsureStyles();
             HandleToolHotkeys(Event.current);
-            DrawRootSection();
+            DrawSection("World Root", DrawRootSection);
             EditorGUILayout.Space(6f);
-            DrawToolSection();
+            DrawSection("Editor Tool", DrawToolSection);
             EditorGUILayout.Space(6f);
-            DrawBlockListSection();
+            DrawSection("Block Library", DrawBlockListSection);
+        }
+
+        private void EnsureStyles()
+        {
+            if (_sectionBoxStyle == null)
+            {
+                _sectionBoxStyle = new GUIStyle("HelpBox")
+                {
+                    padding = new RectOffset(10, 10, 10, 10),
+                    margin = new RectOffset(0, 0, 0, 0)
+                };
+            }
+
+            if (_sectionTitleStyle == null)
+            {
+                _sectionTitleStyle = new GUIStyle(EditorStyles.boldLabel)
+                {
+                    fontSize = 12
+                };
+            }
+
+            if (_subtleLabelStyle == null)
+            {
+                _subtleLabelStyle = new GUIStyle(EditorStyles.miniLabel)
+                {
+                    normal = { textColor = new Color(0.72f, 0.72f, 0.72f, 1f) }
+                };
+            }
+
+            if (_primaryButtonStyle == null)
+            {
+                _primaryButtonStyle = new GUIStyle(EditorStyles.miniButton)
+                {
+                    fixedHeight = 24f,
+                    fontStyle = FontStyle.Bold
+                };
+            }
+
+            if (_dangerButtonStyle == null)
+            {
+                _dangerButtonStyle = new GUIStyle(EditorStyles.miniButton)
+                {
+                    fixedHeight = 24f
+                };
+                _dangerButtonStyle.normal.textColor = new Color(1f, 0.56f, 0.56f, 1f);
+                _dangerButtonStyle.hover.textColor = new Color(1f, 0.66f, 0.66f, 1f);
+            }
+
+            if (_searchFieldStyle == null)
+            {
+                _searchFieldStyle = new GUIStyle(EditorStyles.textField)
+                {
+                    fixedHeight = 22f
+                };
+            }
+
+            if (_categoryTabStyle == null)
+            {
+                _categoryTabStyle = new GUIStyle(EditorStyles.miniButton)
+                {
+                    fixedHeight = 22f
+                };
+            }
+
+            if (_categoryTabSelectedStyle == null)
+            {
+                _categoryTabSelectedStyle = new GUIStyle(EditorStyles.miniButton)
+                {
+                    fixedHeight = 22f,
+                    fontStyle = FontStyle.Bold
+                };
+                _categoryTabSelectedStyle.normal.textColor = new Color(0.55f, 1f, 0.65f, 1f);
+            }
+        }
+
+        private void DrawSection(string title, Action body)
+        {
+            using (new EditorGUILayout.VerticalScope(_sectionBoxStyle))
+            {
+                EditorGUILayout.LabelField(title, _sectionTitleStyle);
+                EditorGUILayout.Space(4f);
+                body?.Invoke();
+            }
         }
 
         private void DrawRootSection()
         {
-            EditorGUILayout.LabelField("World Root", EditorStyles.boldLabel);
             _root = (Transform)EditorGUILayout.ObjectField("Root", _root, typeof(Transform), true);
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button("Create Root"))
+                if (GUILayout.Button("Create Root", _primaryButtonStyle))
                 {
                     CreateRoot();
                 }
 
-                if (GUILayout.Button("Clear Root"))
+                if (GUILayout.Button("Clear Root", _dangerButtonStyle))
                 {
                     ClearRoot();
                 }
 
-                if (GUILayout.Button("Clean Materials"))
+                if (GUILayout.Button("Clean Materials", _primaryButtonStyle))
                 {
                     int deleted = CleanupUnusedGeneratedMaterials();
                     EditorUtility.DisplayDialog("Block World Builder", $"Removed {deleted} unused generated materials.", "OK");
@@ -125,11 +216,27 @@ namespace BlockWorldMVP.Editor
 
         private void DrawToolSection()
         {
-            EditorGUILayout.LabelField("Editor Tool", EditorStyles.boldLabel);
             _tool = (EditTool)GUILayout.Toolbar((int)_tool, new[] { "Place", "Erase", "Replace", "Rotate" });
-            _brushHorizontalSize = Mathf.Max(1, EditorGUILayout.IntField("Horizontal Size (X/Z)", _brushHorizontalSize));
-            _brushHeight = Mathf.Max(1, EditorGUILayout.IntField("Height (Y)", _brushHeight));
-            EditorGUILayout.LabelField($"Brush Volume: {_brushHorizontalSize}x{_brushHorizontalSize}x{_brushHeight}");
+            EditorGUILayout.Space(4f);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("Horizontal (X/Z)", _subtleLabelStyle, GUILayout.Width(104f));
+                int horizontalInput = Mathf.Max(1, EditorGUILayout.IntField(_brushHorizontalSize, GUILayout.Width(52f)));
+                float horizontalSliderMax = Mathf.Max(16f, horizontalInput);
+                _brushHorizontalSize = Mathf.Max(1, Mathf.RoundToInt(GUILayout.HorizontalSlider(horizontalInput, 1f, horizontalSliderMax)));
+            }
+
+            EditorGUILayout.Space(2f);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("Height (Y)", _subtleLabelStyle, GUILayout.Width(70f));
+                int heightInput = Mathf.Max(1, EditorGUILayout.IntField(_brushHeight, GUILayout.Width(52f)));
+                float heightSliderMax = Mathf.Max(16f, heightInput);
+                _brushHeight = Mathf.Max(1, Mathf.RoundToInt(GUILayout.HorizontalSlider(heightInput, 1f, heightSliderMax)));
+            }
+            EditorGUILayout.LabelField($"Brush Volume: {_brushHorizontalSize}x{_brushHorizontalSize}x{_brushHeight}", _subtleLabelStyle);
 
             if (_root == null)
             {
@@ -139,30 +246,25 @@ namespace BlockWorldMVP.Editor
 
         private void DrawBlockListSection()
         {
-            EditorGUILayout.LabelField("Block Library", EditorStyles.boldLabel);
-
             using (new EditorGUILayout.HorizontalScope())
             {
-                string newSearch = EditorGUILayout.TextField("Search", _search);
+                string newSearch = EditorGUILayout.TextField("Search", _search, _searchFieldStyle);
                 if (!string.Equals(newSearch, _search, StringComparison.Ordinal))
                 {
                     _search = newSearch;
                     ApplyFilter();
                 }
-
-                if (GUILayout.Button("Reload", GUILayout.Width(70)))
-                {
-                    ReloadBlockLibrary();
-                }
             }
 
+            EditorGUILayout.Space(4f);
             if (_categories.Count > 0)
             {
                 DrawCategoryTabsWrapped();
             }
 
             int columns = CalculateColumnCount();
-            EditorGUILayout.LabelField($"Blocks: {_filteredBlocks.Count}  |  Layout: {columns} columns");
+            EditorGUILayout.LabelField($"Blocks: {_filteredBlocks.Count}  |  Layout: {columns} columns", _subtleLabelStyle);
+            EditorGUILayout.Space(2f);
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
             DrawBlockGrid(columns);
 
@@ -316,7 +418,8 @@ namespace BlockWorldMVP.Editor
                 }
 
                 bool selected = i == _selectedCategory;
-                bool clicked = GUILayout.Toggle(selected, label, EditorStyles.miniButton, GUILayout.Width(buttonWidth));
+                GUIStyle style = selected ? _categoryTabSelectedStyle : _categoryTabStyle;
+                bool clicked = GUILayout.Toggle(selected, label, style, GUILayout.Width(buttonWidth));
                 if (clicked && !selected)
                 {
                     _selectedCategory = i;
