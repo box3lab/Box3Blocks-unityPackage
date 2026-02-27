@@ -53,7 +53,8 @@ namespace BlockWorldMVP.Editor
         {
             Place,
             Erase,
-            Replace
+            Replace,
+            Rotate
         }
 
         private Transform _root;
@@ -124,7 +125,7 @@ namespace BlockWorldMVP.Editor
         private void DrawToolSection()
         {
             EditorGUILayout.LabelField("Editor Tool", EditorStyles.boldLabel);
-            _tool = (EditTool)GUILayout.Toolbar((int)_tool, new[] { "Place", "Erase", "Replace" });
+            _tool = (EditTool)GUILayout.Toolbar((int)_tool, new[] { "Place", "Erase", "Replace", "Rotate" });
             _brushHorizontalSize = Mathf.Max(1, EditorGUILayout.IntField("Horizontal Size (X/Z)", _brushHorizontalSize));
             _brushHeight = Mathf.Max(1, EditorGUILayout.IntField("Height (Y)", _brushHeight));
             EditorGUILayout.LabelField($"Brush Volume: {_brushHorizontalSize}x{_brushHorizontalSize}x{_brushHeight}");
@@ -368,6 +369,10 @@ namespace BlockWorldMVP.Editor
                 {
                     ReplaceBlockBrush(hitBlock, target);
                 }
+                else if (_tool == EditTool.Rotate)
+                {
+                    RotateBlock(hitBlock, target);
+                }
                 else
                 {
                     EraseBlockBrush(hitBlock, target);
@@ -389,7 +394,7 @@ namespace BlockWorldMVP.Editor
                 if (hitBlock != null)
                 {
                     Vector3Int blockPos = Vector3Int.RoundToInt(hitBlock.transform.position);
-                    if (_tool == EditTool.Erase || _tool == EditTool.Replace)
+                    if (_tool == EditTool.Erase || _tool == EditTool.Replace || _tool == EditTool.Rotate)
                     {
                         target = blockPos;
                         return true;
@@ -406,7 +411,7 @@ namespace BlockWorldMVP.Editor
                 }
             }
 
-            if (_tool == EditTool.Erase || _tool == EditTool.Replace)
+            if (_tool == EditTool.Erase || _tool == EditTool.Replace || _tool == EditTool.Rotate)
             {
                 if (TryFindClosestBlockFromScreen(mousePosition, out PlacedBlock closest))
                 {
@@ -463,7 +468,9 @@ namespace BlockWorldMVP.Editor
 
         private void DrawScenePreview(Vector3Int target)
         {
-            Handles.color = _tool == EditTool.Place ? Color.green : (_tool == EditTool.Replace ? Color.yellow : Color.red);
+            Handles.color = _tool == EditTool.Place
+                ? Color.green
+                : (_tool == EditTool.Replace ? Color.yellow : (_tool == EditTool.Rotate ? Color.cyan : Color.red));
             List<Vector3Int> positions = BuildBrushPositions(target);
             for (int i = 0; i < positions.Count; i++)
             {
@@ -586,6 +593,19 @@ namespace BlockWorldMVP.Editor
             {
                 RegisterRecentPlaced(replacement.id);
             }
+        }
+
+        private void RotateBlock(PlacedBlock hitBlock, Vector3Int fallbackPosition)
+        {
+            GameObject target = hitBlock != null ? hitBlock.gameObject : FindBlockAt(fallbackPosition);
+            if (target == null)
+            {
+                return;
+            }
+
+            Undo.RecordObject(target.transform, "Rotate Block 90");
+            target.transform.Rotate(0f, 90f, 0f, Space.World);
+            EditorUtility.SetDirty(target.transform);
         }
 
         private GameObject FindBlockAt(Vector3Int position)
