@@ -16,6 +16,7 @@ namespace BlockWorldMVP.Editor
         private const string BlockIdPath = "Packages/com.box3.blockworld-mvp/Assets/block-id.json";
         private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
         private const string GeneratedMeshFolder = "Assets/BlockWorldGenerated/Meshes";
+        private const string VoxelImportChunkOpaqueMaterialPath = "Assets/BlockWorldGenerated/Materials/VoxelImport_ChunkOpaque.mat";
         private const string CategoryAll = "All";
         private const string CategoryRecent = "Recent";
         private const string CategoryUncategorized = "Uncategorized";
@@ -740,7 +741,14 @@ namespace BlockWorldMVP.Editor
             }
             else
             {
-                meshRenderer.sharedMaterial = renderData.materials[0];
+                if (definition.transparent)
+                {
+                    meshRenderer.sharedMaterial = renderData.materials[0];
+                }
+                else
+                {
+                    meshRenderer.sharedMaterial = GetOrCreateOpaqueAtlasMaterial(renderData.materials[0]);
+                }
             }
 
             MeshCollider meshCollider = go.AddComponent<MeshCollider>();
@@ -1019,6 +1027,52 @@ namespace BlockWorldMVP.Editor
 
                 current = next;
             }
+        }
+
+        private static Material GetOrCreateOpaqueAtlasMaterial(Material atlasSource)
+        {
+            if (atlasSource == null)
+            {
+                return null;
+            }
+
+            EnsureAssetFolderPath(GeneratedMaterialFolder);
+            Material existing = AssetDatabase.LoadAssetAtPath<Material>(VoxelImportChunkOpaqueMaterialPath);
+            if (existing != null)
+            {
+                if (existing.mainTexture != atlasSource.mainTexture)
+                {
+                    existing.mainTexture = atlasSource.mainTexture;
+                    EditorUtility.SetDirty(existing);
+                }
+
+                return existing;
+            }
+
+            Shader shader = Shader.Find("Standard");
+            if (shader == null)
+            {
+                Material fallback = new Material(atlasSource) { name = "VoxelImport_ChunkOpaque" };
+                fallback.renderQueue = (int)RenderQueue.Geometry;
+                fallback.SetInt("_ZWrite", 1);
+                AssetDatabase.CreateAsset(fallback, VoxelImportChunkOpaqueMaterialPath);
+                EditorUtility.SetDirty(fallback);
+                return fallback;
+            }
+
+            Material material = new Material(shader) { name = "VoxelImport_ChunkOpaque" };
+            material.mainTexture = atlasSource.mainTexture;
+            material.SetFloat("_Mode", 0f);
+            material.SetInt("_SrcBlend", (int)BlendMode.One);
+            material.SetInt("_DstBlend", (int)BlendMode.Zero);
+            material.SetInt("_ZWrite", 1);
+            material.DisableKeyword("_ALPHATEST_ON");
+            material.DisableKeyword("_ALPHABLEND_ON");
+            material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            material.renderQueue = (int)RenderQueue.Geometry;
+            AssetDatabase.CreateAsset(material, VoxelImportChunkOpaqueMaterialPath);
+            EditorUtility.SetDirty(material);
+            return material;
         }
 
         private static int FloorDiv(int value, int divisor)

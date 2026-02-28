@@ -1419,6 +1419,7 @@ namespace BlockWorldMVP.Editor
             {
                 material.SetTexture("_MetallicGlossMap", materialMap);
                 material.SetFloat("_Metallic", 1f);
+                material.SetFloat("_Glossiness", 0.5f);
                 material.EnableKeyword("_METALLICGLOSSMAP");
             }
         }
