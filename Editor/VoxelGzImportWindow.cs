@@ -848,6 +848,9 @@ namespace BlockWorldMVP.Editor
             MeshRenderer mr = go.AddComponent<MeshRenderer>();
             mr.sharedMaterial = prepared.material;
 
+            MeshCollider mc = go.AddComponent<MeshCollider>();
+            mc.sharedMesh = prepared.mesh;
+
             PlacedBlock marker = go.AddComponent<PlacedBlock>();
             marker.BlockId = blockName;
             marker.HasAnimation = false;
