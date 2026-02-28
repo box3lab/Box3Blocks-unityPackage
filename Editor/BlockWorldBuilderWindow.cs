@@ -940,10 +940,10 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
-            BlockWorldOcclusionCuller culler = root.GetComponent<BlockWorldOcclusionCuller>();
+            global::BlockWorldMVP.BlockWorldOcclusionCuller culler = root.GetComponent<global::BlockWorldMVP.BlockWorldOcclusionCuller>();
             if (culler == null)
             {
-                culler = Undo.AddComponent<BlockWorldOcclusionCuller>(root.gameObject);
+                culler = Undo.AddComponent<global::BlockWorldMVP.BlockWorldOcclusionCuller>(root.gameObject);
             }
 
             if (culler != null)
