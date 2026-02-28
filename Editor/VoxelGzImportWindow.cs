@@ -1349,6 +1349,7 @@ namespace BlockWorldMVP.Editor
                     _chunkOpaqueMaterialInstance.mainTexture = source.mainTexture;
                 }
 
+                ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
                 return _chunkOpaqueMaterialInstance;
             }
 
@@ -1357,6 +1358,7 @@ namespace BlockWorldMVP.Editor
             {
                 _chunkOpaqueMaterialInstance = existing;
                 _chunkOpaqueMaterialInstance.mainTexture = source.mainTexture;
+                ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
                 EditorUtility.SetDirty(_chunkOpaqueMaterialInstance);
                 return _chunkOpaqueMaterialInstance;
             }
@@ -1367,6 +1369,7 @@ namespace BlockWorldMVP.Editor
                 _chunkOpaqueMaterialInstance = new Material(source) { name = "VoxelImport_ChunkOpaque" };
                 _chunkOpaqueMaterialInstance.renderQueue = (int)RenderQueue.Geometry;
                 _chunkOpaqueMaterialInstance.SetInt("_ZWrite", 1);
+                ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
                 AssetDatabase.CreateAsset(_chunkOpaqueMaterialInstance, ChunkOpaqueMaterialPath);
                 EditorUtility.SetDirty(_chunkOpaqueMaterialInstance);
                 return _chunkOpaqueMaterialInstance;
@@ -1386,10 +1389,30 @@ namespace BlockWorldMVP.Editor
             m.DisableKeyword("_ALPHAPREMULTIPLY_ON");
             m.renderQueue = (int)RenderQueue.Geometry;
 
+            ApplyBumpToChunkOpaque(m);
             _chunkOpaqueMaterialInstance = m;
             AssetDatabase.CreateAsset(_chunkOpaqueMaterialInstance, ChunkOpaqueMaterialPath);
             EditorUtility.SetDirty(_chunkOpaqueMaterialInstance);
             return _chunkOpaqueMaterialInstance;
+        }
+
+        private static void ApplyBumpToChunkOpaque(Material material)
+        {
+            if (material == null)
+            {
+                return;
+            }
+
+            Texture2D bump = BlockAssetFactory.GetAtlasBumpTexture();
+            if (bump == null)
+            {
+                return;
+            }
+
+            material.SetTexture("_BumpMap", bump);
+            material.SetFloat("_BumpScale", 0.2f);
+            material.EnableKeyword("_NORMALMAP");
+            material.DisableKeyword("_PARALLAXMAP");
         }
 
         private static Mesh BuildTopSurfaceColliderMesh(ChunkKey key, HashSet<Vector3Int> chunkVoxels, HashSet<Vector3Int> allVoxels)
