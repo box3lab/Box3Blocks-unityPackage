@@ -158,6 +158,7 @@ namespace BlockWorldMVP.Editor
         [Serializable]
         private sealed class VoxelPayload
         {
+            public string formatVersion;
             public int[] shape;
             public int[] dir;
             public int[] indices;
@@ -707,6 +708,8 @@ namespace BlockWorldMVP.Editor
                 int wy = _origin.y + (dirY * y);
                 int wz = _origin.z + (dirZ * z);
                 int rot = (_payload.rot != null && _payload.rot.Length > i) ? (_payload.rot[i] & 3) : 0;
+                // Import convention: always rotate voxel yaw by +180 degrees.
+                rot = (rot + 2) & 3;
                 Vector3 worldPos = new Vector3(wx, wy, wz);
                 Quaternion worldRot = _rotLookup[rot];
                 if (_importMode == ImportMode.SingleBlock)
@@ -1013,6 +1016,7 @@ namespace BlockWorldMVP.Editor
 
                 VoxelPayload payload = new VoxelPayload
                 {
+                    formatVersion = "unity",
                     shape = new[] { shapeX, shapeY, shapeZ },
                     dir = new[] { 1, 1, 1 },
                     indices = indices,

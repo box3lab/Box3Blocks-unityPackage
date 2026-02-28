@@ -18,6 +18,7 @@ namespace BlockWorldMVP.Editor
         [Serializable]
         private sealed class VoxelPayload
         {
+        
             public int[] shape;
             public int[] dir;
             public int[] indices;
@@ -319,6 +320,7 @@ namespace BlockWorldMVP.Editor
 
                 VoxelPayload payload = new VoxelPayload
                 {
+                 
                     shape = new[] { shapeX, shapeY, shapeZ },
                     dir = new[] { 1, 1, 1 },
                     indices = indices,
