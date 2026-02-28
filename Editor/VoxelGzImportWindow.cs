@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using BlockWorldMVP;
 
 namespace BlockWorldMVP.Editor
 {
@@ -212,6 +213,11 @@ namespace BlockWorldMVP.Editor
             public bool valid;
             public Mesh mesh;
             public Material material;
+            public Material[] materials;
+            public Vector4[] faceMainTexSt;
+            public bool hasAnimation;
+            public BlockTextureAnimator.FaceAnimation[] animations;
+            public bool usesSubmeshes;
         }
 
         private sealed class ChunkBucket
@@ -253,6 +259,13 @@ namespace BlockWorldMVP.Editor
         {
             Chunk = 0,
             SingleBlock = 1
+        }
+
+        private sealed class FaceAnimationSpec
+        {
+            public int frameCount = 1;
+            public float frameDuration = 0.05f;
+            public int[] frames = Array.Empty<int>();
         }
 
         private SourceType _sourceType = SourceType.LocalFile;
@@ -712,7 +725,7 @@ namespace BlockWorldMVP.Editor
                 rot = (rot + 2) & 3;
                 Vector3 worldPos = new Vector3(wx, wy, wz);
                 Quaternion worldRot = _rotLookup[rot];
-                if (_importMode == ImportMode.SingleBlock)
+                if (_importMode == ImportMode.SingleBlock || prepared.hasAnimation)
                 {
                     PlaceSingleBlock(prepared, blockName, worldPos, worldRot);
                     _stats.createdBlocks++;
@@ -1041,7 +1054,7 @@ namespace BlockWorldMVP.Editor
 
         private void PlaceSingleBlock(PreparedBlock prepared, string blockName, Vector3 position, Quaternion rotation)
         {
-            if (_importRoot == null || prepared == null || prepared.mesh == null || prepared.material == null)
+            if (_importRoot == null || prepared == null || prepared.mesh == null)
             {
                 return;
             }
@@ -1056,14 +1069,32 @@ namespace BlockWorldMVP.Editor
             mf.sharedMesh = prepared.mesh;
 
             MeshRenderer mr = go.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = prepared.material;
+            if (prepared.usesSubmeshes && prepared.materials != null && prepared.materials.Length > 0)
+            {
+                mr.sharedMaterials = prepared.materials;
+            }
+            else if (prepared.material != null)
+            {
+                mr.sharedMaterial = prepared.material;
+            }
 
             MeshCollider mc = go.AddComponent<MeshCollider>();
             mc.sharedMesh = prepared.mesh;
 
             PlacedBlock marker = go.AddComponent<PlacedBlock>();
             marker.BlockId = blockName;
-            marker.HasAnimation = false;
+            marker.HasAnimation = prepared.hasAnimation;
+
+            if (prepared.hasAnimation && prepared.animations != null && prepared.animations.Length > 0)
+            {
+                BlockTextureAnimator animator = go.GetComponent<BlockTextureAnimator>();
+                if (animator == null)
+                {
+                    animator = go.AddComponent<BlockTextureAnimator>();
+                }
+
+                animator.SetAnimations(prepared.animations, prepared.faceMainTexSt);
+            }
         }
 
         private void CancelImport(bool clearStatus = true)
@@ -1203,8 +1234,14 @@ namespace BlockWorldMVP.Editor
                 return prepared;
             }
 
-            prepared.mesh = BuildStaticBlockMesh(blockName, renderData.faceMainTexSt);
+            prepared.faceMainTexSt = renderData.faceMainTexSt;
+            prepared.materials = renderData.materials;
             prepared.material = renderData.materials[0];
+            prepared.hasAnimation = TryBuildAnimations(def.sideTexturePaths, renderData.faceMainTexSt, out prepared.animations);
+            prepared.usesSubmeshes = prepared.hasAnimation;
+            prepared.mesh = prepared.usesSubmeshes
+                ? BuildStaticBlockMeshMultiBaseUv(blockName)
+                : BuildStaticBlockMesh(blockName, renderData.faceMainTexSt);
             prepared.valid = prepared.mesh != null && prepared.material != null;
             _preparedByName[blockName] = prepared;
             return prepared;
@@ -1393,6 +1430,101 @@ namespace BlockWorldMVP.Editor
             return mesh;
         }
 
+        private static Mesh BuildStaticBlockMeshMulti(string blockName, Vector4[] faceMainTexSt)
+        {
+            Vector3[] vertices = new Vector3[24]
+            {
+                new Vector3(-0.5f, -0.5f, -0.5f), new Vector3(0.5f, -0.5f, -0.5f), new Vector3(0.5f, 0.5f, -0.5f), new Vector3(-0.5f, 0.5f, -0.5f),
+                new Vector3(-0.5f, -0.5f, 0.5f), new Vector3(0.5f, -0.5f, 0.5f), new Vector3(0.5f, -0.5f, -0.5f), new Vector3(-0.5f, -0.5f, -0.5f),
+                new Vector3(0.5f, -0.5f, 0.5f), new Vector3(-0.5f, -0.5f, 0.5f), new Vector3(-0.5f, 0.5f, 0.5f), new Vector3(0.5f, 0.5f, 0.5f),
+                new Vector3(-0.5f, -0.5f, 0.5f), new Vector3(-0.5f, -0.5f, -0.5f), new Vector3(-0.5f, 0.5f, -0.5f), new Vector3(-0.5f, 0.5f, 0.5f),
+                new Vector3(0.5f, -0.5f, -0.5f), new Vector3(0.5f, -0.5f, 0.5f), new Vector3(0.5f, 0.5f, 0.5f), new Vector3(0.5f, 0.5f, -0.5f),
+                new Vector3(-0.5f, 0.5f, -0.5f), new Vector3(0.5f, 0.5f, -0.5f), new Vector3(0.5f, 0.5f, 0.5f), new Vector3(-0.5f, 0.5f, 0.5f)
+            };
+
+            Vector2[] uvs = new Vector2[24];
+            for (int face = 0; face < SideOrder.Length; face++)
+            {
+                Vector4 st = faceMainTexSt[face];
+                int offset = face * 4;
+                uvs[offset + 0] = new Vector2(st.z, st.w);
+                uvs[offset + 1] = new Vector2(st.z + st.x, st.w);
+                uvs[offset + 2] = new Vector2(st.z + st.x, st.w + st.y);
+                uvs[offset + 3] = new Vector2(st.z, st.w + st.y);
+            }
+
+            int[][] subTris =
+            {
+                new[] { 0, 2, 1, 0, 3, 2 },
+                new[] { 4, 6, 5, 4, 7, 6 },
+                new[] { 8, 10, 9, 8, 11, 10 },
+                new[] { 12, 14, 13, 12, 15, 14 },
+                new[] { 16, 18, 17, 16, 19, 18 },
+                new[] { 20, 22, 21, 20, 23, 22 }
+            };
+
+            Mesh mesh = new Mesh { name = "VoxelStaticMulti_" + blockName };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.subMeshCount = 6;
+            for (int i = 0; i < 6; i++)
+            {
+                mesh.SetTriangles(subTris[i], i, true);
+            }
+
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            mesh.UploadMeshData(false);
+            return mesh;
+        }
+
+        private static Mesh BuildStaticBlockMeshMultiBaseUv(string blockName)
+        {
+            Vector3[] vertices = new Vector3[24]
+            {
+                new Vector3(-0.5f, -0.5f, -0.5f), new Vector3(0.5f, -0.5f, -0.5f), new Vector3(0.5f, 0.5f, -0.5f), new Vector3(-0.5f, 0.5f, -0.5f),
+                new Vector3(-0.5f, -0.5f, 0.5f), new Vector3(0.5f, -0.5f, 0.5f), new Vector3(0.5f, -0.5f, -0.5f), new Vector3(-0.5f, -0.5f, -0.5f),
+                new Vector3(0.5f, -0.5f, 0.5f), new Vector3(-0.5f, -0.5f, 0.5f), new Vector3(-0.5f, 0.5f, 0.5f), new Vector3(0.5f, 0.5f, 0.5f),
+                new Vector3(-0.5f, -0.5f, 0.5f), new Vector3(-0.5f, -0.5f, -0.5f), new Vector3(-0.5f, 0.5f, -0.5f), new Vector3(-0.5f, 0.5f, 0.5f),
+                new Vector3(0.5f, -0.5f, -0.5f), new Vector3(0.5f, -0.5f, 0.5f), new Vector3(0.5f, 0.5f, 0.5f), new Vector3(0.5f, 0.5f, -0.5f),
+                new Vector3(-0.5f, 0.5f, -0.5f), new Vector3(0.5f, 0.5f, -0.5f), new Vector3(0.5f, 0.5f, 0.5f), new Vector3(-0.5f, 0.5f, 0.5f)
+            };
+
+            Vector2[] uvs = new Vector2[24];
+            for (int face = 0; face < SideOrder.Length; face++)
+            {
+                int offset = face * 4;
+                uvs[offset + 0] = new Vector2(0f, 0f);
+                uvs[offset + 1] = new Vector2(1f, 0f);
+                uvs[offset + 2] = new Vector2(1f, 1f);
+                uvs[offset + 3] = new Vector2(0f, 1f);
+            }
+
+            int[][] subTris =
+            {
+                new[] { 0, 2, 1, 0, 3, 2 },
+                new[] { 4, 6, 5, 4, 7, 6 },
+                new[] { 8, 10, 9, 8, 11, 10 },
+                new[] { 12, 14, 13, 12, 15, 14 },
+                new[] { 16, 18, 17, 16, 19, 18 },
+                new[] { 20, 22, 21, 20, 23, 22 }
+            };
+
+            Mesh mesh = new Mesh { name = "VoxelStaticAnim_" + blockName };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.subMeshCount = 6;
+            for (int i = 0; i < 6; i++)
+            {
+                mesh.SetTriangles(subTris[i], i, true);
+            }
+
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            mesh.UploadMeshData(false);
+            return mesh;
+        }
+
         private static bool ValidatePayload(VoxelPayload payload, out string error)
         {
             if (payload == null)
@@ -1426,6 +1558,162 @@ namespace BlockWorldMVP.Editor
 
             error = null;
             return true;
+        }
+
+        private static bool TryBuildAnimations(Dictionary<string, string> sideTexturePaths, Vector4[] faceMainTexSt, out BlockTextureAnimator.FaceAnimation[] animations)
+        {
+            animations = Array.Empty<BlockTextureAnimator.FaceAnimation>();
+            if (sideTexturePaths == null || faceMainTexSt == null || faceMainTexSt.Length < SideOrder.Length)
+            {
+                return false;
+            }
+
+            List<BlockTextureAnimator.FaceAnimation> list = new List<BlockTextureAnimator.FaceAnimation>();
+            for (int i = 0; i < SideOrder.Length; i++)
+            {
+                string side = SideOrder[i];
+                if (!sideTexturePaths.TryGetValue(side, out string texPath) || string.IsNullOrWhiteSpace(texPath))
+                {
+                    continue;
+                }
+
+                if (!TryParseFaceAnimation(texPath, out FaceAnimationSpec spec))
+                {
+                    continue;
+                }
+
+                if (spec == null || spec.frameCount <= 1)
+                {
+                    continue;
+                }
+
+                list.Add(new BlockTextureAnimator.FaceAnimation
+                {
+                    materialIndex = i,
+                    frameCount = spec.frameCount,
+                    frameDuration = spec.frameDuration,
+                    frames = spec.frames,
+                    baseMainTexSt = faceMainTexSt[i]
+                });
+            }
+
+            if (list.Count == 0)
+            {
+                return false;
+            }
+
+            animations = list.ToArray();
+            return true;
+        }
+
+        private static bool TryParseFaceAnimation(string textureAssetPath, out FaceAnimationSpec spec)
+        {
+            spec = null;
+            string mcmetaPath = GetProjectAbsolutePath(textureAssetPath + ".mcmeta");
+            if (!File.Exists(mcmetaPath))
+            {
+                return false;
+            }
+
+            Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(textureAssetPath);
+            if (texture == null || texture.width <= 0 || texture.height <= 0)
+            {
+                return false;
+            }
+
+            int frameCountFromTexture = Mathf.Max(1, texture.height / texture.width);
+            string json = File.ReadAllText(mcmetaPath);
+            string animationBody = ExtractAnimationObjectBody(json);
+
+            int frameTimeTicks = ParseIntSafe(ReadNumberField(animationBody, "frametime"), 1);
+            float frameDuration = Mathf.Max(0.01f, frameTimeTicks * 0.05f);
+            int[] frames = ParseFrameSequence(animationBody);
+            int maxFrame = -1;
+            for (int i = 0; i < frames.Length; i++)
+            {
+                if (frames[i] > maxFrame)
+                {
+                    maxFrame = frames[i];
+                }
+            }
+
+            int frameCount = Mathf.Max(frameCountFromTexture, maxFrame + 1);
+            if (frameCount <= 1 && frames.Length <= 1)
+            {
+                return false;
+            }
+
+            if (frames.Length == 0)
+            {
+                frames = new int[frameCount];
+                for (int i = 0; i < frameCount; i++)
+                {
+                    frames[i] = i;
+                }
+            }
+
+            spec = new FaceAnimationSpec
+            {
+                frameCount = frameCount,
+                frameDuration = frameDuration,
+                frames = frames
+            };
+            return true;
+        }
+
+        private static string ExtractAnimationObjectBody(string json)
+        {
+            Match m = Regex.Match(json, "\"animation\"\\s*:\\s*\\{(?<body>[\\s\\S]*?)\\}", RegexOptions.IgnoreCase);
+            return m.Success ? m.Groups["body"].Value : json;
+        }
+
+        private static int[] ParseFrameSequence(string body)
+        {
+            Match m = Regex.Match(body, "\"frames\"\\s*:\\s*\\[(?<frames>[\\s\\S]*?)\\]", RegexOptions.IgnoreCase);
+            if (!m.Success)
+            {
+                return Array.Empty<int>();
+            }
+
+            string framesBody = m.Groups["frames"].Value;
+            List<int> frames = new List<int>();
+
+            MatchCollection objectIndexMatches = Regex.Matches(framesBody, "\"index\"\\s*:\\s*(?<idx>\\d+)", RegexOptions.IgnoreCase);
+            if (objectIndexMatches.Count > 0)
+            {
+                for (int i = 0; i < objectIndexMatches.Count; i++)
+                {
+                    if (int.TryParse(objectIndexMatches[i].Groups["idx"].Value, out int idx) && idx >= 0)
+                    {
+                        frames.Add(idx);
+                    }
+                }
+
+                return frames.ToArray();
+            }
+
+            string[] tokens = framesBody.Split(',');
+            for (int i = 0; i < tokens.Length; i++)
+            {
+                string token = tokens[i].Trim();
+                if (int.TryParse(token, out int frameIndex) && frameIndex >= 0)
+                {
+                    frames.Add(frameIndex);
+                }
+            }
+
+            return frames.ToArray();
+        }
+
+        private static string ReadNumberField(string text, string fieldName)
+        {
+            Match match = Regex.Match(text, $"\"{Regex.Escape(fieldName)}\"\\s*:\\s*(?<value>-?[0-9]+(?:\\.[0-9]+)?)", RegexOptions.IgnoreCase);
+            return match.Success ? match.Groups["value"].Value : null;
+        }
+
+        private static int ParseIntSafe(string text, int fallback)
+        {
+            return int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ? value : fallback;
         }
 
         private static string ReadGzipJsonFromFile(string path)
