@@ -1046,6 +1046,7 @@ namespace BlockWorldMVP.Editor
                     EditorUtility.SetDirty(existing);
                 }
 
+                ApplyMapsToOpaque(existing);
                 return existing;
             }
 
@@ -1055,6 +1056,7 @@ namespace BlockWorldMVP.Editor
                 Material fallback = new Material(atlasSource) { name = "VoxelImport_ChunkOpaque" };
                 fallback.renderQueue = (int)RenderQueue.Geometry;
                 fallback.SetInt("_ZWrite", 1);
+                ApplyMapsToOpaque(fallback);
                 AssetDatabase.CreateAsset(fallback, VoxelImportChunkOpaqueMaterialPath);
                 EditorUtility.SetDirty(fallback);
                 return fallback;
@@ -1070,9 +1072,35 @@ namespace BlockWorldMVP.Editor
             material.DisableKeyword("_ALPHABLEND_ON");
             material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
             material.renderQueue = (int)RenderQueue.Geometry;
+            ApplyMapsToOpaque(material);
             AssetDatabase.CreateAsset(material, VoxelImportChunkOpaqueMaterialPath);
             EditorUtility.SetDirty(material);
             return material;
+        }
+
+        private static void ApplyMapsToOpaque(Material material)
+        {
+            if (material == null)
+            {
+                return;
+            }
+
+            Texture2D bump = BlockAssetFactory.GetAtlasBumpTexture();
+            if (bump != null)
+            {
+                material.SetTexture("_BumpMap", bump);
+                material.SetFloat("_BumpScale", 1f);
+                material.EnableKeyword("_NORMALMAP");
+            }
+
+            Texture2D metal = BlockAssetFactory.GetAtlasMaterialTexture();
+            if (metal != null)
+            {
+                material.SetTexture("_MetallicGlossMap", metal);
+                material.SetFloat("_Metallic", 1f);
+                material.SetFloat("_Glossiness", 0.5f);
+                material.EnableKeyword("_METALLICGLOSSMAP");
+            }
         }
 
         private static int FloorDiv(int value, int divisor)
