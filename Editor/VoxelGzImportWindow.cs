@@ -22,6 +22,60 @@ namespace BlockWorldMVP.Editor
         private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
         private const string ChunkOpaqueMaterialPath = "Assets/BlockWorldGenerated/Materials/VoxelImport_ChunkOpaque.mat";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
+        private static readonly Vector3[] FaceNormals =
+        {
+            new Vector3(0f, 0f, -1f),
+            new Vector3(0f, -1f, 0f),
+            new Vector3(0f, 0f, 1f),
+            new Vector3(-1f, 0f, 0f),
+            new Vector3(1f, 0f, 0f),
+            new Vector3(0f, 1f, 0f)
+        };
+        private static readonly Vector3[][] FaceVertices =
+        {
+            new[]
+            {
+                new Vector3(-0.5f, -0.5f, -0.5f),
+                new Vector3(0.5f, -0.5f, -0.5f),
+                new Vector3(0.5f, 0.5f, -0.5f),
+                new Vector3(-0.5f, 0.5f, -0.5f)
+            },
+            new[]
+            {
+                new Vector3(-0.5f, -0.5f, 0.5f),
+                new Vector3(0.5f, -0.5f, 0.5f),
+                new Vector3(0.5f, -0.5f, -0.5f),
+                new Vector3(-0.5f, -0.5f, -0.5f)
+            },
+            new[]
+            {
+                new Vector3(0.5f, -0.5f, 0.5f),
+                new Vector3(-0.5f, -0.5f, 0.5f),
+                new Vector3(-0.5f, 0.5f, 0.5f),
+                new Vector3(0.5f, 0.5f, 0.5f)
+            },
+            new[]
+            {
+                new Vector3(-0.5f, -0.5f, 0.5f),
+                new Vector3(-0.5f, -0.5f, -0.5f),
+                new Vector3(-0.5f, 0.5f, -0.5f),
+                new Vector3(-0.5f, 0.5f, 0.5f)
+            },
+            new[]
+            {
+                new Vector3(0.5f, -0.5f, -0.5f),
+                new Vector3(0.5f, -0.5f, 0.5f),
+                new Vector3(0.5f, 0.5f, 0.5f),
+                new Vector3(0.5f, 0.5f, -0.5f)
+            },
+            new[]
+            {
+                new Vector3(-0.5f, 0.5f, -0.5f),
+                new Vector3(0.5f, 0.5f, -0.5f),
+                new Vector3(0.5f, 0.5f, 0.5f),
+                new Vector3(-0.5f, 0.5f, 0.5f)
+            }
+        };
         private static readonly Regex SideRegex = new Regex(@"^(.*)_(back|bottom|front|left|right|top)\.png$", RegexOptions.Compiled);
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
         private static readonly Dictionary<string, string> FallbackEn = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -224,7 +278,7 @@ namespace BlockWorldMVP.Editor
         private sealed class ChunkBucket
         {
             public readonly List<CombineInstance> opaqueCombines = new List<CombineInstance>(2048);
-            public readonly List<CombineInstance> transparentCombines = new List<CombineInstance>(512);
+            public readonly List<TransparentVoxel> transparentVoxels = new List<TransparentVoxel>(512);
         }
 
         private sealed class ImportStats
@@ -241,6 +295,20 @@ namespace BlockWorldMVP.Editor
             public int skippedUnknown;
             public int skippedInvalid;
             public double startTime;
+        }
+
+        private readonly struct TransparentVoxel
+        {
+            public readonly Vector3Int pos;
+            public readonly int rot;
+            public readonly PreparedBlock prepared;
+
+            public TransparentVoxel(Vector3Int pos, int rot, PreparedBlock prepared)
+            {
+                this.pos = pos;
+                this.rot = rot;
+                this.prepared = prepared;
+            }
         }
 
         private enum SourceType
@@ -315,6 +383,7 @@ namespace BlockWorldMVP.Editor
         private Material _chunkOpaqueMaterialInstance;
         private Dictionary<ChunkKey, HashSet<Vector3Int>> _chunkVoxelPositions;
         private HashSet<Vector3Int> _occupiedVoxels;
+        private HashSet<Vector3Int> _allVoxels;
 
         [MenuItem("Tools/Block World MVP/Voxel GZ Importer")]
         public static void Open()
@@ -610,6 +679,7 @@ namespace BlockWorldMVP.Editor
                 _occupiedVoxels = useChunkMode && _addSurfaceCollider
                     ? new HashSet<Vector3Int>()
                     : null;
+                _allVoxels = useChunkMode ? new HashSet<Vector3Int>() : null;
                 _chunkOpaqueMaterialInstance = null;
                 _stats = new ImportStats
                 {
@@ -737,6 +807,11 @@ namespace BlockWorldMVP.Editor
                 else
                 {
                     bool isTransparent = IsTransparentBlock(blockName);
+                    Vector3Int gridPos = new Vector3Int(wx, wy, wz);
+                    if (_allVoxels != null)
+                    {
+                        _allVoxels.Add(gridPos);
+                    }
                     ChunkKey key = BuildChunkKey(wx, wy, wz, _chunkSize);
                     if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket))
                     {
@@ -744,17 +819,22 @@ namespace BlockWorldMVP.Editor
                         _chunkBuckets.Add(key, bucket);
                     }
 
-                    List<CombineInstance> target = isTransparent ? bucket.transparentCombines : bucket.opaqueCombines;
-                    target.Add(new CombineInstance
+                    if (isTransparent)
                     {
-                        mesh = prepared.mesh,
-                        subMeshIndex = 0,
-                        transform = Matrix4x4.TRS(worldPos, worldRot, Vector3.one)
-                    });
+                        bucket.transparentVoxels.Add(new TransparentVoxel(gridPos, rot, prepared));
+                    }
+                    else
+                    {
+                        bucket.opaqueCombines.Add(new CombineInstance
+                        {
+                            mesh = prepared.mesh,
+                            subMeshIndex = 0,
+                            transform = Matrix4x4.TRS(worldPos, worldRot, Vector3.one)
+                        });
+                    }
 
                     if (_addSurfaceCollider && _occupiedVoxels != null && _chunkVoxelPositions != null)
                     {
-                        Vector3Int gridPos = new Vector3Int(wx, wy, wz);
                         _occupiedVoxels.Add(gridPos);
                         if (!_chunkVoxelPositions.TryGetValue(key, out HashSet<Vector3Int> set))
                         {
@@ -811,7 +891,7 @@ namespace BlockWorldMVP.Editor
             {
                 ChunkKey key = _chunkKeys[i];
                 if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket)
-                    || (bucket.opaqueCombines.Count == 0 && bucket.transparentCombines.Count == 0))
+                    || (bucket.opaqueCombines.Count == 0 && bucket.transparentVoxels.Count == 0))
                 {
                     continue;
                 }
@@ -846,7 +926,7 @@ namespace BlockWorldMVP.Editor
                     }
                 }
 
-                if (bucket.transparentCombines.Count > 0)
+                if (bucket.transparentVoxels.Count > 0)
                 {
                     GameObject transparentGo = new GameObject("transparent");
                     transparentGo.transform.SetParent(go.transform, false);
@@ -854,13 +934,11 @@ namespace BlockWorldMVP.Editor
                     MeshRenderer mr = transparentGo.AddComponent<MeshRenderer>();
                     mr.sharedMaterial = ResolveChunkTransparentMaterial();
 
-                    Mesh mesh = new Mesh
+                    Mesh mesh = BuildTransparentChunkMesh(key, bucket.transparentVoxels, _allVoxels);
+                    if (mesh == null)
                     {
-                        name = $"VoxelChunk_{key.x}_{key.y}_{key.z}_transparent",
-                        indexFormat = IndexFormat.UInt32
-                    };
-                    mesh.CombineMeshes(bucket.transparentCombines.ToArray(), true, true, false);
-                    mesh.RecalculateBounds();
+                        continue;
+                    }
 
                     string assetPath = BuildChunkMeshAssetPath(key, i, "transparent");
                     AssetDatabase.CreateAsset(mesh, assetPath);
@@ -1414,6 +1492,85 @@ namespace BlockWorldMVP.Editor
             mesh.SetTriangles(triangles, 0, true);
             mesh.RecalculateBounds();
             return mesh;
+        }
+
+        private Mesh BuildTransparentChunkMesh(ChunkKey key, List<TransparentVoxel> voxels, HashSet<Vector3Int> allVoxels)
+        {
+            if (voxels == null || voxels.Count == 0 || allVoxels == null)
+            {
+                return null;
+            }
+
+            List<Vector3> vertices = new List<Vector3>(voxels.Count * 24);
+            List<Vector2> uvs = new List<Vector2>(voxels.Count * 24);
+            List<int> triangles = new List<int>(voxels.Count * 36);
+
+            for (int i = 0; i < voxels.Count; i++)
+            {
+                TransparentVoxel voxel = voxels[i];
+                PreparedBlock prepared = voxel.prepared;
+                if (prepared == null || prepared.faceMainTexSt == null || prepared.faceMainTexSt.Length < SideOrder.Length)
+                {
+                    continue;
+                }
+
+                Quaternion rot = _rotLookup[voxel.rot];
+                for (int face = 0; face < SideOrder.Length; face++)
+                {
+                    Vector3 dir = rot * FaceNormals[face];
+                    Vector3Int neighbor = voxel.pos + ToVector3Int(dir);
+                    if (allVoxels.Contains(neighbor))
+                    {
+                        continue;
+                    }
+
+                    Vector4 st = prepared.faceMainTexSt[face];
+                    int baseIndex = vertices.Count;
+                    for (int v = 0; v < 4; v++)
+                    {
+                        Vector3 local = FaceVertices[face][v];
+                        Vector3 rotated = rot * local;
+                        vertices.Add(rotated + (Vector3)voxel.pos);
+                    }
+
+                    uvs.Add(new Vector2(st.z, st.w));
+                    uvs.Add(new Vector2(st.z + st.x, st.w));
+                    uvs.Add(new Vector2(st.z + st.x, st.w + st.y));
+                    uvs.Add(new Vector2(st.z, st.w + st.y));
+
+                    triangles.Add(baseIndex + 0);
+                    triangles.Add(baseIndex + 2);
+                    triangles.Add(baseIndex + 1);
+                    triangles.Add(baseIndex + 0);
+                    triangles.Add(baseIndex + 3);
+                    triangles.Add(baseIndex + 2);
+                }
+            }
+
+            if (vertices.Count == 0)
+            {
+                return null;
+            }
+
+            Mesh mesh = new Mesh
+            {
+                name = $"VoxelChunk_{key.x}_{key.y}_{key.z}_transparent",
+                indexFormat = IndexFormat.UInt32
+            };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0, true);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static Vector3Int ToVector3Int(Vector3 dir)
+        {
+            return new Vector3Int(
+                Mathf.RoundToInt(dir.x),
+                Mathf.RoundToInt(dir.y),
+                Mathf.RoundToInt(dir.z));
         }
 
         private static Mesh BuildStaticBlockMesh(string blockName, Vector4[] faceMainTexSt)
