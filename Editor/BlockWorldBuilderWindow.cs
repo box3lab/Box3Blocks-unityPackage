@@ -9,129 +9,21 @@ using UnityEngine.Rendering;
 
 namespace BlockWorldMVP.Editor
 {
-    public class BlockWorldBuilderWindow : EditorWindow
+    public partial class BlockWorldBuilderWindow : EditorWindow
     {
-        private const string BlockTextureFolder = "Packages/com.box3.blockworld-mvp/Assets/block";
-        private const string BlockSpecPath = "Packages/com.box3.blockworld-mvp/Assets/block-spec.json";
-        private const string BlockIdPath = "Packages/com.box3.blockworld-mvp/Assets/block-id.json";
+        private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
+        private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
+        private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
         private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
         private const string GeneratedMeshFolder = "Assets/BlockWorldGenerated/Meshes";
+        private const string VoxelImportChunkOpaqueMaterialPath = "Assets/BlockWorldGenerated/Materials/VoxelImport_ChunkOpaque.mat";
         private const string CategoryAll = "All";
         private const string CategoryRecent = "Recent";
         private const string CategoryUncategorized = "Uncategorized";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
-        private static readonly Vector3Int[] NeighborDirections =
-        {
-            new Vector3Int(0, 0, -1),
-            new Vector3Int(0, -1, 0),
-            new Vector3Int(0, 0, 1),
-            new Vector3Int(-1, 0, 0),
-            new Vector3Int(1, 0, 0),
-            new Vector3Int(0, 1, 0)
-        };
-        private static readonly Vector3[] FaceNormals =
-        {
-            new Vector3(0f, 0f, -1f),
-            new Vector3(0f, -1f, 0f),
-            new Vector3(0f, 0f, 1f),
-            new Vector3(-1f, 0f, 0f),
-            new Vector3(1f, 0f, 0f),
-            new Vector3(0f, 1f, 0f)
-        };
-        private static readonly Vector3[][] FaceVertices =
-        {
-            new[]
-            {
-                new Vector3(-0.5f, -0.5f, -0.5f),
-                new Vector3(0.5f, -0.5f, -0.5f),
-                new Vector3(0.5f, 0.5f, -0.5f),
-                new Vector3(-0.5f, 0.5f, -0.5f)
-            },
-            new[]
-            {
-                new Vector3(-0.5f, -0.5f, 0.5f),
-                new Vector3(0.5f, -0.5f, 0.5f),
-                new Vector3(0.5f, -0.5f, -0.5f),
-                new Vector3(-0.5f, -0.5f, -0.5f)
-            },
-            new[]
-            {
-                new Vector3(0.5f, -0.5f, 0.5f),
-                new Vector3(-0.5f, -0.5f, 0.5f),
-                new Vector3(-0.5f, 0.5f, 0.5f),
-                new Vector3(0.5f, 0.5f, 0.5f)
-            },
-            new[]
-            {
-                new Vector3(-0.5f, -0.5f, 0.5f),
-                new Vector3(-0.5f, -0.5f, -0.5f),
-                new Vector3(-0.5f, 0.5f, -0.5f),
-                new Vector3(-0.5f, 0.5f, 0.5f)
-            },
-            new[]
-            {
-                new Vector3(0.5f, -0.5f, -0.5f),
-                new Vector3(0.5f, -0.5f, 0.5f),
-                new Vector3(0.5f, 0.5f, 0.5f),
-                new Vector3(0.5f, 0.5f, -0.5f)
-            },
-            new[]
-            {
-                new Vector3(-0.5f, 0.5f, -0.5f),
-                new Vector3(0.5f, 0.5f, -0.5f),
-                new Vector3(0.5f, 0.5f, 0.5f),
-                new Vector3(-0.5f, 0.5f, 0.5f)
-            }
-        };
         private static readonly Regex SideRegex = new Regex(@"^(.*)_(back|bottom|front|left|right|top)\.png$", RegexOptions.Compiled);
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
         private static readonly int MainTexStShaderId = Shader.PropertyToID("_MainTex_ST");
-
-        private class BlockDefinition
-        {
-            public string id;
-            public Dictionary<string, string> sideTexturePaths = new Dictionary<string, string>();
-            public Dictionary<string, FaceAnimationSpec> sideAnimations = new Dictionary<string, FaceAnimationSpec>();
-            public bool hasAnimation;
-            public Texture2D previewTexture;
-            public int numericId = -1;
-            public string category = CategoryUncategorized;
-            public bool emitsLight;
-            public bool transparent;
-            public Color lightColor = new Color(1f, 0.8f, 0.2f, 1f);
-            public string displayName;
-            public int placementRotationQuarter;
-        }
-
-        private class FaceAnimationSpec
-        {
-            public int frameCount = 1;
-            public float frameDuration = 0.05f;
-            public int[] frames = Array.Empty<int>();
-        }
-
-        private sealed class AnimatedPreviewCacheEntry
-        {
-            public int signature;
-            public Texture2D texture;
-        }
-
-        private class BlockMetadata
-        {
-            public int numericId = -1;
-            public string category;
-            public bool emitsLight;
-            public bool transparent;
-            public Color lightColor = new Color(1f, 0.8f, 0.2f, 1f);
-        }
-
-        private enum EditTool
-        {
-            Place,
-            Erase,
-            Replace,
-            Rotate
-        }
 
         private Transform _root;
         private List<BlockDefinition> _allBlocks = new List<BlockDefinition>();
@@ -160,7 +52,7 @@ namespace BlockWorldMVP.Editor
         private PreviewRenderUtility _blockCardPreviewUtility;
         private double _nextAnimatedPreviewRepaintTime;
 
-        [MenuItem("Tools/Block World MVP/World Builder")]
+        [MenuItem("Box3/Block Library", false, 0)]
         public static void Open()
         {
             GetWindow<BlockWorldBuilderWindow>(L("window.title"));
@@ -849,7 +741,14 @@ namespace BlockWorldMVP.Editor
             }
             else
             {
-                meshRenderer.sharedMaterial = renderData.materials[0];
+                if (definition.transparent)
+                {
+                    meshRenderer.sharedMaterial = renderData.materials[0];
+                }
+                else
+                {
+                    meshRenderer.sharedMaterial = GetOrCreateOpaqueAtlasMaterial(renderData.materials[0]);
+                }
             }
 
             MeshCollider meshCollider = go.AddComponent<MeshCollider>();
@@ -983,77 +882,6 @@ namespace BlockWorldMVP.Editor
             return null;
         }
 
-        private void RefreshTransparentAround(Vector3Int position)
-        {
-            UpdateTransparentBlockAt(position);
-            for (int i = 0; i < NeighborDirections.Length; i++)
-            {
-                UpdateTransparentBlockAt(position + NeighborDirections[i]);
-            }
-        }
-
-        private void UpdateTransparentBlockAt(Vector3Int position)
-        {
-            GameObject target = FindBlockAt(position);
-            if (target == null)
-            {
-                return;
-            }
-
-            UpdateTransparentBlockMesh(target);
-        }
-
-        private void UpdateTransparentBlockMesh(GameObject target)
-        {
-            if (target == null)
-            {
-                return;
-            }
-
-            PlacedBlock marker = target.GetComponent<PlacedBlock>();
-            if (marker == null)
-            {
-                return;
-            }
-
-            BlockDefinition definition = FindDefinitionById(marker.BlockId);
-            if (definition == null || !definition.transparent)
-            {
-                return;
-            }
-
-            if (HasAnimatedFaces(definition))
-            {
-                return;
-            }
-
-            if (!BlockAssetFactory.TryGetFaceRenderData(definition.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData))
-            {
-                return;
-            }
-
-            Vector3Int pos = Vector3Int.RoundToInt(target.transform.position);
-            float yRot = NormalizeYRotation(target.transform.eulerAngles.y);
-            int rotQuarter = Mathf.RoundToInt(yRot / 90f) & 3;
-            Mesh mesh = BuildCulledTransparentMesh(pos, rotQuarter, renderData.faceMainTexSt);
-            if (mesh == null)
-            {
-                return;
-            }
-
-            MeshFilter mf = target.GetComponent<MeshFilter>();
-            if (mf != null)
-            {
-                mf.sharedMesh = mesh;
-            }
-
-            MeshCollider mc = target.GetComponent<MeshCollider>();
-            if (mc != null)
-            {
-                mc.sharedMesh = mesh;
-            }
-        }
-
         private List<Vector3Int> BuildBrushPositions(Vector3Int origin)
         {
             int size = Mathf.Max(1, _brushHorizontalSize);
@@ -1090,83 +918,6 @@ namespace BlockWorldMVP.Editor
             }
 
             return null;
-        }
-
-        private Mesh BuildCulledTransparentMesh(Vector3Int position, int rotationQuarter, Vector4[] faceMainTexSt)
-        {
-            if (faceMainTexSt == null || faceMainTexSt.Length < SideOrder.Length)
-            {
-                return null;
-            }
-
-            List<Vector3> vertices = new List<Vector3>(24);
-            List<Vector2> uvs = new List<Vector2>(24);
-            List<int> triangles = new List<int>(36);
-            Quaternion rotation = Quaternion.Euler(0f, (rotationQuarter & 3) * 90f, 0f);
-
-            for (int face = 0; face < SideOrder.Length; face++)
-            {
-                Vector3 dir = rotation * FaceNormals[face];
-                Vector3Int neighbor = position + ToVector3Int(dir);
-                if (FindBlockAt(neighbor) != null)
-                {
-                    continue;
-                }
-
-                Vector4 st = faceMainTexSt[face];
-                int baseIndex = vertices.Count;
-                vertices.Add(FaceVertices[face][0]);
-                vertices.Add(FaceVertices[face][1]);
-                vertices.Add(FaceVertices[face][2]);
-                vertices.Add(FaceVertices[face][3]);
-
-                uvs.Add(new Vector2(st.z, st.w));
-                uvs.Add(new Vector2(st.z + st.x, st.w));
-                uvs.Add(new Vector2(st.z + st.x, st.w + st.y));
-                uvs.Add(new Vector2(st.z, st.w + st.y));
-
-                triangles.Add(baseIndex + 0);
-                triangles.Add(baseIndex + 2);
-                triangles.Add(baseIndex + 1);
-                triangles.Add(baseIndex + 0);
-                triangles.Add(baseIndex + 3);
-                triangles.Add(baseIndex + 2);
-            }
-
-            if (vertices.Count == 0)
-            {
-                return null;
-            }
-
-            Mesh mesh = new Mesh
-            {
-                name = $"CulledTransparent_{position.x}_{position.y}_{position.z}"
-            };
-            mesh.SetVertices(vertices);
-            mesh.SetUVs(0, uvs);
-            mesh.SetTriangles(triangles, 0, true);
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            return mesh;
-        }
-
-        private static Vector3Int ToVector3Int(Vector3 dir)
-        {
-            return new Vector3Int(
-                Mathf.RoundToInt(dir.x),
-                Mathf.RoundToInt(dir.y),
-                Mathf.RoundToInt(dir.z));
-        }
-
-        private static float NormalizeYRotation(float y)
-        {
-            float n = y % 360f;
-            if (n < 0f)
-            {
-                n += 360f;
-            }
-
-            return n;
         }
 
         private void CreateRoot()
@@ -1275,6 +1026,80 @@ namespace BlockWorldMVP.Editor
                 }
 
                 current = next;
+            }
+        }
+
+        private static Material GetOrCreateOpaqueAtlasMaterial(Material atlasSource)
+        {
+            if (atlasSource == null)
+            {
+                return null;
+            }
+
+            EnsureAssetFolderPath(GeneratedMaterialFolder);
+            Material existing = AssetDatabase.LoadAssetAtPath<Material>(VoxelImportChunkOpaqueMaterialPath);
+            if (existing != null)
+            {
+                if (existing.mainTexture != atlasSource.mainTexture)
+                {
+                    existing.mainTexture = atlasSource.mainTexture;
+                    EditorUtility.SetDirty(existing);
+                }
+
+                ApplyMapsToOpaque(existing);
+                return existing;
+            }
+
+            Shader shader = Shader.Find("Standard");
+            if (shader == null)
+            {
+                Material fallback = new Material(atlasSource) { name = "VoxelImport_ChunkOpaque" };
+                fallback.renderQueue = (int)RenderQueue.Geometry;
+                fallback.SetInt("_ZWrite", 1);
+                ApplyMapsToOpaque(fallback);
+                AssetDatabase.CreateAsset(fallback, VoxelImportChunkOpaqueMaterialPath);
+                EditorUtility.SetDirty(fallback);
+                return fallback;
+            }
+
+            Material material = new Material(shader) { name = "VoxelImport_ChunkOpaque" };
+            material.mainTexture = atlasSource.mainTexture;
+            material.SetFloat("_Mode", 0f);
+            material.SetInt("_SrcBlend", (int)BlendMode.One);
+            material.SetInt("_DstBlend", (int)BlendMode.Zero);
+            material.SetInt("_ZWrite", 1);
+            material.DisableKeyword("_ALPHATEST_ON");
+            material.DisableKeyword("_ALPHABLEND_ON");
+            material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            material.renderQueue = (int)RenderQueue.Geometry;
+            ApplyMapsToOpaque(material);
+            AssetDatabase.CreateAsset(material, VoxelImportChunkOpaqueMaterialPath);
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        private static void ApplyMapsToOpaque(Material material)
+        {
+            if (material == null)
+            {
+                return;
+            }
+
+            Texture2D bump = BlockAssetFactory.GetAtlasBumpTexture();
+            if (bump != null)
+            {
+                material.SetTexture("_BumpMap", bump);
+                material.SetFloat("_BumpScale", 0.1f);
+                material.EnableKeyword("_NORMALMAP");
+            }
+
+            Texture2D metal = BlockAssetFactory.GetAtlasMaterialTexture();
+            if (metal != null)
+            {
+                material.SetTexture("_MetallicGlossMap", metal);
+                material.SetFloat("_Metallic", 0.2f);
+                material.SetFloat("_Glossiness", 0.5f);
+                material.EnableKeyword("_METALLICGLOSSMAP");
             }
         }
 
@@ -1605,7 +1430,29 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
-            renderer.sharedMaterials = renderData.materials;
+            bool isTransparent = definition != null && definition.transparent;
+            if (!isTransparent)
+            {
+                Material opaque = GetOrCreateOpaqueAtlasMaterial(renderData.materials[0]);
+                if (opaque != null)
+                {
+                    Material[] shared = new Material[renderData.materials.Length];
+                    for (int i = 0; i < shared.Length; i++)
+                    {
+                        shared[i] = opaque;
+                    }
+
+                    renderer.sharedMaterials = shared;
+                }
+                else
+                {
+                    renderer.sharedMaterials = renderData.materials;
+                }
+            }
+            else
+            {
+                renderer.sharedMaterials = renderData.materials;
+            }
 
             if (!definition.hasAnimation || definition.sideAnimations.Count == 0)
             {
@@ -2231,573 +2078,6 @@ namespace BlockWorldMVP.Editor
 
             _recentBlockIds.RemoveAll(id => string.Equals(id, blockId, StringComparison.OrdinalIgnoreCase));
             _recentBlockIds.Insert(0, blockId);
-        }
-
-        private static Dictionary<string, BlockMetadata> LoadBlockMetadata()
-        {
-            Dictionary<string, BlockMetadata> map = LoadFromBlockSpec();
-            if (map.Count > 0)
-            {
-                return map;
-            }
-
-            return LoadFromBlockId();
-        }
-
-        private static Dictionary<string, BlockMetadata> LoadFromBlockSpec()
-        {
-            Dictionary<string, BlockMetadata> map = new Dictionary<string, BlockMetadata>(StringComparer.OrdinalIgnoreCase);
-            string absPath = GetProjectAbsolutePath(BlockSpecPath);
-            if (!File.Exists(absPath))
-            {
-                return map;
-            }
-
-            string json = File.ReadAllText(absPath);
-            Dictionary<string, string> objects = ExtractTopLevelObjectValues(json);
-            foreach (KeyValuePair<string, string> pair in objects)
-            {
-                string name = pair.Key;
-                string body = pair.Value;
-
-                string category = ReadStringField(body, "category");
-                int numericId = ParseIntSafe(ReadNumberField(body, "id"), -1);
-                bool transparent = ReadBoolField(body, "transparent");
-                Color emissiveColor = ReadColorArrayField(body, "emissive", InferLightColor(name));
-                bool emitsLight = HasMeaningfulEmission(body) || HasLightKeyword(name);
-
-                map[name] = new BlockMetadata
-                {
-                    numericId = numericId,
-                    category = string.IsNullOrWhiteSpace(category) ? InferCategory(name) : category,
-                    emitsLight = emitsLight,
-                    transparent = transparent,
-                    lightColor = emissiveColor
-                };
-            }
-
-            return map;
-        }
-
-        private static Dictionary<string, BlockMetadata> LoadFromBlockId()
-        {
-            Dictionary<string, BlockMetadata> map = new Dictionary<string, BlockMetadata>(StringComparer.OrdinalIgnoreCase);
-            string absPath = GetProjectAbsolutePath(BlockIdPath);
-            if (!File.Exists(absPath))
-            {
-                return map;
-            }
-
-            string json = File.ReadAllText(absPath);
-            MatchCollection flatMatches = FlatMapRegex.Matches(json);
-            for (int i = 0; i < flatMatches.Count; i++)
-            {
-                Match m = flatMatches[i];
-                string name = m.Groups["name"].Value;
-                if (string.IsNullOrWhiteSpace(name))
-                {
-                    continue;
-                }
-
-                map[name] = new BlockMetadata
-                {
-                    numericId = ParseIntSafe(m.Groups["id"].Value, -1),
-                    category = InferCategory(name),
-                    emitsLight = HasLightKeyword(name),
-                    transparent = IsTransparencyKeyword(name),
-                    lightColor = InferLightColor(name)
-                };
-            }
-
-            return map;
-        }
-
-        private static string ReadStringField(string text, string fieldName)
-        {
-            Match match = Regex.Match(text, $"\"{Regex.Escape(fieldName)}\"\\s*:\\s*\"(?<value>[^\"]*)\"", RegexOptions.IgnoreCase);
-            return match.Success ? match.Groups["value"].Value : null;
-        }
-
-        private static string ReadNumberField(string text, string fieldName)
-        {
-            Match match = Regex.Match(text, $"\"{Regex.Escape(fieldName)}\"\\s*:\\s*(?<value>-?[0-9]+(?:\\.[0-9]+)?)", RegexOptions.IgnoreCase);
-            return match.Success ? match.Groups["value"].Value : null;
-        }
-
-        private static bool ReadBoolField(string text, string fieldName)
-        {
-            Match match = Regex.Match(text, $"\"{Regex.Escape(fieldName)}\"\\s*:\\s*(?<value>true|false|1|0)", RegexOptions.IgnoreCase);
-            if (!match.Success)
-            {
-                return false;
-            }
-
-            string raw = match.Groups["value"].Value;
-            return string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase) || raw == "1";
-        }
-
-        private static int ParseIntSafe(string text, int fallback)
-        {
-            return int.TryParse(text, out int value) ? value : fallback;
-        }
-
-        private static float ParseFloatSafe(string text, float fallback)
-        {
-            return float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out float value) ? value : fallback;
-        }
-
-        private static bool HasLightKeyword(string id)
-        {
-            return id.IndexOf("light", StringComparison.OrdinalIgnoreCase) >= 0
-                || id.IndexOf("lamp", StringComparison.OrdinalIgnoreCase) >= 0
-                || id.IndexOf("lantern", StringComparison.OrdinalIgnoreCase) >= 0
-                || id.IndexOf("lava", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static bool IsTransparencyKeyword(string id)
-        {
-            return id.IndexOf("glass", StringComparison.OrdinalIgnoreCase) >= 0
-                || id.IndexOf("window", StringComparison.OrdinalIgnoreCase) >= 0
-                || id.IndexOf("ice", StringComparison.OrdinalIgnoreCase) >= 0
-                || id.IndexOf("water", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static string InferCategory(string id)
-        {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                return CategoryUncategorized;
-            }
-
-            string lower = id.ToLowerInvariant();
-            if (lower.Contains("light") || lower.Contains("lamp") || lower.Contains("lantern") || lower.Contains("led"))
-            {
-                return "Light";
-            }
-
-            if (lower.Contains("glass") || lower.Contains("window"))
-            {
-                return "Glass";
-            }
-
-            if (lower.Contains("grass") || lower.Contains("sand") || lower.Contains("dirt") || lower.Contains("rock") || lower.Contains("stone") || lower.Contains("leaf") || lower.Contains("water") || lower.Contains("snow") || lower.Contains("lava"))
-            {
-                return "Nature";
-            }
-
-            if (lower.Contains("board") || lower.Contains("plank") || lower.Contains("brick") || lower.Contains("wall") || lower.Contains("roof"))
-            {
-                return "Building";
-            }
-
-            if (lower.Length == 1 || lower.Contains("mark") || lower.Contains("slash") || lower.Contains("paren") || lower.Contains("brace") || lower.Contains("bracket"))
-            {
-                return "Symbol";
-            }
-
-            return "Misc";
-        }
-
-        private static Color InferLightColor(string id)
-        {
-            string lower = id.ToLowerInvariant();
-            if (lower.Contains("red"))
-            {
-                return new Color(1f, 0.32f, 0.28f, 1f);
-            }
-
-            if (lower.Contains("blue"))
-            {
-                return new Color(0.35f, 0.7f, 1f, 1f);
-            }
-
-            if (lower.Contains("green") || lower.Contains("mint"))
-            {
-                return new Color(0.4f, 1f, 0.55f, 1f);
-            }
-
-            if (lower.Contains("yellow") || lower.Contains("warm"))
-            {
-                return new Color(1f, 0.9f, 0.3f, 1f);
-            }
-
-            if (lower.Contains("purple") || lower.Contains("indigo"))
-            {
-                return new Color(0.62f, 0.45f, 1f, 1f);
-            }
-
-            if (lower.Contains("pink"))
-            {
-                return new Color(1f, 0.52f, 0.8f, 1f);
-            }
-
-            return new Color(1f, 0.8f, 0.2f, 1f);
-        }
-
-        private static bool HasMeaningfulEmission(string body)
-        {
-            Match m = Regex.Match(body, "\"emissive\"\\s*:\\s*\\[(?<value>[^\\]]+)\\]", RegexOptions.IgnoreCase);
-            if (!m.Success)
-            {
-                return false;
-            }
-
-            string[] parts = m.Groups["value"].Value.Split(',');
-            float sum = 0f;
-            for (int i = 0; i < Mathf.Min(3, parts.Length); i++)
-            {
-                sum += Mathf.Abs(ParseFloatSafe(parts[i], 0f));
-            }
-
-            return sum > 0.001f;
-        }
-
-        private static Color ReadColorArrayField(string text, string fieldName, Color fallback)
-        {
-            Match match = Regex.Match(text, $"\"{Regex.Escape(fieldName)}\"\\s*:\\s*\\[(?<value>[^\\]]+)\\]", RegexOptions.IgnoreCase);
-            if (!match.Success)
-            {
-                return fallback;
-            }
-
-            string[] parts = match.Groups["value"].Value.Split(',');
-            if (parts.Length < 3)
-            {
-                return fallback;
-            }
-
-            float r = ParseFloatSafe(parts[0], fallback.r);
-            float g = ParseFloatSafe(parts[1], fallback.g);
-            float b = ParseFloatSafe(parts[2], fallback.b);
-
-            float max = Mathf.Max(r, Mathf.Max(g, b));
-            if (max > 1f)
-            {
-                r /= max;
-                g /= max;
-                b /= max;
-            }
-
-            return new Color(Mathf.Clamp01(r), Mathf.Clamp01(g), Mathf.Clamp01(b), 1f);
-        }
-
-        private static bool TryParseFaceAnimation(string textureAssetPath, out FaceAnimationSpec spec)
-        {
-            spec = null;
-            string mcmetaPath = GetProjectAbsolutePath(textureAssetPath + ".mcmeta");
-            if (!File.Exists(mcmetaPath))
-            {
-                return false;
-            }
-
-            Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(textureAssetPath);
-            if (texture == null || texture.width <= 0 || texture.height <= 0)
-            {
-                return false;
-            }
-
-            int frameCountFromTexture = Mathf.Max(1, texture.height / texture.width);
-            string json = File.ReadAllText(mcmetaPath);
-            string animationBody = ExtractAnimationObjectBody(json);
-
-            int frameTimeTicks = ParseIntSafe(ReadNumberField(animationBody, "frametime"), 1);
-            float frameDuration = Mathf.Max(0.01f, frameTimeTicks * 0.05f);
-            int[] frames = ParseFrameSequence(animationBody);
-            int maxFrame = -1;
-            for (int i = 0; i < frames.Length; i++)
-            {
-                if (frames[i] > maxFrame)
-                {
-                    maxFrame = frames[i];
-                }
-            }
-
-            int frameCount = Mathf.Max(frameCountFromTexture, maxFrame + 1);
-            if (frameCount <= 1 && frames.Length <= 1)
-            {
-                return false;
-            }
-
-            if (frames.Length == 0)
-            {
-                frames = new int[frameCount];
-                for (int i = 0; i < frameCount; i++)
-                {
-                    frames[i] = i;
-                }
-            }
-
-            spec = new FaceAnimationSpec
-            {
-                frameCount = frameCount,
-                frameDuration = frameDuration,
-                frames = frames
-            };
-            return true;
-        }
-
-        private static string ExtractAnimationObjectBody(string json)
-        {
-            Match m = Regex.Match(json, "\"animation\"\\s*:\\s*\\{(?<body>[\\s\\S]*?)\\}", RegexOptions.IgnoreCase);
-            return m.Success ? m.Groups["body"].Value : json;
-        }
-
-        private static int[] ParseFrameSequence(string body)
-        {
-            Match m = Regex.Match(body, "\"frames\"\\s*:\\s*\\[(?<frames>[\\s\\S]*?)\\]", RegexOptions.IgnoreCase);
-            if (!m.Success)
-            {
-                return Array.Empty<int>();
-            }
-
-            string framesBody = m.Groups["frames"].Value;
-            List<int> frames = new List<int>();
-
-            MatchCollection objectIndexMatches = Regex.Matches(framesBody, "\"index\"\\s*:\\s*(?<idx>\\d+)", RegexOptions.IgnoreCase);
-            if (objectIndexMatches.Count > 0)
-            {
-                for (int i = 0; i < objectIndexMatches.Count; i++)
-                {
-                    if (int.TryParse(objectIndexMatches[i].Groups["idx"].Value, out int idx) && idx >= 0)
-                    {
-                        frames.Add(idx);
-                    }
-                }
-
-                return frames.ToArray();
-            }
-
-            string[] tokens = framesBody.Split(',');
-            for (int i = 0; i < tokens.Length; i++)
-            {
-                string token = tokens[i].Trim();
-                if (int.TryParse(token, out int frameIndex) && frameIndex >= 0)
-                {
-                    frames.Add(frameIndex);
-                }
-            }
-
-            return frames.ToArray();
-        }
-
-        private static Dictionary<string, string> ExtractTopLevelObjectValues(string json)
-        {
-            Dictionary<string, string> result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            int i = 0;
-            SkipWhitespace(json, ref i);
-            if (i >= json.Length || json[i] != '{')
-            {
-                return result;
-            }
-
-            i++;
-            while (i < json.Length)
-            {
-                SkipWhitespace(json, ref i);
-                if (i < json.Length && json[i] == '}')
-                {
-                    break;
-                }
-
-                string key = ReadJsonString(json, ref i);
-                if (key == null)
-                {
-                    break;
-                }
-
-                SkipWhitespace(json, ref i);
-                if (i >= json.Length || json[i] != ':')
-                {
-                    break;
-                }
-
-                i++;
-                SkipWhitespace(json, ref i);
-                if (i >= json.Length || json[i] != '{')
-                {
-                    SkipJsonValue(json, ref i);
-                }
-                else
-                {
-                    int start = i;
-                    SkipJsonObject(json, ref i);
-                    string objectText = json.Substring(start, i - start);
-                    result[key] = objectText;
-                }
-
-                SkipWhitespace(json, ref i);
-                if (i < json.Length && json[i] == ',')
-                {
-                    i++;
-                }
-            }
-
-            return result;
-        }
-
-        private static void SkipWhitespace(string text, ref int i)
-        {
-            while (i < text.Length && char.IsWhiteSpace(text[i]))
-            {
-                i++;
-            }
-        }
-
-        private static string ReadJsonString(string text, ref int i)
-        {
-            SkipWhitespace(text, ref i);
-            if (i >= text.Length || text[i] != '"')
-            {
-                return null;
-            }
-
-            i++;
-            int start = i;
-            bool escape = false;
-            System.Text.StringBuilder sb = null;
-            while (i < text.Length)
-            {
-                char c = text[i++];
-                if (!escape && c == '"')
-                {
-                    if (sb == null)
-                    {
-                        return text.Substring(start, i - start - 1);
-                    }
-
-                    return sb.ToString();
-                }
-
-                if (!escape && c == '\\')
-                {
-                    escape = true;
-                    if (sb == null)
-                    {
-                        sb = new System.Text.StringBuilder();
-                        sb.Append(text, start, (i - 1) - start);
-                    }
-                    continue;
-                }
-
-                if (sb != null)
-                {
-                    sb.Append(c);
-                }
-
-                escape = false;
-            }
-
-            return null;
-        }
-
-        private static void SkipJsonValue(string text, ref int i)
-        {
-            SkipWhitespace(text, ref i);
-            if (i >= text.Length)
-            {
-                return;
-            }
-
-            if (text[i] == '{')
-            {
-                SkipJsonObject(text, ref i);
-                return;
-            }
-
-            if (text[i] == '[')
-            {
-                int depth = 0;
-                bool inString = false;
-                bool escape = false;
-                while (i < text.Length)
-                {
-                    char c = text[i++];
-                    if (inString)
-                    {
-                        if (!escape && c == '"')
-                        {
-                            inString = false;
-                        }
-                        escape = !escape && c == '\\';
-                        continue;
-                    }
-
-                    if (c == '"')
-                    {
-                        inString = true;
-                        continue;
-                    }
-
-                    if (c == '[')
-                    {
-                        depth++;
-                    }
-                    else if (c == ']')
-                    {
-                        depth--;
-                        if (depth <= 0)
-                        {
-                            break;
-                        }
-                    }
-                }
-                return;
-            }
-
-            if (text[i] == '"')
-            {
-                ReadJsonString(text, ref i);
-                return;
-            }
-
-            while (i < text.Length && text[i] != ',' && text[i] != '}' && text[i] != ']')
-            {
-                i++;
-            }
-        }
-
-        private static void SkipJsonObject(string text, ref int i)
-        {
-            if (i >= text.Length || text[i] != '{')
-            {
-                return;
-            }
-
-            int depth = 0;
-            bool inString = false;
-            bool escape = false;
-            while (i < text.Length)
-            {
-                char c = text[i++];
-                if (inString)
-                {
-                    if (!escape && c == '"')
-                    {
-                        inString = false;
-                    }
-                    escape = !escape && c == '\\';
-                    continue;
-                }
-
-                if (c == '"')
-                {
-                    inString = true;
-                    continue;
-                }
-
-                if (c == '{')
-                {
-                    depth++;
-                }
-                else if (c == '}')
-                {
-                    depth--;
-                    if (depth == 0)
-                    {
-                        break;
-                    }
-                }
-            }
         }
 
     }

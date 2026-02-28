@@ -13,11 +13,11 @@ using BlockWorldMVP;
 
 namespace BlockWorldMVP.Editor
 {
-    public sealed class VoxelGzImportWindow : EditorWindow
+    public sealed partial class VoxelGzImportWindow : EditorWindow
     {
-        private const string BlockTextureFolder = "Packages/com.box3.blockworld-mvp/Assets/block";
-        private const string BlockIdPath = "Packages/com.box3.blockworld-mvp/Assets/block-id.json";
-        private const string BlockSpecPath = "Packages/com.box3.blockworld-mvp/Assets/block-spec.json";
+        private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
+        private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
+        private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
         private const string GeneratedMeshFolder = "Assets/BlockWorldGenerated/Meshes/VoxelImport";
         private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
         private const string ChunkOpaqueMaterialPath = "Assets/BlockWorldGenerated/Materials/VoxelImport_ChunkOpaque.mat";
@@ -215,150 +215,6 @@ namespace BlockWorldMVP.Editor
             ["voxel.err.url_empty"] = "URL 为空。"
         };
 
-        [Serializable]
-        private sealed class VoxelPayload
-        {
-            public string formatVersion;
-            public int[] shape;
-            public int[] dir;
-            public int[] indices;
-            public int[] data;
-            public int[] rot;
-        }
-
-        private readonly struct ChunkKey : IEquatable<ChunkKey>
-        {
-            public readonly int x;
-            public readonly int y;
-            public readonly int z;
-
-            public ChunkKey(int x, int y, int z)
-            {
-                this.x = x;
-                this.y = y;
-                this.z = z;
-            }
-
-            public bool Equals(ChunkKey other)
-            {
-                return x == other.x && y == other.y && z == other.z;
-            }
-
-            public override bool Equals(object obj)
-            {
-                return obj is ChunkKey other && Equals(other);
-            }
-
-            public override int GetHashCode()
-            {
-                unchecked
-                {
-                    int h = 17;
-                    h = (h * 31) + x;
-                    h = (h * 31) + y;
-                    h = (h * 31) + z;
-                    return h;
-                }
-            }
-        }
-
-        private sealed class BlockDefinition
-        {
-            public readonly Dictionary<string, string> sideTexturePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        }
-
-        private sealed class PreparedBlock
-        {
-            public bool valid;
-            public Mesh mesh;
-            public Material material;
-            public Material[] materials;
-            public Vector4[] faceMainTexSt;
-            public bool hasAnimation;
-            public BlockTextureAnimator.FaceAnimation[] animations;
-            public bool usesSubmeshes;
-        }
-
-        private sealed class ChunkBucket
-        {
-            public readonly List<CombineInstance> opaqueCombines = new List<CombineInstance>(2048);
-            public readonly List<TransparentVoxel> transparentVoxels = new List<TransparentVoxel>(512);
-        }
-
-        private sealed class ImportStats
-        {
-            public int total;
-            public int valid;
-            public int createdChunks;
-            public int createdBlocks;
-            public int createdSurfaceColliders;
-            public int createdMeshColliders;
-            public int skippedAir;
-            public int skippedWater;
-            public int skippedBarrier;
-            public int skippedUnknown;
-            public int skippedInvalid;
-            public double startTime;
-        }
-
-        private readonly struct TransparentVoxel
-        {
-            public readonly Vector3Int pos;
-            public readonly int rot;
-            public readonly PreparedBlock prepared;
-
-            public TransparentVoxel(Vector3Int pos, int rot, PreparedBlock prepared)
-            {
-                this.pos = pos;
-                this.rot = rot;
-                this.prepared = prepared;
-            }
-        }
-
-        private readonly struct PendingBlock
-        {
-            public readonly Vector3Int pos;
-            public readonly int rot;
-            public readonly PreparedBlock prepared;
-            public readonly string blockName;
-
-            public PendingBlock(Vector3Int pos, int rot, PreparedBlock prepared, string blockName)
-            {
-                this.pos = pos;
-                this.rot = rot;
-                this.prepared = prepared;
-                this.blockName = blockName;
-            }
-        }
-
-        private enum SourceType
-        {
-            LocalFile,
-            Url
-        }
-
-        private enum Phase
-        {
-            Idle,
-            ProcessVoxels,
-            PlaceSingleBlocks,
-            BuildChunks,
-            Done
-        }
-
-        private enum ImportMode
-        {
-            Chunk = 0,
-            SingleBlock = 1
-        }
-
-        private sealed class FaceAnimationSpec
-        {
-            public int frameCount = 1;
-            public float frameDuration = 0.05f;
-            public int[] frames = Array.Empty<int>();
-        }
-
         private SourceType _sourceType = SourceType.LocalFile;
         private string _localGzPath = string.Empty;
         private string _url = string.Empty;
@@ -408,7 +264,7 @@ namespace BlockWorldMVP.Editor
         private HashSet<Vector3Int> _allVoxels;
         private List<PendingBlock> _pendingBlocks;
 
-        [MenuItem("Tools/Block World MVP/Voxel GZ Importer")]
+        [MenuItem("Box3/Terrain Import", false, 20)]
         public static void Open()
         {
             GetWindow<VoxelGzImportWindow>(L("voxel.window.title"));
@@ -1282,6 +1138,30 @@ namespace BlockWorldMVP.Editor
                 mr.sharedMaterial = prepared.material;
             }
 
+            // For non-transparent blocks (including animated ones), use the shared opaque chunk material
+            bool isTransparent = IsTransparentBlock(blockName);
+            if (!isTransparent)
+            {
+                Material opaque = ResolveChunkOpaqueMaterial();
+                if (opaque != null)
+                {
+                    if (prepared.usesSubmeshes && prepared.materials != null && prepared.materials.Length > 0)
+                    {
+                        Material[] shared = new Material[prepared.materials.Length];
+                        for (int i = 0; i < shared.Length; i++)
+                        {
+                            shared[i] = opaque;
+                        }
+
+                        mr.sharedMaterials = shared;
+                    }
+                    else
+                    {
+                        mr.sharedMaterial = opaque;
+                    }
+                }
+            }
+
             MeshCollider mc = go.AddComponent<MeshCollider>();
             mc.sharedMesh = meshToUse;
 
@@ -1493,6 +1373,7 @@ namespace BlockWorldMVP.Editor
                     _chunkOpaqueMaterialInstance.mainTexture = source.mainTexture;
                 }
 
+                ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
                 return _chunkOpaqueMaterialInstance;
             }
 
@@ -1501,6 +1382,7 @@ namespace BlockWorldMVP.Editor
             {
                 _chunkOpaqueMaterialInstance = existing;
                 _chunkOpaqueMaterialInstance.mainTexture = source.mainTexture;
+                ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
                 EditorUtility.SetDirty(_chunkOpaqueMaterialInstance);
                 return _chunkOpaqueMaterialInstance;
             }
@@ -1511,6 +1393,7 @@ namespace BlockWorldMVP.Editor
                 _chunkOpaqueMaterialInstance = new Material(source) { name = "VoxelImport_ChunkOpaque" };
                 _chunkOpaqueMaterialInstance.renderQueue = (int)RenderQueue.Geometry;
                 _chunkOpaqueMaterialInstance.SetInt("_ZWrite", 1);
+                ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
                 AssetDatabase.CreateAsset(_chunkOpaqueMaterialInstance, ChunkOpaqueMaterialPath);
                 EditorUtility.SetDirty(_chunkOpaqueMaterialInstance);
                 return _chunkOpaqueMaterialInstance;
@@ -1530,10 +1413,39 @@ namespace BlockWorldMVP.Editor
             m.DisableKeyword("_ALPHAPREMULTIPLY_ON");
             m.renderQueue = (int)RenderQueue.Geometry;
 
+            ApplyBumpToChunkOpaque(m);
             _chunkOpaqueMaterialInstance = m;
             AssetDatabase.CreateAsset(_chunkOpaqueMaterialInstance, ChunkOpaqueMaterialPath);
             EditorUtility.SetDirty(_chunkOpaqueMaterialInstance);
             return _chunkOpaqueMaterialInstance;
+        }
+
+        private static void ApplyBumpToChunkOpaque(Material material)
+        {
+            if (material == null)
+            {
+                return;
+            }
+
+            Texture2D bump = BlockAssetFactory.GetAtlasBumpTexture();
+            if (bump == null)
+            {
+                return;
+            }
+
+            material.SetTexture("_BumpMap", bump);
+            material.SetFloat("_BumpScale", 0.1f);
+            material.EnableKeyword("_NORMALMAP");
+            material.DisableKeyword("_PARALLAXMAP");
+
+            Texture2D materialMap = BlockAssetFactory.GetAtlasMaterialTexture();
+            if (materialMap != null)
+            {
+                material.SetTexture("_MetallicGlossMap", materialMap);
+                material.SetFloat("_Metallic", 0.2f);
+                material.SetFloat("_Glossiness", 0.5f);
+                material.EnableKeyword("_METALLICGLOSSMAP");
+            }
         }
 
         private static Mesh BuildTopSurfaceColliderMesh(ChunkKey key, HashSet<Vector3Int> chunkVoxels, HashSet<Vector3Int> allVoxels)

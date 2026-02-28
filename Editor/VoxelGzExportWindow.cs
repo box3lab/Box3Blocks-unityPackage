@@ -12,7 +12,7 @@ namespace BlockWorldMVP.Editor
 {
     public sealed class VoxelGzExportWindow : EditorWindow
     {
-        private const string BlockIdPath = "Packages/com.box3.blockworld-mvp/Assets/block-id.json";
+        private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
 
         [Serializable]
@@ -66,7 +66,7 @@ namespace BlockWorldMVP.Editor
         private GUIStyle _primaryButtonStyle;
         private GUIStyle _textFieldStyle;
 
-        [MenuItem("Tools/Block World MVP/Voxel GZ Exporter")]
+        [MenuItem("Box3/Terrain Export", false, 21)]
         public static void Open()
         {
             GetWindow<VoxelGzExportWindow>(L("voxel.export.window.title"));

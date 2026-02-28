@@ -15,19 +15,25 @@ namespace BlockWorldMVP.Editor
             public Vector4[] faceMainTexSt;
         }
 
-        private const string BlockTextureFolder = "Packages/com.box3.blockworld-mvp/Assets/block";
+        private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
+        private const string BumpTextureFolder = "Packages/com.box3lab.box3/Assets/bump";
+        private const string MaterialTextureFolder = "Packages/com.box3lab.box3/Assets/material";
         private static readonly string GeneratedRoot = "Assets/BlockWorldGenerated";
         private static readonly string MeshFolder = "Assets/BlockWorldGenerated/Meshes";
         private static readonly string MaterialFolder = "Assets/BlockWorldGenerated/Materials";
         private static readonly string AtlasFolder = "Assets/BlockWorldGenerated/Atlases";
         private static readonly string MeshAssetPath = "Assets/BlockWorldGenerated/Meshes/BlockCube.asset";
         private static readonly string AtlasTexturePath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas.asset";
-        private static readonly string AtlasTransparentMaterialPath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Transparent.mat";
+        private static readonly string AtlasBumpTexturePath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Bump.asset";
+        private static readonly string AtlasMaterialTexturePath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Material.asset";
+        private static readonly string AtlasTransparentMaterialPath = "Assets/BlockWorldGenerated/Materials/WorldBuilderAtlas_Transparent.mat";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
         private static readonly Regex SideRegex = new Regex("^(.*)_(back|bottom|front|left|right|top)\\.png$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private static readonly Dictionary<string, Rect> AtlasUvByTexturePath = new Dictionary<string, Rect>(StringComparer.OrdinalIgnoreCase);
         private static Texture2D _atlasTexture;
+        private static Texture2D _atlasBumpTexture;
+        private static Texture2D _atlasMaterialTexture;
         private static Material _atlasTransparentMaterial;
         private static bool _atlasReady;
 
@@ -35,6 +41,8 @@ namespace BlockWorldMVP.Editor
         {
             _atlasReady = false;
             _atlasTexture = null;
+            _atlasBumpTexture = null;
+            _atlasMaterialTexture = null;
             _atlasTransparentMaterial = null;
             AtlasUvByTexturePath.Clear();
         }
@@ -102,6 +110,36 @@ namespace BlockWorldMVP.Editor
                 faceMainTexSt = mainTexSt
             };
             return true;
+        }
+
+        public static Material GetAtlasMaterial()
+        {
+            if (!EnsureAtlasResources())
+            {
+                return null;
+            }
+
+            return _atlasTransparentMaterial;
+        }
+
+        public static Texture2D GetAtlasBumpTexture()
+        {
+            if (!EnsureAtlasResources())
+            {
+                return null;
+            }
+
+            return _atlasBumpTexture;
+        }
+
+        public static Texture2D GetAtlasMaterialTexture()
+        {
+            if (!EnsureAtlasResources())
+            {
+                return null;
+            }
+
+            return _atlasMaterialTexture;
         }
 
         private static string GetFallbackTexturePath(Dictionary<string, string> sideTexturePaths)
@@ -180,6 +218,10 @@ namespace BlockWorldMVP.Editor
             }
 
             PersistAtlasTexture(generated, out _atlasTexture);
+            _atlasBumpTexture = BuildBumpAtlasTexture(_atlasTexture, texturePaths);
+            PersistAtlasBumpTexture(_atlasBumpTexture);
+            _atlasMaterialTexture = BuildMaterialAtlasTexture(_atlasTexture, texturePaths);
+            PersistAtlasMaterialTexture(_atlasMaterialTexture);
             _atlasTransparentMaterial = GetOrCreateTransparentAtlasMaterial(AtlasTransparentMaterialPath, _atlasTexture);
 
             const string legacyOpaqueMaterialPath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Opaque.mat";
@@ -190,6 +232,14 @@ namespace BlockWorldMVP.Editor
 
             AssetDatabase.SaveAssets();
             AssetDatabase.ImportAsset(AtlasTexturePath, ImportAssetOptions.ForceUpdate);
+            if (AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasBumpTexturePath) != null)
+            {
+                AssetDatabase.ImportAsset(AtlasBumpTexturePath, ImportAssetOptions.ForceUpdate);
+            }
+            if (AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasMaterialTexturePath) != null)
+            {
+                AssetDatabase.ImportAsset(AtlasMaterialTexturePath, ImportAssetOptions.ForceUpdate);
+            }
             AssetDatabase.ImportAsset(AtlasTransparentMaterialPath, ImportAssetOptions.ForceUpdate);
 
             CleanupReadableTextures(readableTextures);
@@ -219,6 +269,48 @@ namespace BlockWorldMVP.Editor
             }
         }
 
+        private static void PersistAtlasBumpTexture(Texture2D bumpTexture)
+        {
+            if (bumpTexture == null)
+            {
+                return;
+            }
+
+            Texture2D existing = AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasBumpTexturePath);
+            if (existing == null)
+            {
+                AssetDatabase.CreateAsset(bumpTexture, AtlasBumpTexturePath);
+                ConfigureBumpAtlasImporter(AtlasBumpTexturePath);
+                return;
+            }
+
+            EditorUtility.CopySerialized(bumpTexture, existing);
+            EditorUtility.SetDirty(existing);
+            UnityEngine.Object.DestroyImmediate(bumpTexture);
+            ConfigureBumpAtlasImporter(AtlasBumpTexturePath);
+        }
+
+        private static void PersistAtlasMaterialTexture(Texture2D materialTexture)
+        {
+            if (materialTexture == null)
+            {
+                return;
+            }
+
+            Texture2D existing = AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasMaterialTexturePath);
+            if (existing == null)
+            {
+                AssetDatabase.CreateAsset(materialTexture, AtlasMaterialTexturePath);
+                ConfigureMaterialAtlasImporter(AtlasMaterialTexturePath);
+                return;
+            }
+
+            EditorUtility.CopySerialized(materialTexture, existing);
+            EditorUtility.SetDirty(existing);
+            UnityEngine.Object.DestroyImmediate(materialTexture);
+            ConfigureMaterialAtlasImporter(AtlasMaterialTexturePath);
+        }
+
         private static Material GetOrCreateTransparentAtlasMaterial(string materialPath, Texture2D atlasTexture)
         {
             if (atlasTexture == null)
@@ -226,6 +318,7 @@ namespace BlockWorldMVP.Editor
                 return null;
             }
 
+            EnsureFolders();
             Material material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
             if (material == null)
             {
@@ -247,6 +340,280 @@ namespace BlockWorldMVP.Editor
 
             EditorUtility.SetDirty(material);
             return material;
+        }
+
+        private static Texture2D BuildBumpAtlasTexture(Texture2D colorAtlas, List<string> colorTexturePaths)
+        {
+            if (colorAtlas == null || colorTexturePaths == null)
+            {
+                return null;
+            }
+
+            int width = colorAtlas.width;
+            int height = colorAtlas.height;
+            if (width <= 0 || height <= 0)
+            {
+                return null;
+            }
+
+            Texture2D bumpAtlas = new Texture2D(width, height, TextureFormat.RGBA32, false, false)
+            {
+                name = "WorldBuilderAtlas_Bump",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                anisoLevel = 0
+            };
+
+            Color[] clear = new Color[width * height];
+            for (int i = 0; i < clear.Length; i++)
+            {
+                clear[i] = Color.black;
+            }
+            bumpAtlas.SetPixels(clear);
+
+            for (int i = 0; i < colorTexturePaths.Count; i++)
+            {
+                string colorPath = colorTexturePaths[i];
+                if (!AtlasUvByTexturePath.TryGetValue(colorPath, out Rect uvRect))
+                {
+                    continue;
+                }
+
+                string bumpPath = GetBumpTexturePath(colorPath);
+                if (string.IsNullOrWhiteSpace(bumpPath) || !File.Exists(GetProjectAbsolutePath(bumpPath)))
+                {
+                    continue;
+                }
+
+                Texture2D bumpTex = LoadReadableTextureFromAsset(bumpPath);
+                if (bumpTex == null)
+                {
+                    continue;
+                }
+
+                int x = Mathf.RoundToInt(uvRect.x * width);
+                int y = Mathf.RoundToInt(uvRect.y * height);
+                int w = Mathf.RoundToInt(uvRect.width * width);
+                int h = Mathf.RoundToInt(uvRect.height * height);
+                if (w <= 0 || h <= 0)
+                {
+                    UnityEngine.Object.DestroyImmediate(bumpTex);
+                    continue;
+                }
+
+                if (bumpTex.width == w && bumpTex.height == h)
+                {
+                    bumpAtlas.SetPixels(x, y, w, h, bumpTex.GetPixels());
+                }
+                else
+                {
+                    Color[] src = bumpTex.GetPixels();
+                    Color[] scaled = new Color[w * h];
+                    for (int yy = 0; yy < h; yy++)
+                    {
+                        int srcY = Mathf.Clamp(Mathf.RoundToInt((yy / (float)h) * (bumpTex.height - 1)), 0, bumpTex.height - 1);
+                        for (int xx = 0; xx < w; xx++)
+                        {
+                            int srcX = Mathf.Clamp(Mathf.RoundToInt((xx / (float)w) * (bumpTex.width - 1)), 0, bumpTex.width - 1);
+                            scaled[(yy * w) + xx] = src[(srcY * bumpTex.width) + srcX];
+                        }
+                    }
+                    bumpAtlas.SetPixels(x, y, w, h, scaled);
+                }
+
+                UnityEngine.Object.DestroyImmediate(bumpTex);
+            }
+
+            bumpAtlas.Apply();
+            return bumpAtlas;
+        }
+
+        private static Texture2D BuildMaterialAtlasTexture(Texture2D colorAtlas, List<string> colorTexturePaths)
+        {
+            if (colorAtlas == null || colorTexturePaths == null)
+            {
+                return null;
+            }
+
+            int width = colorAtlas.width;
+            int height = colorAtlas.height;
+            if (width <= 0 || height <= 0)
+            {
+                return null;
+            }
+
+            Texture2D materialAtlas = new Texture2D(width, height, TextureFormat.RGBA32, false, false)
+            {
+                name = "WorldBuilderAtlas_Material",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                anisoLevel = 0
+            };
+
+            Color[] clear = new Color[width * height];
+            for (int i = 0; i < clear.Length; i++)
+            {
+                clear[i] = Color.black;
+            }
+            materialAtlas.SetPixels(clear);
+
+            for (int i = 0; i < colorTexturePaths.Count; i++)
+            {
+                string colorPath = colorTexturePaths[i];
+                if (!AtlasUvByTexturePath.TryGetValue(colorPath, out Rect uvRect))
+                {
+                    continue;
+                }
+
+                string materialPath = GetMaterialTexturePath(colorPath);
+                if (string.IsNullOrWhiteSpace(materialPath) || !File.Exists(GetProjectAbsolutePath(materialPath)))
+                {
+                    continue;
+                }
+
+                Texture2D matTex = LoadReadableTextureFromAsset(materialPath);
+                if (matTex == null)
+                {
+                    continue;
+                }
+
+                int x = Mathf.RoundToInt(uvRect.x * width);
+                int y = Mathf.RoundToInt(uvRect.y * height);
+                int w = Mathf.RoundToInt(uvRect.width * width);
+                int h = Mathf.RoundToInt(uvRect.height * height);
+                if (w <= 0 || h <= 0)
+                {
+                    UnityEngine.Object.DestroyImmediate(matTex);
+                    continue;
+                }
+
+                if (matTex.width == w && matTex.height == h)
+                {
+                    materialAtlas.SetPixels(x, y, w, h, matTex.GetPixels());
+                }
+                else
+                {
+                    Color[] src = matTex.GetPixels();
+                    Color[] scaled = new Color[w * h];
+                    for (int yy = 0; yy < h; yy++)
+                    {
+                        int srcY = Mathf.Clamp(Mathf.RoundToInt((yy / (float)h) * (matTex.height - 1)), 0, matTex.height - 1);
+                        for (int xx = 0; xx < w; xx++)
+                        {
+                            int srcX = Mathf.Clamp(Mathf.RoundToInt((xx / (float)w) * (matTex.width - 1)), 0, matTex.width - 1);
+                            scaled[(yy * w) + xx] = src[(srcY * matTex.width) + srcX];
+                        }
+                    }
+                    materialAtlas.SetPixels(x, y, w, h, scaled);
+                }
+
+                UnityEngine.Object.DestroyImmediate(matTex);
+            }
+
+            materialAtlas.Apply();
+            return materialAtlas;
+        }
+
+        private static void ConfigureBumpAtlasImporter(string assetPath)
+        {
+            TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer == null)
+            {
+                return;
+            }
+
+            importer.textureType = TextureImporterType.NormalMap;
+            importer.sRGBTexture = false;
+            importer.mipmapEnabled = false;
+            importer.filterMode = FilterMode.Point;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
+        }
+
+        private static void ConfigureMaterialAtlasImporter(string assetPath)
+        {
+            TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer == null)
+            {
+                return;
+            }
+
+            importer.textureType = TextureImporterType.Default;
+            importer.sRGBTexture = false;
+            importer.mipmapEnabled = false;
+            importer.filterMode = FilterMode.Point;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
+        }
+
+        private static string GetBumpTexturePath(string colorPath)
+        {
+            if (string.IsNullOrWhiteSpace(colorPath))
+            {
+                return null;
+            }
+
+            string fileName = Path.GetFileName(colorPath);
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return null;
+            }
+
+            string direct = $"{BumpTextureFolder}/{fileName}";
+            if (File.Exists(GetProjectAbsolutePath(direct)))
+            {
+                return direct;
+            }
+
+            string name = Path.GetFileNameWithoutExtension(fileName);
+            string ext = Path.GetExtension(fileName);
+            if (string.IsNullOrWhiteSpace(ext))
+            {
+                ext = ".png";
+            }
+
+            string withIndex = $"{BumpTextureFolder}/{name}_0{ext}";
+            if (File.Exists(GetProjectAbsolutePath(withIndex)))
+            {
+                return withIndex;
+            }
+
+            return null;
+        }
+
+        private static string GetMaterialTexturePath(string colorPath)
+        {
+            if (string.IsNullOrWhiteSpace(colorPath))
+            {
+                return null;
+            }
+
+            string fileName = Path.GetFileName(colorPath);
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return null;
+            }
+
+            string direct = $"{MaterialTextureFolder}/{fileName}";
+            if (File.Exists(GetProjectAbsolutePath(direct)))
+            {
+                return direct;
+            }
+
+            string name = Path.GetFileNameWithoutExtension(fileName);
+            string ext = Path.GetExtension(fileName);
+            if (string.IsNullOrWhiteSpace(ext))
+            {
+                ext = ".png";
+            }
+
+            string withIndex = $"{MaterialTextureFolder}/{name}_0{ext}";
+            if (File.Exists(GetProjectAbsolutePath(withIndex)))
+            {
+                return withIndex;
+            }
+
+            return null;
         }
 
         private static Texture2D LoadReadableTextureFromAsset(string assetPath)

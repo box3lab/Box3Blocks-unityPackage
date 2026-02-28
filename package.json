@@ -1,10 +1,23 @@
 {
-  "name": "com.box3.blockworld-mvp",
+  "name": "com.box3lab.box3",
   "version": "0.1.0",
-  "displayName": "Box3 BlockWorld MVP",
-  "description": "MVP package for generating a block world from JSON block coordinates.",
+  "displayName": "Box3 Blocks",
+  "description": "Block-based world building tools and editors for Box3.",
   "unity": "2022.3",
+  "keywords": [
+    "box3",
+    "blocks"
+  ],
+  "category": "Tools",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/box3lab/Box3-Unity-Package.git"
+  },
+  "bugs": {
+    "url": "https://github.com/box3lab/Box3-Unity-Package/issues"
+  },
+  "homepage": "https://github.com/box3lab/Box3-Unity-Package",
   "author": {
-    "name": "Box3"
+    "name": "神岛实验室"
   }
 }

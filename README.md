@@ -3,6 +3,7 @@
 This package generates a block world from JSON data.
 
 ## Setup
+
 1. Create block prefabs (example: `grass`, `stone`).
 2. Create catalog: `Create -> Block World MVP -> Block Catalog`
 3. Create JSON template: `Assets -> Create -> Block World MVP -> Blocks JSON Template`
@@ -11,6 +12,7 @@ This package generates a block world from JSON data.
 6. Click `Build From JSON` in inspector.
 
 ## Visual Builder (recommended)
+
 1. Open `Tools -> Block World MVP -> World Builder`
 2. Assign/create `Root`
 3. Search + choose category tabs (including `Recent`)
@@ -21,9 +23,10 @@ This package generates a block world from JSON data.
 6. Click `Clean Materials` to remove unused generated materials
 
 Notes:
+
 - `Recent` only updates when a block is actually placed in Scene.
-- Block textures are auto-scanned from `Packages/com.box3.blockworld-mvp/Assets/block`.
-- Block metadata is read from `Packages/com.box3.blockworld-mvp/Assets/block-spec.json` (fallback: `block-id.json`).
+- Block textures are auto-scanned from `Packages/com.box3lab.box3/Assets/block`.
+- Block metadata is read from `Packages/com.box3lab.box3/Assets/block-spec.json` (fallback: `block-id.json`).
 - `transparent: true` uses transparent material, so PNG alpha will render correctly.
 - If texture has `.png.mcmeta`, block face animation is played (supports multi-frame strips such as 4-frame textures).
 - Glow blocks show a color strip on the card bottom.
@@ -35,6 +38,7 @@ Notes:
 - `BlockWorldOcclusionCuller` can cull chunked renderers by distance + frustum + runtime occlusion (for large scenes with many hidden blocks).
 
 ## JSON format
+
 ```json
 {
   "blocks": [
