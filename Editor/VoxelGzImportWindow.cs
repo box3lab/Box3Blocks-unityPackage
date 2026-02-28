@@ -15,9 +15,9 @@ namespace BlockWorldMVP.Editor
 {
     public sealed partial class VoxelGzImportWindow : EditorWindow
     {
-        private const string BlockTextureFolder = "Packages/com.box3.blockworld-mvp/Assets/block";
-        private const string BlockIdPath = "Packages/com.box3.blockworld-mvp/Assets/block-id.json";
-        private const string BlockSpecPath = "Packages/com.box3.blockworld-mvp/Assets/block-spec.json";
+        private const string BlockTextureFolder = "Packages/com.box3lab.box3blocks/Assets/block";
+        private const string BlockIdPath = "Packages/com.box3lab.box3blocks/Assets/block-id.json";
+        private const string BlockSpecPath = "Packages/com.box3lab.box3blocks/Assets/block-spec.json";
         private const string GeneratedMeshFolder = "Assets/BlockWorldGenerated/Meshes/VoxelImport";
         private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
         private const string ChunkOpaqueMaterialPath = "Assets/BlockWorldGenerated/Materials/VoxelImport_ChunkOpaque.mat";
@@ -264,7 +264,7 @@ namespace BlockWorldMVP.Editor
         private HashSet<Vector3Int> _allVoxels;
         private List<PendingBlock> _pendingBlocks;
 
-        [MenuItem("Box3/Voxel GZ Importer")]
+        [MenuItem("Box3/Terrain Import", false, 20)]
         public static void Open()
         {
             GetWindow<VoxelGzImportWindow>(L("voxel.window.title"));

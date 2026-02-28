@@ -15,9 +15,9 @@ namespace BlockWorldMVP.Editor
             public Vector4[] faceMainTexSt;
         }
 
-        private const string BlockTextureFolder = "Packages/com.box3.blockworld-mvp/Assets/block";
-        private const string BumpTextureFolder = "Packages/com.box3.blockworld-mvp/Assets/bump";
-        private const string MaterialTextureFolder = "Packages/com.box3.blockworld-mvp/Assets/material";
+        private const string BlockTextureFolder = "Packages/com.box3lab.box3blocks/Assets/block";
+        private const string BumpTextureFolder = "Packages/com.box3lab.box3blocks/Assets/bump";
+        private const string MaterialTextureFolder = "Packages/com.box3lab.box3blocks/Assets/material";
         private static readonly string GeneratedRoot = "Assets/BlockWorldGenerated";
         private static readonly string MeshFolder = "Assets/BlockWorldGenerated/Meshes";
         private static readonly string MaterialFolder = "Assets/BlockWorldGenerated/Materials";
