@@ -22,7 +22,7 @@ namespace BlockWorldMVP.Editor
         private static readonly string AtlasFolder = "Assets/BlockWorldGenerated/Atlases";
         private static readonly string MeshAssetPath = "Assets/BlockWorldGenerated/Meshes/BlockCube.asset";
         private static readonly string AtlasTexturePath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas.asset";
-        private static readonly string AtlasTransparentMaterialPath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Transparent.mat";
+        private static readonly string AtlasTransparentMaterialPath = "Assets/BlockWorldGenerated/Materials/WorldBuilderAtlas_Transparent.mat";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
         private static readonly Regex SideRegex = new Regex("^(.*)_(back|bottom|front|left|right|top)\\.png$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -102,6 +102,16 @@ namespace BlockWorldMVP.Editor
                 faceMainTexSt = mainTexSt
             };
             return true;
+        }
+
+        public static Material GetAtlasMaterial()
+        {
+            if (!EnsureAtlasResources())
+            {
+                return null;
+            }
+
+            return _atlasTransparentMaterial;
         }
 
         private static string GetFallbackTexturePath(Dictionary<string, string> sideTexturePaths)
@@ -226,6 +236,7 @@ namespace BlockWorldMVP.Editor
                 return null;
             }
 
+            EnsureFolders();
             Material material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
             if (material == null)
             {
