@@ -17,9 +17,10 @@ namespace BlockWorldMVP.Editor
     {
         private const string BlockTextureFolder = "Packages/com.box3.blockworld-mvp/Assets/block";
         private const string BlockIdPath = "Packages/com.box3.blockworld-mvp/Assets/block-id.json";
+        private const string BlockSpecPath = "Packages/com.box3.blockworld-mvp/Assets/block-spec.json";
         private const string GeneratedMeshFolder = "Assets/BlockWorldGenerated/Meshes/VoxelImport";
         private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
-        private const string ChunkCutoutMaterialPath = "Assets/BlockWorldGenerated/Materials/VoxelImport_ChunkCutout.mat";
+        private const string ChunkOpaqueMaterialPath = "Assets/BlockWorldGenerated/Materials/VoxelImport_ChunkOpaque.mat";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
         private static readonly Regex SideRegex = new Regex(@"^(.*)_(back|bottom|front|left|right|top)\.png$", RegexOptions.Compiled);
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
@@ -222,7 +223,8 @@ namespace BlockWorldMVP.Editor
 
         private sealed class ChunkBucket
         {
-            public readonly List<CombineInstance> combines = new List<CombineInstance>(2048);
+            public readonly List<CombineInstance> opaqueCombines = new List<CombineInstance>(2048);
+            public readonly List<CombineInstance> transparentCombines = new List<CombineInstance>(512);
         }
 
         private sealed class ImportStats
@@ -302,6 +304,7 @@ namespace BlockWorldMVP.Editor
         private Dictionary<int, string> _idToName;
         private Dictionary<string, BlockDefinition> _blockDefs;
         private Dictionary<string, PreparedBlock> _preparedByName;
+        private Dictionary<string, bool> _transparentByName;
         private Dictionary<ChunkKey, ChunkBucket> _chunkBuckets;
         private List<ChunkKey> _chunkKeys;
         private Transform _importRoot;
@@ -309,7 +312,7 @@ namespace BlockWorldMVP.Editor
         private int _cursorVoxel;
         private int _cursorChunk;
         private Quaternion[] _rotLookup;
-        private Material _chunkMaterialInstance;
+        private Material _chunkOpaqueMaterialInstance;
         private Dictionary<ChunkKey, HashSet<Vector3Int>> _chunkVoxelPositions;
         private HashSet<Vector3Int> _occupiedVoxels;
 
@@ -595,6 +598,7 @@ namespace BlockWorldMVP.Editor
                 }
 
                 _idToName = LoadBlockIdMap();
+                _transparentByName = LoadBlockTransparencyMap();
                 _blockDefs = LoadBlockDefinitions();
                 _preparedByName = new Dictionary<string, PreparedBlock>(StringComparer.OrdinalIgnoreCase);
                 bool useChunkMode = _importMode == ImportMode.Chunk;
@@ -606,7 +610,7 @@ namespace BlockWorldMVP.Editor
                 _occupiedVoxels = useChunkMode && _addSurfaceCollider
                     ? new HashSet<Vector3Int>()
                     : null;
-                _chunkMaterialInstance = null;
+                _chunkOpaqueMaterialInstance = null;
                 _stats = new ImportStats
                 {
                     total = Mathf.Min(_payload.indices.Length, _payload.data.Length),
@@ -732,6 +736,7 @@ namespace BlockWorldMVP.Editor
                 }
                 else
                 {
+                    bool isTransparent = IsTransparentBlock(blockName);
                     ChunkKey key = BuildChunkKey(wx, wy, wz, _chunkSize);
                     if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket))
                     {
@@ -739,7 +744,8 @@ namespace BlockWorldMVP.Editor
                         _chunkBuckets.Add(key, bucket);
                     }
 
-                    bucket.combines.Add(new CombineInstance
+                    List<CombineInstance> target = isTransparent ? bucket.transparentCombines : bucket.opaqueCombines;
+                    target.Add(new CombineInstance
                     {
                         mesh = prepared.mesh,
                         subMeshIndex = 0,
@@ -804,7 +810,8 @@ namespace BlockWorldMVP.Editor
             for (int i = _cursorChunk; i < maxIndex; i++)
             {
                 ChunkKey key = _chunkKeys[i];
-                if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket) || bucket.combines.Count == 0)
+                if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket)
+                    || (bucket.opaqueCombines.Count == 0 && bucket.transparentCombines.Count == 0))
                 {
                     continue;
                 }
@@ -812,26 +819,52 @@ namespace BlockWorldMVP.Editor
                 GameObject go = new GameObject($"chunk_{key.x}_{key.y}_{key.z}");
                 go.transform.SetParent(_importRoot, false);
 
-                MeshFilter mf = go.AddComponent<MeshFilter>();
-                MeshRenderer mr = go.AddComponent<MeshRenderer>();
-                mr.sharedMaterial = ResolveChunkMaterial();
-
-                Mesh mesh = new Mesh
+                if (bucket.opaqueCombines.Count > 0)
                 {
-                    name = $"VoxelChunk_{key.x}_{key.y}_{key.z}",
-                    indexFormat = IndexFormat.UInt32
-                };
-                mesh.CombineMeshes(bucket.combines.ToArray(), true, true, false);
-                mesh.RecalculateBounds();
+                    GameObject opaqueGo = new GameObject("opaque");
+                    opaqueGo.transform.SetParent(go.transform, false);
+                    MeshFilter mf = opaqueGo.AddComponent<MeshFilter>();
+                    MeshRenderer mr = opaqueGo.AddComponent<MeshRenderer>();
+                    mr.sharedMaterial = ResolveChunkOpaqueMaterial();
 
-                string assetPath = BuildChunkMeshAssetPath(key, i);
-                AssetDatabase.CreateAsset(mesh, assetPath);
-                mf.sharedMesh = mesh;
-                if (_addMeshCollider)
+                    Mesh mesh = new Mesh
+                    {
+                        name = $"VoxelChunk_{key.x}_{key.y}_{key.z}_opaque",
+                        indexFormat = IndexFormat.UInt32
+                    };
+                    mesh.CombineMeshes(bucket.opaqueCombines.ToArray(), true, true, false);
+                    mesh.RecalculateBounds();
+
+                    string assetPath = BuildChunkMeshAssetPath(key, i, "opaque");
+                    AssetDatabase.CreateAsset(mesh, assetPath);
+                    mf.sharedMesh = mesh;
+                    if (_addMeshCollider)
+                    {
+                        MeshCollider chunkCollider = opaqueGo.AddComponent<MeshCollider>();
+                        chunkCollider.sharedMesh = mesh;
+                        _stats.createdMeshColliders++;
+                    }
+                }
+
+                if (bucket.transparentCombines.Count > 0)
                 {
-                    MeshCollider chunkCollider = go.AddComponent<MeshCollider>();
-                    chunkCollider.sharedMesh = mesh;
-                    _stats.createdMeshColliders++;
+                    GameObject transparentGo = new GameObject("transparent");
+                    transparentGo.transform.SetParent(go.transform, false);
+                    MeshFilter mf = transparentGo.AddComponent<MeshFilter>();
+                    MeshRenderer mr = transparentGo.AddComponent<MeshRenderer>();
+                    mr.sharedMaterial = ResolveChunkTransparentMaterial();
+
+                    Mesh mesh = new Mesh
+                    {
+                        name = $"VoxelChunk_{key.x}_{key.y}_{key.z}_transparent",
+                        indexFormat = IndexFormat.UInt32
+                    };
+                    mesh.CombineMeshes(bucket.transparentCombines.ToArray(), true, true, false);
+                    mesh.RecalculateBounds();
+
+                    string assetPath = BuildChunkMeshAssetPath(key, i, "transparent");
+                    AssetDatabase.CreateAsset(mesh, assetPath);
+                    mf.sharedMesh = mesh;
                 }
 
                 if (_addSurfaceCollider
@@ -1188,10 +1221,11 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private string BuildChunkMeshAssetPath(ChunkKey key, int index)
+        private string BuildChunkMeshAssetPath(ChunkKey key, int index, string suffix)
         {
             string parentName = _parent != null ? SanitizeName(_parent.name) : "Root";
-            string name = $"{parentName}_chunk_{key.x}_{key.y}_{key.z}_{index}.asset";
+            string safeSuffix = string.IsNullOrWhiteSpace(suffix) ? "chunk" : suffix;
+            string name = $"{parentName}_chunk_{key.x}_{key.y}_{key.z}_{safeSuffix}_{index}.asset";
             return $"{GeneratedMeshFolder}/{name}";
         }
 
@@ -1260,7 +1294,7 @@ namespace BlockWorldMVP.Editor
             return null;
         }
 
-        private Material ResolveChunkMaterial()
+        private Material ResolveChunkTransparentMaterial()
         {
             Material source = ResolveSharedMaterial();
             if (source == null)
@@ -1268,72 +1302,67 @@ namespace BlockWorldMVP.Editor
                 return null;
             }
 
-            if (!_chunkUseAlphaClip)
+            return source;
+        }
+
+        private Material ResolveChunkOpaqueMaterial()
+        {
+            Material source = ResolveSharedMaterial();
+            if (source == null)
             {
-                return source;
+                return null;
             }
 
             EnsureAssetFolderPath(GeneratedMaterialFolder);
 
-            if (_chunkMaterialInstance != null)
+            if (_chunkOpaqueMaterialInstance != null)
             {
-                if (_chunkMaterialInstance.mainTexture != source.mainTexture)
+                if (_chunkOpaqueMaterialInstance.mainTexture != source.mainTexture)
                 {
-                    _chunkMaterialInstance.mainTexture = source.mainTexture;
+                    _chunkOpaqueMaterialInstance.mainTexture = source.mainTexture;
                 }
-                _chunkMaterialInstance.SetFloat("_Cutoff", _chunkAlphaCutoff);
-                return _chunkMaterialInstance;
+
+                return _chunkOpaqueMaterialInstance;
             }
 
-            Material existing = AssetDatabase.LoadAssetAtPath<Material>(ChunkCutoutMaterialPath);
+            Material existing = AssetDatabase.LoadAssetAtPath<Material>(ChunkOpaqueMaterialPath);
             if (existing != null)
             {
-                _chunkMaterialInstance = existing;
-                _chunkMaterialInstance.mainTexture = source.mainTexture;
-                _chunkMaterialInstance.SetFloat("_Cutoff", _chunkAlphaCutoff);
-                EditorUtility.SetDirty(_chunkMaterialInstance);
-                return _chunkMaterialInstance;
+                _chunkOpaqueMaterialInstance = existing;
+                _chunkOpaqueMaterialInstance.mainTexture = source.mainTexture;
+                EditorUtility.SetDirty(_chunkOpaqueMaterialInstance);
+                return _chunkOpaqueMaterialInstance;
             }
 
-            Shader cutoutShader = Shader.Find("Standard");
-            if (cutoutShader == null)
+            Shader shader = Shader.Find("Standard");
+            if (shader == null)
             {
-                cutoutShader = Shader.Find("Legacy Shaders/Transparent/Cutout/Diffuse");
+                _chunkOpaqueMaterialInstance = new Material(source) { name = "VoxelImport_ChunkOpaque" };
+                _chunkOpaqueMaterialInstance.renderQueue = (int)RenderQueue.Geometry;
+                _chunkOpaqueMaterialInstance.SetInt("_ZWrite", 1);
+                AssetDatabase.CreateAsset(_chunkOpaqueMaterialInstance, ChunkOpaqueMaterialPath);
+                EditorUtility.SetDirty(_chunkOpaqueMaterialInstance);
+                return _chunkOpaqueMaterialInstance;
             }
 
-            if (cutoutShader == null)
+            Material m = new Material(shader)
             {
-                // Fallback if cutout shader is unavailable.
-                _chunkMaterialInstance = new Material(source) { name = "VoxelImport_ChunkZWrite" };
-                _chunkMaterialInstance.SetInt("_ZWrite", 1);
-                AssetDatabase.CreateAsset(_chunkMaterialInstance, ChunkCutoutMaterialPath);
-                EditorUtility.SetDirty(_chunkMaterialInstance);
-                return _chunkMaterialInstance;
-            }
-
-            Material m = new Material(cutoutShader)
-            {
-                name = "VoxelImport_ChunkCutout"
+                name = "VoxelImport_ChunkOpaque"
             };
             m.mainTexture = source.mainTexture;
-            m.SetFloat("_Cutoff", _chunkAlphaCutoff);
+            m.SetFloat("_Mode", 0f);
+            m.SetInt("_SrcBlend", (int)BlendMode.One);
+            m.SetInt("_DstBlend", (int)BlendMode.Zero);
+            m.SetInt("_ZWrite", 1);
+            m.DisableKeyword("_ALPHATEST_ON");
+            m.DisableKeyword("_ALPHABLEND_ON");
+            m.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            m.renderQueue = (int)RenderQueue.Geometry;
 
-            if (string.Equals(cutoutShader.name, "Standard", StringComparison.Ordinal))
-            {
-                m.SetFloat("_Mode", 1f);
-                m.SetInt("_SrcBlend", (int)BlendMode.One);
-                m.SetInt("_DstBlend", (int)BlendMode.Zero);
-                m.SetInt("_ZWrite", 1);
-                m.DisableKeyword("_ALPHABLEND_ON");
-                m.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-                m.EnableKeyword("_ALPHATEST_ON");
-                m.renderQueue = (int)RenderQueue.AlphaTest;
-            }
-
-            _chunkMaterialInstance = m;
-            AssetDatabase.CreateAsset(_chunkMaterialInstance, ChunkCutoutMaterialPath);
-            EditorUtility.SetDirty(_chunkMaterialInstance);
-            return _chunkMaterialInstance;
+            _chunkOpaqueMaterialInstance = m;
+            AssetDatabase.CreateAsset(_chunkOpaqueMaterialInstance, ChunkOpaqueMaterialPath);
+            EditorUtility.SetDirty(_chunkOpaqueMaterialInstance);
+            return _chunkOpaqueMaterialInstance;
         }
 
         private static Mesh BuildTopSurfaceColliderMesh(ChunkKey key, HashSet<Vector3Int> chunkVoxels, HashSet<Vector3Int> allVoxels)
@@ -1786,6 +1815,58 @@ namespace BlockWorldMVP.Editor
             return map;
         }
 
+        private static Dictionary<string, bool> LoadBlockTransparencyMap()
+        {
+            Dictionary<string, bool> map = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            string absPath = GetProjectAbsolutePath(BlockSpecPath);
+            if (File.Exists(absPath))
+            {
+                string json = File.ReadAllText(absPath);
+                Dictionary<string, string> objects = ExtractTopLevelObjectValues(json);
+                foreach (KeyValuePair<string, string> pair in objects)
+                {
+                    string name = pair.Key;
+                    if (string.IsNullOrWhiteSpace(name))
+                    {
+                        continue;
+                    }
+
+                    bool transparent = ReadBoolField(pair.Value, "transparent");
+                    map[name] = transparent;
+                }
+
+                if (map.Count > 0)
+                {
+                    return map;
+                }
+            }
+
+            string fallback = GetProjectAbsolutePath(BlockIdPath);
+            if (!File.Exists(fallback))
+            {
+                return map;
+            }
+
+            string fallbackJson = File.ReadAllText(fallback);
+            MatchCollection flatMatches = FlatMapRegex.Matches(fallbackJson);
+            for (int i = 0; i < flatMatches.Count; i++)
+            {
+                Match m = flatMatches[i];
+                string name = m.Groups["name"].Value;
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+
+                if (!map.ContainsKey(name))
+                {
+                    map[name] = IsTransparencyKeyword(name);
+                }
+            }
+
+            return map;
+        }
+
         private static Dictionary<string, int> LoadNameToBlockIdMap()
         {
             Dictionary<int, string> idToName = LoadBlockIdMap();
@@ -1829,6 +1910,21 @@ namespace BlockWorldMVP.Editor
             return defs;
         }
 
+        private bool IsTransparentBlock(string blockName)
+        {
+            if (string.IsNullOrWhiteSpace(blockName))
+            {
+                return false;
+            }
+
+            if (_transparentByName != null && _transparentByName.TryGetValue(blockName, out bool transparent))
+            {
+                return transparent;
+            }
+
+            return IsTransparencyKeyword(blockName);
+        }
+
         private static bool IsWaterBlock(string blockName)
         {
             return blockName.IndexOf("water", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -1837,6 +1933,246 @@ namespace BlockWorldMVP.Editor
         private static bool IsBarrierBlock(string blockName)
         {
             return blockName.IndexOf("barrier", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool ReadBoolField(string text, string fieldName)
+        {
+            Match match = Regex.Match(text, $"\"{Regex.Escape(fieldName)}\"\\s*:\\s*(?<value>true|false|1|0)", RegexOptions.IgnoreCase);
+            if (!match.Success)
+            {
+                return false;
+            }
+
+            string raw = match.Groups["value"].Value;
+            return string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase) || raw == "1";
+        }
+
+        private static bool IsTransparencyKeyword(string id)
+        {
+            return id.IndexOf("glass", StringComparison.OrdinalIgnoreCase) >= 0
+                || id.IndexOf("window", StringComparison.OrdinalIgnoreCase) >= 0
+                || id.IndexOf("ice", StringComparison.OrdinalIgnoreCase) >= 0
+                || id.IndexOf("water", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static Dictionary<string, string> ExtractTopLevelObjectValues(string json)
+        {
+            Dictionary<string, string> result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            int i = 0;
+            SkipWhitespace(json, ref i);
+            if (i >= json.Length || json[i] != '{')
+            {
+                return result;
+            }
+
+            i++;
+            while (i < json.Length)
+            {
+                SkipWhitespace(json, ref i);
+                if (i < json.Length && json[i] == '}')
+                {
+                    break;
+                }
+
+                string key = ReadJsonString(json, ref i);
+                if (key == null)
+                {
+                    break;
+                }
+
+                SkipWhitespace(json, ref i);
+                if (i >= json.Length || json[i] != ':')
+                {
+                    break;
+                }
+
+                i++;
+                SkipWhitespace(json, ref i);
+                if (i >= json.Length || json[i] != '{')
+                {
+                    SkipJsonValue(json, ref i);
+                }
+                else
+                {
+                    int start = i;
+                    SkipJsonObject(json, ref i);
+                    string objectText = json.Substring(start, i - start);
+                    result[key] = objectText;
+                }
+
+                SkipWhitespace(json, ref i);
+                if (i < json.Length && json[i] == ',')
+                {
+                    i++;
+                }
+            }
+
+            return result;
+        }
+
+        private static void SkipWhitespace(string text, ref int i)
+        {
+            while (i < text.Length && char.IsWhiteSpace(text[i]))
+            {
+                i++;
+            }
+        }
+
+        private static string ReadJsonString(string text, ref int i)
+        {
+            SkipWhitespace(text, ref i);
+            if (i >= text.Length || text[i] != '"')
+            {
+                return null;
+            }
+
+            i++;
+            int start = i;
+            bool escape = false;
+            StringBuilder sb = null;
+            while (i < text.Length)
+            {
+                char c = text[i++];
+                if (!escape && c == '"')
+                {
+                    if (sb == null)
+                    {
+                        return text.Substring(start, i - start - 1);
+                    }
+
+                    return sb.ToString();
+                }
+
+                if (!escape && c == '\\')
+                {
+                    escape = true;
+                    if (sb == null)
+                    {
+                        sb = new StringBuilder();
+                        sb.Append(text, start, (i - 1) - start);
+                    }
+                    continue;
+                }
+
+                if (sb != null)
+                {
+                    sb.Append(c);
+                }
+
+                escape = false;
+            }
+
+            return null;
+        }
+
+        private static void SkipJsonValue(string text, ref int i)
+        {
+            SkipWhitespace(text, ref i);
+            if (i >= text.Length)
+            {
+                return;
+            }
+
+            if (text[i] == '{')
+            {
+                SkipJsonObject(text, ref i);
+                return;
+            }
+
+            if (text[i] == '[')
+            {
+                int depth = 0;
+                bool inString = false;
+                bool escape = false;
+                while (i < text.Length)
+                {
+                    char c = text[i++];
+                    if (inString)
+                    {
+                        if (!escape && c == '"')
+                        {
+                            inString = false;
+                        }
+                        escape = !escape && c == '\\';
+                        continue;
+                    }
+
+                    if (c == '"')
+                    {
+                        inString = true;
+                        continue;
+                    }
+
+                    if (c == '[')
+                    {
+                        depth++;
+                    }
+                    else if (c == ']')
+                    {
+                        depth--;
+                        if (depth <= 0)
+                        {
+                            break;
+                        }
+                    }
+                }
+                return;
+            }
+
+            if (text[i] == '"')
+            {
+                ReadJsonString(text, ref i);
+                return;
+            }
+
+            while (i < text.Length && text[i] != ',' && text[i] != '}' && text[i] != ']')
+            {
+                i++;
+            }
+        }
+
+        private static void SkipJsonObject(string text, ref int i)
+        {
+            if (i >= text.Length || text[i] != '{')
+            {
+                return;
+            }
+
+            int depth = 0;
+            bool inString = false;
+            bool escape = false;
+            while (i < text.Length)
+            {
+                char c = text[i++];
+                if (inString)
+                {
+                    if (!escape && c == '"')
+                    {
+                        inString = false;
+                    }
+                    escape = !escape && c == '\\';
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inString = true;
+                    continue;
+                }
+
+                if (c == '{')
+                {
+                    depth++;
+                }
+                else if (c == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        break;
+                    }
+                }
+            }
         }
 
         private static int FloorDiv(int value, int divisor)
