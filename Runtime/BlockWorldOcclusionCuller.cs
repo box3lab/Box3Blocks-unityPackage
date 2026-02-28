@@ -1,9 +1,14 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace BlockWorldMVP
 {
+    [ExecuteAlways]
     [DisallowMultipleComponent]
     public class BlockWorldOcclusionCuller : MonoBehaviour
     {
@@ -12,7 +17,6 @@ namespace BlockWorldMVP
         {
             public Bounds bounds;
             public Renderer[] renderers = Array.Empty<Renderer>();
-            public HashSet<Collider> colliderSet = new HashSet<Collider>();
             public bool visible = true;
         }
 
@@ -56,9 +60,6 @@ namespace BlockWorldMVP
         [SerializeField]
         private Transform targetRoot;
 
-        [SerializeField]
-        private bool runInEditor;
-
         [Header("Chunk")]
         [SerializeField]
         private int chunkSize = 16;
@@ -74,25 +75,12 @@ namespace BlockWorldMVP
         [SerializeField]
         private int updateFrames = 2;
 
+        [FormerlySerializedAs("maxObjectsPerTick")]
         [SerializeField]
         private int maxChunksPerTick = 256;
 
-        [Header("Culling")]
-        [SerializeField]
-        private bool useFrustumCulling = true;
-
-        [SerializeField]
-        private bool useOcclusionCulling = true;
-
-        [SerializeField]
-        private float occlusionMinDistance = 6f;
-
-        [SerializeField]
-        private LayerMask occlusionMask = ~0;
-
         private readonly List<ChunkData> _chunks = new List<ChunkData>(256);
         private readonly Plane[] _planes = new Plane[6];
-        private readonly RaycastHit[] _rayHits = new RaycastHit[8];
 
         private Camera _camera;
         private int _chunkCursor;
@@ -126,7 +114,10 @@ namespace BlockWorldMVP
                 return;
             }
 
+            int size = Mathf.Max(1, chunkSize);
             Dictionary<ChunkKey, ChunkData> map = new Dictionary<ChunkKey, ChunkData>(256);
+            Dictionary<ChunkKey, List<Renderer>> lists = new Dictionary<ChunkKey, List<Renderer>>(256);
+
             for (int i = 0; i < renderers.Length; i++)
             {
                 Renderer renderer = renderers[i];
@@ -137,46 +128,25 @@ namespace BlockWorldMVP
 
                 Bounds b = renderer.bounds;
                 Vector3 c = b.center;
-                int cx = FloorDiv(Mathf.FloorToInt(c.x), Mathf.Max(1, chunkSize));
-                int cy = FloorDiv(Mathf.FloorToInt(c.y), Mathf.Max(1, chunkSize));
-                int cz = FloorDiv(Mathf.FloorToInt(c.z), Mathf.Max(1, chunkSize));
-                ChunkKey key = new ChunkKey(cx, cy, cz);
+                ChunkKey key = new ChunkKey(
+                    FloorDiv(Mathf.FloorToInt(c.x), size),
+                    FloorDiv(Mathf.FloorToInt(c.y), size),
+                    FloorDiv(Mathf.FloorToInt(c.z), size));
 
                 if (!map.TryGetValue(key, out ChunkData chunk))
                 {
-                    chunk = new ChunkData
-                    {
-                        bounds = b,
-                        visible = true
-                    };
+                    chunk = new ChunkData { bounds = b, visible = renderer.enabled };
                     map.Add(key, chunk);
                 }
                 else
                 {
                     chunk.bounds.Encapsulate(b);
                 }
-            }
 
-            Dictionary<ChunkKey, List<Renderer>> rendererLists = new Dictionary<ChunkKey, List<Renderer>>(map.Count);
-            for (int i = 0; i < renderers.Length; i++)
-            {
-                Renderer renderer = renderers[i];
-                if (renderer == null)
-                {
-                    continue;
-                }
-
-                Bounds b = renderer.bounds;
-                Vector3 c = b.center;
-                int cx = FloorDiv(Mathf.FloorToInt(c.x), Mathf.Max(1, chunkSize));
-                int cy = FloorDiv(Mathf.FloorToInt(c.y), Mathf.Max(1, chunkSize));
-                int cz = FloorDiv(Mathf.FloorToInt(c.z), Mathf.Max(1, chunkSize));
-                ChunkKey key = new ChunkKey(cx, cy, cz);
-
-                if (!rendererLists.TryGetValue(key, out List<Renderer> list))
+                if (!lists.TryGetValue(key, out List<Renderer> list))
                 {
                     list = new List<Renderer>(64);
-                    rendererLists.Add(key, list);
+                    lists.Add(key, list);
                 }
 
                 list.Add(renderer);
@@ -184,25 +154,10 @@ namespace BlockWorldMVP
 
             foreach (KeyValuePair<ChunkKey, ChunkData> kv in map)
             {
-                ChunkKey key = kv.Key;
                 ChunkData chunk = kv.Value;
-                if (rendererLists.TryGetValue(key, out List<Renderer> list))
+                if (lists.TryGetValue(kv.Key, out List<Renderer> list))
                 {
                     chunk.renderers = list.ToArray();
-                    for (int i = 0; i < chunk.renderers.Length; i++)
-                    {
-                        Renderer r = chunk.renderers[i];
-                        if (r == null)
-                        {
-                            continue;
-                        }
-
-                        Collider co = r.GetComponent<Collider>();
-                        if (co != null)
-                        {
-                            chunk.colliderSet.Add(co);
-                        }
-                    }
                 }
 
                 _chunks.Add(chunk);
@@ -216,13 +171,23 @@ namespace BlockWorldMVP
             Rebuild();
         }
 
+        private void OnDisable()
+        {
+            for (int i = 0; i < _chunks.Count; i++)
+            {
+                ChunkData chunk = _chunks[i];
+                if (chunk == null)
+                {
+                    continue;
+                }
+
+                chunk.visible = true;
+                SetChunkVisible(chunk, true);
+            }
+        }
+
         private void LateUpdate()
         {
-            if (!Application.isPlaying && !runInEditor)
-            {
-                return;
-            }
-
             Transform root = targetRoot != null ? targetRoot : transform;
             if (root == null)
             {
@@ -243,6 +208,12 @@ namespace BlockWorldMVP
                 return;
             }
 
+            _camera = ResolveCamera();
+            if (_camera == null)
+            {
+                return;
+            }
+
             _frameCounter++;
             int frameStep = Mathf.Clamp(updateFrames, 1, 60);
             if ((_frameCounter % frameStep) != 0)
@@ -250,16 +221,7 @@ namespace BlockWorldMVP
                 return;
             }
 
-            _camera = ResolveCamera();
-            if (_camera == null)
-            {
-                return;
-            }
-
-            if (useFrustumCulling)
-            {
-                GeometryUtility.CalculateFrustumPlanes(_camera, _planes);
-            }
+            GeometryUtility.CalculateFrustumPlanes(_camera, _planes);
 
             int budget = Mathf.Clamp((_chunks.Count + frameStep - 1) / frameStep, 1, Mathf.Max(1, maxChunksPerTick));
             for (int i = 0; i < budget; i++)
@@ -272,6 +234,23 @@ namespace BlockWorldMVP
 
         private Camera ResolveCamera()
         {
+            if (!Application.isPlaying)
+            {
+#if UNITY_EDITOR
+                SceneView drawing = SceneView.currentDrawingSceneView;
+                if (drawing != null && drawing.camera != null)
+                {
+                    return drawing.camera;
+                }
+
+                SceneView last = SceneView.lastActiveSceneView;
+                if (last != null && last.camera != null)
+                {
+                    return last.camera;
+                }
+#endif
+            }
+
             if (Camera.main != null)
             {
                 return Camera.main;
@@ -291,24 +270,13 @@ namespace BlockWorldMVP
             Vector3 camPos = _camera.transform.position;
             float distance = Vector3.Distance(camPos, chunk.bounds.center);
 
-            bool shouldBeVisible;
-            if (chunk.visible)
-            {
-                shouldBeVisible = distance <= hideDistance;
-            }
-            else
-            {
-                shouldBeVisible = distance <= visibleDistance;
-            }
+            bool shouldBeVisible = chunk.visible
+                ? (distance <= hideDistance)
+                : (distance <= visibleDistance);
 
-            if (shouldBeVisible && useFrustumCulling)
+            if (shouldBeVisible)
             {
                 shouldBeVisible = GeometryUtility.TestPlanesAABB(_planes, chunk.bounds);
-            }
-
-            if (shouldBeVisible && useOcclusionCulling && distance >= Mathf.Max(0f, occlusionMinDistance))
-            {
-                shouldBeVisible = !IsOccluded(chunk, camPos);
             }
 
             if (chunk.visible != shouldBeVisible)
@@ -316,76 +284,6 @@ namespace BlockWorldMVP
                 chunk.visible = shouldBeVisible;
                 SetChunkVisible(chunk, shouldBeVisible);
             }
-        }
-
-        private bool IsOccluded(ChunkData chunk, Vector3 camPos)
-        {
-            if (chunk == null || chunk.colliderSet == null || chunk.colliderSet.Count == 0)
-            {
-                return false;
-            }
-
-            Vector3 c = chunk.bounds.center;
-            Vector3 e = chunk.bounds.extents;
-            Vector3[] samplePoints =
-            {
-                c,
-                c + new Vector3(e.x, 0f, e.z),
-                c + new Vector3(-e.x, 0f, e.z),
-                c + new Vector3(e.x, 0f, -e.z),
-                c + new Vector3(-e.x, 0f, -e.z)
-            };
-
-            for (int i = 0; i < samplePoints.Length; i++)
-            {
-                if (IsSamplePointVisible(samplePoints[i], camPos, chunk))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        private bool IsSamplePointVisible(Vector3 sample, Vector3 camPos, ChunkData chunk)
-        {
-            Vector3 dir = sample - camPos;
-            float dist = dir.magnitude;
-            if (dist <= 0.001f)
-            {
-                return true;
-            }
-
-            Ray ray = new Ray(camPos, dir / dist);
-            int hitCount = Physics.RaycastNonAlloc(ray, _rayHits, dist - 0.03f, occlusionMask, QueryTriggerInteraction.Ignore);
-            if (hitCount <= 0)
-            {
-                return true;
-            }
-
-            float nearest = float.MaxValue;
-            Collider nearestCollider = null;
-            for (int i = 0; i < hitCount; i++)
-            {
-                RaycastHit hit = _rayHits[i];
-                if (hit.collider == null)
-                {
-                    continue;
-                }
-
-                if (hit.distance < nearest)
-                {
-                    nearest = hit.distance;
-                    nearestCollider = hit.collider;
-                }
-            }
-
-            if (nearestCollider == null)
-            {
-                return true;
-            }
-
-            return chunk.colliderSet.Contains(nearestCollider);
         }
 
         private static void SetChunkVisible(ChunkData chunk, bool visible)
@@ -419,12 +317,11 @@ namespace BlockWorldMVP
 
         private void OnValidate()
         {
-            chunkSize = Mathf.Clamp(chunkSize, 4, 128);
+            chunkSize = Mathf.Clamp(chunkSize, 1, 256);
             visibleDistance = Mathf.Max(1f, visibleDistance);
             hideDistance = Mathf.Max(visibleDistance, hideDistance);
             updateFrames = Mathf.Clamp(updateFrames, 1, 60);
-            maxChunksPerTick = Mathf.Clamp(maxChunksPerTick, 1, 2048);
-            occlusionMinDistance = Mathf.Max(0f, occlusionMinDistance);
+            maxChunksPerTick = Mathf.Clamp(maxChunksPerTick, 1, 4096);
         }
     }
 }
