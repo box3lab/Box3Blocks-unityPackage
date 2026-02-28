@@ -39,6 +39,7 @@
     { "key": "card.anim", "value": "Anim" },
     { "key": "card.glow", "value": "Glow" },
     { "key": "card.transparent", "value": "Transparent" },
+    { "key": "card.rotate_badge", "value": "R{0}" },
     { "key": "card.selected", "value": "SELECTED" },
     { "key": "category.all", "value": "All" },
     { "key": "category.recent", "value": "Recent" },

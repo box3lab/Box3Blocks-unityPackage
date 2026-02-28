@@ -39,6 +39,7 @@ namespace BlockWorldMVP.Editor
             public bool transparent;
             public Color lightColor = new Color(1f, 0.8f, 0.2f, 1f);
             public string displayName;
+            public int placementRotationQuarter;
         }
 
         private class FaceAnimationSpec
@@ -424,8 +425,9 @@ namespace BlockWorldMVP.Editor
                 padding = new RectOffset(6, 6, 8, 6)
             };
 
-            bool clicked = GUILayout.Button(GUIContent.none, cardStyle, GUILayout.Width(width), GUILayout.Height(cardStyle.fixedHeight));
-            Rect rect = GUILayoutUtility.GetLastRect();
+            Rect rect = GUILayoutUtility.GetRect(width, cardStyle.fixedHeight, GUILayout.Width(width), GUILayout.Height(cardStyle.fixedHeight));
+            GUI.Box(rect, GUIContent.none, cardStyle);
+            Rect rotateRect = DrawCardRotateButton(rect, block);
 
             Rect previewRect = new Rect(
                 rect.x + (rect.width - PreviewSize) * 0.5f,
@@ -462,11 +464,49 @@ namespace BlockWorldMVP.Editor
                 EditorGUI.DrawRect(new Rect(rect.x + 6f, rect.yMax - 4f, rect.width - 12f, 2f), block.lightColor);
             }
 
-            if (clicked)
+            HandleCardClick(index, block, rect, rotateRect);
+        }
+
+        private void HandleCardClick(int index, BlockDefinition block, Rect cardRect, Rect rotateRect)
+        {
+            Event e = Event.current;
+            if (e == null || e.type != EventType.MouseDown || e.button != 0)
+            {
+                return;
+            }
+
+            if (rotateRect.Contains(e.mousePosition))
+            {
+                if (block != null)
+                {
+                    block.placementRotationQuarter = (block.placementRotationQuarter + 1) & 3;
+                    Repaint();
+                }
+                e.Use();
+                return;
+            }
+
+            if (cardRect.Contains(e.mousePosition))
             {
                 _selectedIndex = index;
                 Repaint();
+                e.Use();
             }
+        }
+
+        private Rect DrawCardRotateButton(Rect cardRect, BlockDefinition block)
+        {
+            Rect buttonRect = new Rect(cardRect.xMax - 48f, cardRect.y + 6f, 42f, 18f);
+            if (block == null)
+            {
+                GUI.Box(buttonRect, "R0", EditorStyles.miniButton);
+                return buttonRect;
+            }
+
+            int degrees = (block.placementRotationQuarter & 3) * 90;
+            string label = Lf("card.rotate_badge", degrees);
+            GUI.Box(buttonRect, label, EditorStyles.miniButton);
+            return buttonRect;
         }
 
         private static void DrawSelectedCardFrame(Rect rect)
@@ -776,6 +816,7 @@ namespace BlockWorldMVP.Editor
 
             go.transform.SetParent(_root);
             go.transform.position = position;
+            go.transform.rotation = Quaternion.Euler(0f, (definition.placementRotationQuarter & 3) * 90f, 0f);
 
             MeshFilter meshFilter = go.AddComponent<MeshFilter>();
             meshFilter.sharedMesh = meshToUse;
@@ -1700,12 +1741,14 @@ namespace BlockWorldMVP.Editor
                 return null;
             }
 
+            string cacheKey = BuildCardPreviewCacheKey(block);
+
             if (HasAnimatedFaces(block))
             {
                 return GetOrBuildAnimatedBlockCardPreview(block);
             }
 
-            if (_blockCardPreviewCache.TryGetValue(block.id, out Texture2D cached) && cached != null)
+            if (_blockCardPreviewCache.TryGetValue(cacheKey, out Texture2D cached) && cached != null)
             {
                 return cached;
             }
@@ -1725,10 +1768,10 @@ namespace BlockWorldMVP.Editor
                 return block.previewTexture;
             }
 
-            Texture2D preview = RenderBlockCardPreview(mesh, renderData.materials[0]);
+            Texture2D preview = RenderBlockCardPreview(mesh, renderData.materials[0], block.placementRotationQuarter);
             if (preview != null)
             {
-                _blockCardPreviewCache[block.id] = preview;
+                _blockCardPreviewCache[cacheKey] = preview;
                 return preview;
             }
 
@@ -1769,7 +1812,7 @@ namespace BlockWorldMVP.Editor
                 return block.previewTexture;
             }
 
-            Texture2D nextTexture = RenderBlockCardPreview(animatedMesh, renderData.materials[0]);
+            Texture2D nextTexture = RenderBlockCardPreview(animatedMesh, renderData.materials[0], block.placementRotationQuarter);
             DestroyImmediate(animatedMesh);
             if (nextTexture == null)
             {
@@ -1807,8 +1850,20 @@ namespace BlockWorldMVP.Editor
                     hash = hash * 31 + frame;
                 }
 
+                hash = hash * 31 + (block.placementRotationQuarter & 3);
+
                 return hash;
             }
+        }
+
+        private static string BuildCardPreviewCacheKey(BlockDefinition block)
+        {
+            if (block == null || string.IsNullOrWhiteSpace(block.id))
+            {
+                return string.Empty;
+            }
+
+            return $"{block.id}#{block.placementRotationQuarter & 3}";
         }
 
         private static int ResolveAnimationFrameIndexForSide(BlockDefinition block, string side, float timeNow)
@@ -1869,7 +1924,7 @@ namespace BlockWorldMVP.Editor
             return BuildStaticBlockMesh(id + "_animPreview", animatedFaceSt);
         }
 
-        private Texture2D RenderBlockCardPreview(Mesh mesh, Material material)
+        private Texture2D RenderBlockCardPreview(Mesh mesh, Material material, int rotationQuarter)
         {
             if (mesh == null || material == null)
             {
@@ -1882,8 +1937,8 @@ namespace BlockWorldMVP.Editor
                 _blockCardPreviewUtility.cameraFieldOfView = 22f;
             }
 
-            Texture2D onBlack = RenderPreviewWithBackground(mesh, material, new Color(0f, 0f, 0f, 1f));
-            Texture2D onWhite = RenderPreviewWithBackground(mesh, material, new Color(1f, 1f, 1f, 1f));
+            Texture2D onBlack = RenderPreviewWithBackground(mesh, material, new Color(0f, 0f, 0f, 1f), rotationQuarter);
+            Texture2D onWhite = RenderPreviewWithBackground(mesh, material, new Color(1f, 1f, 1f, 1f), rotationQuarter);
             if (onBlack == null || onWhite == null)
             {
                 if (onBlack != null)
@@ -1905,7 +1960,7 @@ namespace BlockWorldMVP.Editor
             return composed;
         }
 
-        private Texture2D RenderPreviewWithBackground(Mesh mesh, Material material, Color backgroundColor)
+        private Texture2D RenderPreviewWithBackground(Mesh mesh, Material material, Color backgroundColor, int rotationQuarter)
         {
             const int size = 128;
             Rect r = new Rect(0f, 0f, size, size);
@@ -1932,7 +1987,8 @@ namespace BlockWorldMVP.Editor
             cam.transform.rotation = viewRot;
             cam.transform.LookAt(target);
 
-            _blockCardPreviewUtility.DrawMesh(mesh, Matrix4x4.identity, material, 0);
+            Quaternion modelRot = Quaternion.Euler(0f, (rotationQuarter & 3) * 90f, 0f);
+            _blockCardPreviewUtility.DrawMesh(mesh, Matrix4x4.TRS(Vector3.zero, modelRot, Vector3.one), material, 0);
             cam.Render();
             return _blockCardPreviewUtility.EndStaticPreview();
         }

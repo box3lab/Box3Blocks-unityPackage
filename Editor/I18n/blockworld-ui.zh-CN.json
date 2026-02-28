@@ -39,6 +39,7 @@
     { "key": "card.anim", "value": "动画" },
     { "key": "card.glow", "value": "发光" },
     { "key": "card.transparent", "value": "透明" },
+    { "key": "card.rotate_badge", "value": "R{0}" },
     { "key": "card.selected", "value": "已选择" },
     { "key": "category.all", "value": "全部" },
     { "key": "category.recent", "value": "最近" },
