@@ -958,7 +958,7 @@ namespace BlockWorldMVP.Editor
 
                     Vector3Int pos = Vector3Int.RoundToInt(block.transform.position);
                     float yRot = NormalizeYRotation(block.transform.eulerAngles.y);
-                    int rotQuarter = Mathf.RoundToInt(yRot / 90f) & 3;
+                    int rotQuarter = (Mathf.RoundToInt(yRot / 90f) + 2) & 3;
 
                     positions.Add(pos);
                     ids.Add(numericId);
@@ -1004,6 +1004,8 @@ namespace BlockWorldMVP.Editor
                     int x = p.x - minX;
                     int y = p.y - minY;
                     int z = p.z - minZ;
+                    // Keep Unity->MC axis convention consistent with importer correction.
+                    x = (shapeX - 1) - x;
                     indices[i] = x + (y * shapeX) + (z * shapeXY);
                     data[i] = ids[i];
                     rot[i] = rots[i];
