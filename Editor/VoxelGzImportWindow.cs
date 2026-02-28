@@ -37,10 +37,15 @@ namespace BlockWorldMVP.Editor
             ["voxel.source.select_file"] = "Select voxel gzip file",
             ["voxel.source.url_value"] = "URL",
             ["voxel.source.parent"] = "Parent",
+            ["voxel.source.create_root"] = "Create Root",
             ["voxel.source.origin"] = "Origin",
             ["voxel.option.ignore_barrier"] = "Ignore Barrier blocks",
+            ["voxel.option.import_mode"] = "Import Mode",
+            ["voxel.mode.chunk"] = "Chunk (Recommended)",
+            ["voxel.mode.single_block"] = "Single Block (Editable)",
             ["voxel.option.replace_previous"] = "Replace previous __VoxelImportGz",
             ["voxel.option.surface_collider"] = "Add Surface Collider (Top Faces Only)",
+            ["voxel.option.mesh_collider"] = "Add Full MeshCollider",
             ["voxel.option.chunk_size"] = "Chunk Size (1 = Whole Scene)",
             ["voxel.option.chunks_per_tick"] = "Chunks / Tick",
             ["voxel.option.alpha_clip"] = "Chunk: Use Alpha Clip (fix transparent artifacts)",
@@ -59,7 +64,9 @@ namespace BlockWorldMVP.Editor
             ["voxel.done.total"] = "Total Voxels: {0}",
             ["voxel.done.imported"] = "Imported Voxels: {0}",
             ["voxel.done.chunks"] = "Created Chunks: {0}",
+            ["voxel.done.blocks"] = "Created Blocks: {0}",
             ["voxel.done.surface_colliders"] = "Surface Colliders: {0}",
+            ["voxel.done.mesh_colliders"] = "Mesh Colliders: {0}",
             ["voxel.done.skipped"] = "Skipped Air/Water/Barrier/Unknown/Invalid: {0}/{1}/{2}/{3}/{4}",
             ["voxel.done.time"] = "Time: {0}s",
             ["voxel.err.failed_with_reason"] = "Failed: {0}",
@@ -87,10 +94,15 @@ namespace BlockWorldMVP.Editor
             ["voxel.source.select_file"] = "选择体素 gzip 文件",
             ["voxel.source.url_value"] = "URL",
             ["voxel.source.parent"] = "父节点",
+            ["voxel.source.create_root"] = "创建根节点",
             ["voxel.source.origin"] = "原点",
             ["voxel.option.ignore_barrier"] = "忽略 Barrier 方块",
+            ["voxel.option.import_mode"] = "导入模式",
+            ["voxel.mode.chunk"] = "Chunk（推荐）",
+            ["voxel.mode.single_block"] = "单个方块（可编辑）",
             ["voxel.option.replace_previous"] = "替换上一次 __VoxelImportGz",
             ["voxel.option.surface_collider"] = "添加表面碰撞（仅顶面）",
+            ["voxel.option.mesh_collider"] = "添加完整 MeshCollider",
             ["voxel.option.chunk_size"] = "Chunk 尺寸（1=整体）",
             ["voxel.option.chunks_per_tick"] = "每 Tick Chunk 数",
             ["voxel.option.alpha_clip"] = "Chunk 使用 Alpha Clip（修复透明伪影）",
@@ -109,7 +121,9 @@ namespace BlockWorldMVP.Editor
             ["voxel.done.total"] = "体素总数: {0}",
             ["voxel.done.imported"] = "导入体素: {0}",
             ["voxel.done.chunks"] = "生成 Chunk: {0}",
+            ["voxel.done.blocks"] = "生成方块: {0}",
             ["voxel.done.surface_colliders"] = "表面碰撞体: {0}",
+            ["voxel.done.mesh_colliders"] = "完整 MeshCollider: {0}",
             ["voxel.done.skipped"] = "跳过 Air/Water/Barrier/Unknown/Invalid: {0}/{1}/{2}/{3}/{4}",
             ["voxel.done.time"] = "耗时: {0}s",
             ["voxel.err.failed_with_reason"] = "失败: {0}",
@@ -191,7 +205,9 @@ namespace BlockWorldMVP.Editor
             public int total;
             public int valid;
             public int createdChunks;
+            public int createdBlocks;
             public int createdSurfaceColliders;
+            public int createdMeshColliders;
             public int skippedAir;
             public int skippedWater;
             public int skippedBarrier;
@@ -214,6 +230,12 @@ namespace BlockWorldMVP.Editor
             Done
         }
 
+        private enum ImportMode
+        {
+            Chunk = 0,
+            SingleBlock = 1
+        }
+
         private SourceType _sourceType = SourceType.LocalFile;
         private string _localGzPath = string.Empty;
         private string _url = string.Empty;
@@ -222,6 +244,7 @@ namespace BlockWorldMVP.Editor
         private bool _ignoreAir = true;
         private bool _ignoreWater = true;
         private bool _ignoreBarrier = false;
+        private ImportMode _importMode = ImportMode.Chunk;
         private int _chunkSize = 16;
         private int _voxelsPerTick = 25000;
         private int _chunksPerTick = 6;
@@ -229,6 +252,7 @@ namespace BlockWorldMVP.Editor
         private float _chunkAlphaCutoff = 0.33f;
         private bool _clearPrevious = true;
         private bool _addSurfaceCollider;
+        private bool _addMeshCollider;
 
         private Phase _phase = Phase.Idle;
         private string _status = string.Empty;
@@ -415,19 +439,39 @@ namespace BlockWorldMVP.Editor
                 _url = EditorGUILayout.TextField(L("voxel.source.url_value"), _url, _textFieldStyle);
             }
 
-            _parent = (Transform)EditorGUILayout.ObjectField(L("voxel.source.parent"), _parent, typeof(Transform), true);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                _parent = (Transform)EditorGUILayout.ObjectField(L("voxel.source.parent"), _parent, typeof(Transform), true);
+                EditorGUI.BeginDisabledGroup(_phase != Phase.Idle);
+                if (GUILayout.Button(L("voxel.source.create_root"), GUILayout.Width(96f)))
+                {
+                    GameObject parentGo = new GameObject("VoxelImportRoot");
+                    Undo.RegisterCreatedObjectUndo(parentGo, "Create Voxel Import Root");
+                    _parent = parentGo.transform;
+                    Selection.activeObject = parentGo;
+                }
+                EditorGUI.EndDisabledGroup();
+            }
             _origin = EditorGUILayout.Vector3IntField(L("voxel.source.origin"), _origin);
         }
 
         private void DrawOptionsSection()
         {
             _ignoreBarrier = EditorGUILayout.ToggleLeft(L("voxel.option.ignore_barrier"), _ignoreBarrier);
+            int modeIndex = EditorGUILayout.Popup(
+                L("voxel.option.import_mode"),
+                (int)_importMode,
+                new[] { L("voxel.mode.chunk"), L("voxel.mode.single_block") });
+            _importMode = (ImportMode)Mathf.Clamp(modeIndex, 0, 1);
             _clearPrevious = EditorGUILayout.ToggleLeft(L("voxel.option.replace_previous"), _clearPrevious);
+            EditorGUI.BeginDisabledGroup(_importMode != ImportMode.Chunk);
             _addSurfaceCollider = EditorGUILayout.ToggleLeft(L("voxel.option.surface_collider"), _addSurfaceCollider);
+            _addMeshCollider = EditorGUILayout.ToggleLeft(L("voxel.option.mesh_collider"), _addMeshCollider);
             _chunkSize = Mathf.Max(1, EditorGUILayout.IntField(L("voxel.option.chunk_size"), _chunkSize));
             _chunksPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.chunks_per_tick"), _chunksPerTick), 1, 64);
             _chunkUseAlphaClip = EditorGUILayout.ToggleLeft(L("voxel.option.alpha_clip"), _chunkUseAlphaClip);
             _chunkAlphaCutoff = Mathf.Clamp01(EditorGUILayout.Slider(L("voxel.option.alpha_cutoff"), _chunkAlphaCutoff, 0.01f, 0.9f));
+            EditorGUI.EndDisabledGroup();
             _voxelsPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.voxels_per_tick"), _voxelsPerTick), 2000, 200000);
             EditorGUILayout.LabelField(L("voxel.option.fixed_filters"), _subtleLabelStyle);
         }
@@ -481,12 +525,13 @@ namespace BlockWorldMVP.Editor
                 _idToName = LoadBlockIdMap();
                 _blockDefs = LoadBlockDefinitions();
                 _preparedByName = new Dictionary<string, PreparedBlock>(StringComparer.OrdinalIgnoreCase);
-                _chunkBuckets = new Dictionary<ChunkKey, ChunkBucket>(512);
+                bool useChunkMode = _importMode == ImportMode.Chunk;
+                _chunkBuckets = useChunkMode ? new Dictionary<ChunkKey, ChunkBucket>(512) : null;
                 _chunkKeys = null;
-                _chunkVoxelPositions = _addSurfaceCollider
+                _chunkVoxelPositions = useChunkMode && _addSurfaceCollider
                     ? new Dictionary<ChunkKey, HashSet<Vector3Int>>(512)
                     : null;
-                _occupiedVoxels = _addSurfaceCollider
+                _occupiedVoxels = useChunkMode && _addSurfaceCollider
                     ? new HashSet<Vector3Int>()
                     : null;
                 _chunkMaterialInstance = null;
@@ -603,31 +648,39 @@ namespace BlockWorldMVP.Editor
                 int rot = (_payload.rot != null && _payload.rot.Length > i) ? (_payload.rot[i] & 3) : 0;
                 Vector3 worldPos = new Vector3(wx, wy, wz);
                 Quaternion worldRot = _rotLookup[rot];
-                ChunkKey key = BuildChunkKey(wx, wy, wz, _chunkSize);
-                if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket))
+                if (_importMode == ImportMode.SingleBlock)
                 {
-                    bucket = new ChunkBucket();
-                    _chunkBuckets.Add(key, bucket);
+                    PlaceSingleBlock(prepared, blockName, worldPos, worldRot);
+                    _stats.createdBlocks++;
                 }
-
-                bucket.combines.Add(new CombineInstance
+                else
                 {
-                    mesh = prepared.mesh,
-                    subMeshIndex = 0,
-                    transform = Matrix4x4.TRS(worldPos, worldRot, Vector3.one)
-                });
-
-                if (_addSurfaceCollider && _occupiedVoxels != null && _chunkVoxelPositions != null)
-                {
-                    Vector3Int gridPos = new Vector3Int(wx, wy, wz);
-                    _occupiedVoxels.Add(gridPos);
-                    if (!_chunkVoxelPositions.TryGetValue(key, out HashSet<Vector3Int> set))
+                    ChunkKey key = BuildChunkKey(wx, wy, wz, _chunkSize);
+                    if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket))
                     {
-                        set = new HashSet<Vector3Int>();
-                        _chunkVoxelPositions.Add(key, set);
+                        bucket = new ChunkBucket();
+                        _chunkBuckets.Add(key, bucket);
                     }
 
-                    set.Add(gridPos);
+                    bucket.combines.Add(new CombineInstance
+                    {
+                        mesh = prepared.mesh,
+                        subMeshIndex = 0,
+                        transform = Matrix4x4.TRS(worldPos, worldRot, Vector3.one)
+                    });
+
+                    if (_addSurfaceCollider && _occupiedVoxels != null && _chunkVoxelPositions != null)
+                    {
+                        Vector3Int gridPos = new Vector3Int(wx, wy, wz);
+                        _occupiedVoxels.Add(gridPos);
+                        if (!_chunkVoxelPositions.TryGetValue(key, out HashSet<Vector3Int> set))
+                        {
+                            set = new HashSet<Vector3Int>();
+                            _chunkVoxelPositions.Add(key, set);
+                        }
+
+                        set.Add(gridPos);
+                    }
                 }
                 _stats.valid++;
             }
@@ -640,6 +693,13 @@ namespace BlockWorldMVP.Editor
 
             if (_cursorVoxel < total)
             {
+                return;
+            }
+
+            if (_importMode == ImportMode.SingleBlock)
+            {
+                _phase = Phase.Done;
+                _status = L("voxel.done.title");
                 return;
             }
 
@@ -690,6 +750,12 @@ namespace BlockWorldMVP.Editor
                 string assetPath = BuildChunkMeshAssetPath(key, i);
                 AssetDatabase.CreateAsset(mesh, assetPath);
                 mf.sharedMesh = mesh;
+                if (_addMeshCollider)
+                {
+                    MeshCollider chunkCollider = go.AddComponent<MeshCollider>();
+                    chunkCollider.sharedMesh = mesh;
+                    _stats.createdMeshColliders++;
+                }
 
                 if (_addSurfaceCollider
                     && _chunkVoxelPositions != null
@@ -753,12 +819,38 @@ namespace BlockWorldMVP.Editor
                 Lf("voxel.done.total", _stats.total) + "\n" +
                 Lf("voxel.done.imported", _stats.valid) + "\n" +
                 Lf("voxel.done.chunks", _stats.createdChunks) + "\n" +
+                Lf("voxel.done.blocks", _stats.createdBlocks) + "\n" +
                 Lf("voxel.done.surface_colliders", _stats.createdSurfaceColliders) + "\n" +
+                Lf("voxel.done.mesh_colliders", _stats.createdMeshColliders) + "\n" +
                 Lf("voxel.done.skipped", _stats.skippedAir, _stats.skippedWater, _stats.skippedBarrier, _stats.skippedUnknown, _stats.skippedInvalid) + "\n" +
                 Lf("voxel.done.time", sec.ToString("F2", CultureInfo.InvariantCulture));
             _status = summary.Replace("\n", " | ");
             EditorUtility.DisplayDialog(L("voxel.window.title"), summary, L("dialog.ok"));
             Repaint();
+        }
+
+        private void PlaceSingleBlock(PreparedBlock prepared, string blockName, Vector3 position, Quaternion rotation)
+        {
+            if (_importRoot == null || prepared == null || prepared.mesh == null || prepared.material == null)
+            {
+                return;
+            }
+
+            GameObject go = new GameObject(blockName);
+            go.transform.SetParent(_importRoot, false);
+            go.transform.localPosition = position;
+            go.transform.localRotation = rotation;
+            go.transform.localScale = Vector3.one;
+
+            MeshFilter mf = go.AddComponent<MeshFilter>();
+            mf.sharedMesh = prepared.mesh;
+
+            MeshRenderer mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = prepared.material;
+
+            PlacedBlock marker = go.AddComponent<PlacedBlock>();
+            marker.BlockId = blockName;
+            marker.HasAnimation = false;
         }
 
         private void CancelImport(bool clearStatus = true)
