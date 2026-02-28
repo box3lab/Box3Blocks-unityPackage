@@ -5,6 +5,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace BlockWorldMVP.Editor
 {
@@ -14,6 +15,9 @@ namespace BlockWorldMVP.Editor
         private const string BlockSpecPath = "Packages/com.box3.blockworld-mvp/Assets/block-spec.json";
         private const string BlockIdPath = "Packages/com.box3.blockworld-mvp/Assets/block-id.json";
         private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
+        private const string GeneratedMeshFolder = "Assets/BlockWorldGenerated/Meshes";
+        private const string GeneratedChunkMeshFolder = "Assets/BlockWorldGenerated/Meshes/ChunkConverted";
+        private const string ChunkMergedRootName = "__ChunkMerged";
         private const string CategoryAll = "All";
         private const string CategoryRecent = "Recent";
         private const string CategoryUncategorized = "Uncategorized";
@@ -67,6 +71,45 @@ namespace BlockWorldMVP.Editor
             Rotate
         }
 
+        private readonly struct ChunkMatKey : IEquatable<ChunkMatKey>
+        {
+            public readonly int x;
+            public readonly int y;
+            public readonly int z;
+            public readonly int materialId;
+
+            public ChunkMatKey(int x, int y, int z, int materialId)
+            {
+                this.x = x;
+                this.y = y;
+                this.z = z;
+                this.materialId = materialId;
+            }
+
+            public bool Equals(ChunkMatKey other)
+            {
+                return x == other.x && y == other.y && z == other.z && materialId == other.materialId;
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is ChunkMatKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int h = 17;
+                    h = h * 31 + x;
+                    h = h * 31 + y;
+                    h = h * 31 + z;
+                    h = h * 31 + materialId;
+                    return h;
+                }
+            }
+        }
+
         private Transform _root;
         private List<BlockDefinition> _allBlocks = new List<BlockDefinition>();
         private List<BlockDefinition> _filteredBlocks = new List<BlockDefinition>();
@@ -79,6 +122,7 @@ namespace BlockWorldMVP.Editor
         private EditTool _tool = EditTool.Place;
         private int _brushHorizontalSize = 1;
         private int _brushHeight = 1;
+        private int _chunkConvertSize = 16;
         private const float PreviewSize = 75f;
         private GUIStyle _sectionBoxStyle;
         private GUIStyle _sectionTitleStyle;
@@ -263,13 +307,8 @@ namespace BlockWorldMVP.Editor
                 {
                     ClearRoot();
                 }
-
-                if (GUILayout.Button(L("root.clean_materials"), _primaryButtonStyle))
-                {
-                    int deleted = CleanupUnusedGeneratedMaterials();
-                    EditorUtility.DisplayDialog(L("window.title"), Lf("dialog.clean_materials_message", deleted), L("dialog.ok"));
-                }
             }
+
         }
 
         private void DrawToolSection()
@@ -925,6 +964,276 @@ namespace BlockWorldMVP.Editor
             {
                 Undo.DestroyObjectImmediate(_root.GetChild(i).gameObject);
             }
+        }
+
+        private void ConvertRootToChunkMerged(bool deleteOriginal)
+        {
+            if (_root == null)
+            {
+                EditorUtility.DisplayDialog(L("window.title"), L("tool.assign_root_help"), L("dialog.ok"));
+                return;
+            }
+
+            if (_allBlocks.Count == 0)
+            {
+                ReloadBlockLibrary();
+            }
+
+            Dictionary<string, BlockDefinition> blockMap = BuildBlockMap();
+            List<PlacedBlock> sources = CollectPlacedBlocksFromRoot();
+            if (sources.Count == 0)
+            {
+                EditorUtility.DisplayDialog(L("window.title"), L("dialog.convert_chunk_empty"), L("dialog.ok"));
+                return;
+            }
+
+            Transform existingMerged = _root.Find(ChunkMergedRootName);
+            if (existingMerged != null)
+            {
+                Undo.DestroyObjectImmediate(existingMerged.gameObject);
+            }
+
+            EnsureAssetFolderPath(GeneratedMeshFolder);
+            EnsureAssetFolderPath(GeneratedChunkMeshFolder);
+            CleanupChunkMeshAssets();
+
+            GameObject mergedRootGo = new GameObject(ChunkMergedRootName);
+            Undo.RegisterCreatedObjectUndo(mergedRootGo, "Convert Root To Chunk");
+            mergedRootGo.transform.SetParent(_root, false);
+
+            Dictionary<ChunkMatKey, List<CombineInstance>> buckets = new Dictionary<ChunkMatKey, List<CombineInstance>>(512);
+            Dictionary<int, Material> materialById = new Dictionary<int, Material>(64);
+            int accepted = 0;
+            int skippedUnknown = 0;
+            int skippedAnimated = 0;
+            int skippedInvalid = 0;
+
+            for (int i = 0; i < sources.Count; i++)
+            {
+                PlacedBlock placed = sources[i];
+                if (placed == null)
+                {
+                    continue;
+                }
+
+                if (!blockMap.TryGetValue(placed.BlockId, out BlockDefinition definition) || definition == null)
+                {
+                    skippedUnknown++;
+                    continue;
+                }
+
+                if (HasAnimatedFaces(definition))
+                {
+                    skippedAnimated++;
+                    continue;
+                }
+
+                if (!BlockAssetFactory.TryGetFaceRenderData(definition.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData)
+                    || renderData == null
+                    || renderData.materials == null
+                    || renderData.materials.Length == 0
+                    || renderData.materials[0] == null)
+                {
+                    skippedInvalid++;
+                    continue;
+                }
+
+                Mesh mesh = GetOrCreateStaticBlockMesh(definition, renderData);
+                if (mesh == null)
+                {
+                    skippedInvalid++;
+                    continue;
+                }
+
+                Material material = renderData.materials[0];
+                int materialId = material.GetInstanceID();
+                materialById[materialId] = material;
+
+                Vector3Int p = Vector3Int.RoundToInt(placed.transform.position);
+                int cx = FloorDiv(p.x, Mathf.Max(1, _chunkConvertSize));
+                int cy = FloorDiv(p.y, Mathf.Max(1, _chunkConvertSize));
+                int cz = FloorDiv(p.z, Mathf.Max(1, _chunkConvertSize));
+                ChunkMatKey key = new ChunkMatKey(cx, cy, cz, materialId);
+                if (!buckets.TryGetValue(key, out List<CombineInstance> list))
+                {
+                    list = new List<CombineInstance>(128);
+                    buckets.Add(key, list);
+                }
+
+                list.Add(new CombineInstance
+                {
+                    mesh = mesh,
+                    subMeshIndex = 0,
+                    transform = _root.worldToLocalMatrix * placed.transform.localToWorldMatrix
+                });
+                accepted++;
+            }
+
+            int createdRenderers = 0;
+            foreach (KeyValuePair<ChunkMatKey, List<CombineInstance>> kv in buckets)
+            {
+                ChunkMatKey key = kv.Key;
+                List<CombineInstance> list = kv.Value;
+                if (list == null || list.Count == 0 || !materialById.TryGetValue(key.materialId, out Material material))
+                {
+                    continue;
+                }
+
+                GameObject go = new GameObject($"chunk_{key.x}_{key.y}_{key.z}_m{key.materialId}");
+                go.transform.SetParent(mergedRootGo.transform, false);
+
+                MeshFilter mf = go.AddComponent<MeshFilter>();
+                MeshRenderer mr = go.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = material;
+
+                Mesh mesh = new Mesh
+                {
+                    name = $"Chunk_{key.x}_{key.y}_{key.z}_{createdRenderers}",
+                    indexFormat = IndexFormat.UInt32
+                };
+                mesh.CombineMeshes(list.ToArray(), true, true, false);
+                mesh.RecalculateBounds();
+
+                string meshPath = $"{GeneratedChunkMeshFolder}/{SanitizeAssetName(_root.name)}_{key.x}_{key.y}_{key.z}_{createdRenderers}.asset";
+                AssetDatabase.CreateAsset(mesh, meshPath);
+                mf.sharedMesh = mesh;
+                createdRenderers++;
+            }
+
+            EnsureRuntimeCuller(mergedRootGo.transform);
+
+            if (deleteOriginal)
+            {
+                for (int i = 0; i < sources.Count; i++)
+                {
+                    PlacedBlock placed = sources[i];
+                    if (placed != null)
+                    {
+                        Undo.DestroyObjectImmediate(placed.gameObject);
+                    }
+                }
+            }
+
+            EditorUtility.SetDirty(mergedRootGo);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            EditorUtility.DisplayDialog(
+                L("window.title"),
+                Lf("dialog.convert_chunk_summary", sources.Count, accepted, buckets.Count, createdRenderers, skippedUnknown, skippedAnimated, skippedInvalid),
+                L("dialog.ok"));
+        }
+
+        private List<PlacedBlock> CollectPlacedBlocksFromRoot()
+        {
+            List<PlacedBlock> list = new List<PlacedBlock>();
+            if (_root == null)
+            {
+                return list;
+            }
+
+            for (int i = 0; i < _root.childCount; i++)
+            {
+                Transform child = _root.GetChild(i);
+                if (child == null || string.Equals(child.name, ChunkMergedRootName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                PlacedBlock placed = child.GetComponent<PlacedBlock>();
+                if (placed != null)
+                {
+                    list.Add(placed);
+                }
+            }
+
+            return list;
+        }
+
+        private Dictionary<string, BlockDefinition> BuildBlockMap()
+        {
+            Dictionary<string, BlockDefinition> map = new Dictionary<string, BlockDefinition>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < _allBlocks.Count; i++)
+            {
+                BlockDefinition def = _allBlocks[i];
+                if (def != null && !string.IsNullOrWhiteSpace(def.id))
+                {
+                    map[def.id] = def;
+                }
+            }
+
+            return map;
+        }
+
+        private static void EnsureAssetFolderPath(string folderPath)
+        {
+            if (AssetDatabase.IsValidFolder(folderPath))
+            {
+                return;
+            }
+
+            string[] parts = folderPath.Split('/');
+            if (parts.Length == 0)
+            {
+                return;
+            }
+
+            string current = parts[0];
+            for (int i = 1; i < parts.Length; i++)
+            {
+                string next = $"{current}/{parts[i]}";
+                if (!AssetDatabase.IsValidFolder(next))
+                {
+                    AssetDatabase.CreateFolder(current, parts[i]);
+                }
+
+                current = next;
+            }
+        }
+
+        private static void CleanupChunkMeshAssets()
+        {
+            string[] guids = AssetDatabase.FindAssets("t:Mesh", new[] { GeneratedChunkMeshFolder });
+            for (int i = 0; i < guids.Length; i++)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guids[i]);
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    AssetDatabase.DeleteAsset(path);
+                }
+            }
+        }
+
+        private static int FloorDiv(int value, int divisor)
+        {
+            int q = value / divisor;
+            int r = value % divisor;
+            if (r != 0 && ((r < 0) != (divisor < 0)))
+            {
+                q--;
+            }
+
+            return q;
+        }
+
+        private static string SanitizeAssetName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return "BlockWorldRoot";
+            }
+
+            char[] chars = name.ToCharArray();
+            for (int i = 0; i < chars.Length; i++)
+            {
+                char c = chars[i];
+                if (!(char.IsLetterOrDigit(c) || c == '_' || c == '-'))
+                {
+                    chars[i] = '_';
+                }
+            }
+
+            return new string(chars);
         }
 
         private int CleanupUnusedGeneratedMaterials()
