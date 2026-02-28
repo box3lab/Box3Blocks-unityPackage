@@ -52,7 +52,7 @@ namespace BlockWorldMVP.Editor
         private PreviewRenderUtility _blockCardPreviewUtility;
         private double _nextAnimatedPreviewRepaintTime;
 
-        [MenuItem("Tools/Block World MVP/World Builder")]
+        [MenuItem("Box3/World Builder")]
         public static void Open()
         {
             GetWindow<BlockWorldBuilderWindow>(L("window.title"));

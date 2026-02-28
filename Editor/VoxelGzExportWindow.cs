@@ -66,7 +66,7 @@ namespace BlockWorldMVP.Editor
         private GUIStyle _primaryButtonStyle;
         private GUIStyle _textFieldStyle;
 
-        [MenuItem("Tools/Block World MVP/Voxel GZ Exporter")]
+        [MenuItem("Box3/Voxel GZ Exporter")]
         public static void Open()
         {
             GetWindow<VoxelGzExportWindow>(L("voxel.export.window.title"));

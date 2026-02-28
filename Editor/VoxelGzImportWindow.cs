@@ -264,7 +264,7 @@ namespace BlockWorldMVP.Editor
         private HashSet<Vector3Int> _allVoxels;
         private List<PendingBlock> _pendingBlocks;
 
-        [MenuItem("Tools/Block World MVP/Voxel GZ Importer")]
+        [MenuItem("Box3/Voxel GZ Importer")]
         public static void Open()
         {
             GetWindow<VoxelGzImportWindow>(L("voxel.window.title"));
