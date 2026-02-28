@@ -123,6 +123,8 @@ namespace BlockWorldMVP.Editor
             ["voxel.status.percent"] = "{0}%",
             ["voxel.status.processing_start"] = "Processing voxels...",
             ["voxel.status.processing_progress"] = "Processing voxels: {0}/{1}",
+            ["voxel.status.placing_blocks"] = "Placing blocks...",
+            ["voxel.status.placing_progress"] = "Placing blocks: {0}/{1}",
             ["voxel.status.building_start"] = "Building chunk meshes...",
             ["voxel.status.building_progress"] = "Building chunks: {0}/{1}",
             ["voxel.done.title"] = "Import complete.",
@@ -189,6 +191,8 @@ namespace BlockWorldMVP.Editor
             ["voxel.status.percent"] = "{0}%",
             ["voxel.status.processing_start"] = "正在处理体素...",
             ["voxel.status.processing_progress"] = "处理体素: {0}/{1}",
+            ["voxel.status.placing_blocks"] = "正在放置方块...",
+            ["voxel.status.placing_progress"] = "放置方块: {0}/{1}",
             ["voxel.status.building_start"] = "正在构建 Chunk 网格...",
             ["voxel.status.building_progress"] = "构建 Chunk: {0}/{1}",
             ["voxel.done.title"] = "导入完成。",
@@ -311,6 +315,22 @@ namespace BlockWorldMVP.Editor
             }
         }
 
+        private readonly struct PendingBlock
+        {
+            public readonly Vector3Int pos;
+            public readonly int rot;
+            public readonly PreparedBlock prepared;
+            public readonly string blockName;
+
+            public PendingBlock(Vector3Int pos, int rot, PreparedBlock prepared, string blockName)
+            {
+                this.pos = pos;
+                this.rot = rot;
+                this.prepared = prepared;
+                this.blockName = blockName;
+            }
+        }
+
         private enum SourceType
         {
             LocalFile,
@@ -321,6 +341,7 @@ namespace BlockWorldMVP.Editor
         {
             Idle,
             ProcessVoxels,
+            PlaceSingleBlocks,
             BuildChunks,
             Done
         }
@@ -379,11 +400,13 @@ namespace BlockWorldMVP.Editor
         private ImportStats _stats;
         private int _cursorVoxel;
         private int _cursorChunk;
+        private int _cursorPlace;
         private Quaternion[] _rotLookup;
         private Material _chunkOpaqueMaterialInstance;
         private Dictionary<ChunkKey, HashSet<Vector3Int>> _chunkVoxelPositions;
         private HashSet<Vector3Int> _occupiedVoxels;
         private HashSet<Vector3Int> _allVoxels;
+        private List<PendingBlock> _pendingBlocks;
 
         [MenuItem("Tools/Block World MVP/Voxel GZ Importer")]
         public static void Open()
@@ -679,7 +702,7 @@ namespace BlockWorldMVP.Editor
                 _occupiedVoxels = useChunkMode && _addSurfaceCollider
                     ? new HashSet<Vector3Int>()
                     : null;
-                _allVoxels = useChunkMode ? new HashSet<Vector3Int>() : null;
+                _allVoxels = _importMode == ImportMode.SingleBlock || useChunkMode ? new HashSet<Vector3Int>() : null;
                 _chunkOpaqueMaterialInstance = null;
                 _stats = new ImportStats
                 {
@@ -688,6 +711,7 @@ namespace BlockWorldMVP.Editor
                 };
                 _cursorVoxel = 0;
                 _cursorChunk = 0;
+                _cursorPlace = 0;
                 _rotLookup = new[]
                 {
                     Quaternion.identity,
@@ -695,6 +719,7 @@ namespace BlockWorldMVP.Editor
                     Quaternion.Euler(0f, 180f, 0f),
                     Quaternion.Euler(0f, 270f, 0f)
                 };
+                _pendingBlocks = _importMode == ImportMode.SingleBlock ? new List<PendingBlock>(_stats.total) : null;
 
                 PrepareRoot();
                 _phase = Phase.ProcessVoxels;
@@ -717,6 +742,12 @@ namespace BlockWorldMVP.Editor
                 if (_phase == Phase.ProcessVoxels)
                 {
                     TickProcessVoxels();
+                    return;
+                }
+
+                if (_phase == Phase.PlaceSingleBlocks)
+                {
+                    TickPlaceSingleBlocks();
                     return;
                 }
 
@@ -801,8 +832,22 @@ namespace BlockWorldMVP.Editor
                 Quaternion worldRot = _rotLookup[rot];
                 if (_importMode == ImportMode.SingleBlock || prepared.hasAnimation)
                 {
-                    PlaceSingleBlock(prepared, blockName, worldPos, worldRot);
-                    _stats.createdBlocks++;
+                    bool isTransparent = IsTransparentBlock(blockName);
+                    Vector3Int gridPos = new Vector3Int(wx, wy, wz);
+                    if (_allVoxels != null)
+                    {
+                        _allVoxels.Add(gridPos);
+                    }
+
+                    if (_importMode == ImportMode.SingleBlock && isTransparent && !prepared.hasAnimation)
+                    {
+                        _pendingBlocks?.Add(new PendingBlock(gridPos, rot, prepared, blockName));
+                    }
+                    else
+                    {
+                        PlaceSingleBlock(prepared, blockName, worldPos, worldRot);
+                        _stats.createdBlocks++;
+                    }
                 }
                 else
                 {
@@ -861,8 +906,16 @@ namespace BlockWorldMVP.Editor
 
             if (_importMode == ImportMode.SingleBlock)
             {
-                _phase = Phase.Done;
-                _status = L("voxel.done.title");
+                if (_pendingBlocks != null && _pendingBlocks.Count > 0)
+                {
+                    _phase = Phase.PlaceSingleBlocks;
+                    _status = L("voxel.status.placing_blocks");
+                }
+                else
+                {
+                    _phase = Phase.Done;
+                    _status = L("voxel.done.title");
+                }
                 return;
             }
 
@@ -876,6 +929,45 @@ namespace BlockWorldMVP.Editor
             });
             _phase = Phase.BuildChunks;
             _status = L("voxel.status.building_start");
+        }
+
+        private void TickPlaceSingleBlocks()
+        {
+            if (_pendingBlocks == null || _pendingBlocks.Count == 0)
+            {
+                _phase = Phase.Done;
+                _status = L("voxel.done.title");
+                return;
+            }
+
+            int total = _pendingBlocks.Count;
+            int maxIndex = Mathf.Min(total, _cursorPlace + _voxelsPerTick);
+            for (int i = _cursorPlace; i < maxIndex; i++)
+            {
+                PendingBlock pending = _pendingBlocks[i];
+                Mesh mesh = BuildCulledSingleBlockMesh(pending.prepared, pending.pos, pending.rot, _allVoxels);
+                if (mesh == null)
+                {
+                    continue;
+                }
+
+                Vector3 worldPos = new Vector3(pending.pos.x, pending.pos.y, pending.pos.z);
+                Quaternion worldRot = _rotLookup[pending.rot];
+                PlaceSingleBlock(pending.prepared, pending.blockName, worldPos, worldRot, mesh);
+                _stats.createdBlocks++;
+            }
+
+            _cursorPlace = maxIndex;
+            _progress = total > 0 ? (float)_cursorPlace / total : 1f;
+            _status = Lf("voxel.status.placing_progress", _cursorPlace, total);
+            EditorUtility.DisplayProgressBar(L("voxel.window.title"), _status, _progress);
+            Repaint();
+
+            if (_cursorPlace >= total)
+            {
+                _phase = Phase.Done;
+                _status = L("voxel.done.title");
+            }
         }
 
         private void TickBuildChunks()
@@ -1163,9 +1255,10 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private void PlaceSingleBlock(PreparedBlock prepared, string blockName, Vector3 position, Quaternion rotation)
+        private void PlaceSingleBlock(PreparedBlock prepared, string blockName, Vector3 position, Quaternion rotation, Mesh overrideMesh = null)
         {
-            if (_importRoot == null || prepared == null || prepared.mesh == null)
+            Mesh meshToUse = overrideMesh ?? prepared?.mesh;
+            if (_importRoot == null || prepared == null || meshToUse == null)
             {
                 return;
             }
@@ -1177,7 +1270,7 @@ namespace BlockWorldMVP.Editor
             go.transform.localScale = Vector3.one;
 
             MeshFilter mf = go.AddComponent<MeshFilter>();
-            mf.sharedMesh = prepared.mesh;
+            mf.sharedMesh = meshToUse;
 
             MeshRenderer mr = go.AddComponent<MeshRenderer>();
             if (prepared.usesSubmeshes && prepared.materials != null && prepared.materials.Length > 0)
@@ -1190,7 +1283,7 @@ namespace BlockWorldMVP.Editor
             }
 
             MeshCollider mc = go.AddComponent<MeshCollider>();
-            mc.sharedMesh = prepared.mesh;
+            mc.sharedMesh = meshToUse;
 
             PlacedBlock marker = go.AddComponent<PlacedBlock>();
             marker.BlockId = blockName;
@@ -1555,6 +1648,65 @@ namespace BlockWorldMVP.Editor
             Mesh mesh = new Mesh
             {
                 name = $"VoxelChunk_{key.x}_{key.y}_{key.z}_transparent",
+                indexFormat = IndexFormat.UInt32
+            };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0, true);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private Mesh BuildCulledSingleBlockMesh(PreparedBlock prepared, Vector3Int pos, int rot, HashSet<Vector3Int> allVoxels)
+        {
+            if (prepared == null || prepared.faceMainTexSt == null || prepared.faceMainTexSt.Length < SideOrder.Length || allVoxels == null)
+            {
+                return prepared?.mesh;
+            }
+
+            List<Vector3> vertices = new List<Vector3>(24);
+            List<Vector2> uvs = new List<Vector2>(24);
+            List<int> triangles = new List<int>(36);
+            Quaternion rotation = _rotLookup[rot];
+
+            for (int face = 0; face < SideOrder.Length; face++)
+            {
+                Vector3 dir = rotation * FaceNormals[face];
+                Vector3Int neighbor = pos + ToVector3Int(dir);
+                if (allVoxels.Contains(neighbor))
+                {
+                    continue;
+                }
+
+                Vector4 st = prepared.faceMainTexSt[face];
+                int baseIndex = vertices.Count;
+                vertices.Add(FaceVertices[face][0]);
+                vertices.Add(FaceVertices[face][1]);
+                vertices.Add(FaceVertices[face][2]);
+                vertices.Add(FaceVertices[face][3]);
+
+                uvs.Add(new Vector2(st.z, st.w));
+                uvs.Add(new Vector2(st.z + st.x, st.w));
+                uvs.Add(new Vector2(st.z + st.x, st.w + st.y));
+                uvs.Add(new Vector2(st.z, st.w + st.y));
+
+                triangles.Add(baseIndex + 0);
+                triangles.Add(baseIndex + 2);
+                triangles.Add(baseIndex + 1);
+                triangles.Add(baseIndex + 0);
+                triangles.Add(baseIndex + 3);
+                triangles.Add(baseIndex + 2);
+            }
+
+            if (vertices.Count == 0)
+            {
+                return null;
+            }
+
+            Mesh mesh = new Mesh
+            {
+                name = $"VoxelSingle_{pos.x}_{pos.y}_{pos.z}",
                 indexFormat = IndexFormat.UInt32
             };
             mesh.SetVertices(vertices);
