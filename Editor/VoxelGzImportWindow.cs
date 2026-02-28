@@ -1410,9 +1410,17 @@ namespace BlockWorldMVP.Editor
             }
 
             material.SetTexture("_BumpMap", bump);
-            material.SetFloat("_BumpScale", 0.2f);
+            material.SetFloat("_BumpScale", 1f);
             material.EnableKeyword("_NORMALMAP");
             material.DisableKeyword("_PARALLAXMAP");
+
+            Texture2D materialMap = BlockAssetFactory.GetAtlasMaterialTexture();
+            if (materialMap != null)
+            {
+                material.SetTexture("_MetallicGlossMap", materialMap);
+                material.SetFloat("_Metallic", 1f);
+                material.EnableKeyword("_METALLICGLOSSMAP");
+            }
         }
 
         private static Mesh BuildTopSurfaceColliderMesh(ChunkKey key, HashSet<Vector3Int> chunkVoxels, HashSet<Vector3Int> allVoxels)
