@@ -699,6 +699,9 @@ namespace BlockWorldMVP.Editor
                 int x = idx % shapeX;
                 int y = (idx / shapeX) % shapeY;
                 int z = idx / shapeXY;
+                // MC voxel data and Unity scene space differ in handedness on horizontal axis.
+                // Mirror X within shape bounds so import layout matches source orientation.
+                x = (shapeX - 1) - x;
 
                 int wx = _origin.x + (dirX * x);
                 int wy = _origin.y + (dirY * y);
