@@ -11,10 +11,10 @@ namespace BlockWorldMVP.Editor
 {
     internal static class BlockWorldBuilderI18n
     {
-        private const string EnJsonPath = "Packages/com.box3lab.box3blocks/Editor/I18n/blockworld-ui.en.json";
-        private const string ZhCnJsonPath = "Packages/com.box3lab.box3blocks/Editor/I18n/blockworld-ui.zh-CN.json";
-        private const string EnBlockNamesJsonPath = "Packages/com.box3lab.box3blocks/Editor/I18n/block-names.en.json";
-        private const string ZhCnBlockNamesJsonPath = "Packages/com.box3lab.box3blocks/Editor/I18n/block-names.zh-CN.json";
+        private const string EnJsonPath = "Packages/com.box3lab.box3/Editor/I18n/blockworld-ui.en.json";
+        private const string ZhCnJsonPath = "Packages/com.box3lab.box3/Editor/I18n/blockworld-ui.zh-CN.json";
+        private const string EnBlockNamesJsonPath = "Packages/com.box3lab.box3/Editor/I18n/block-names.en.json";
+        private const string ZhCnBlockNamesJsonPath = "Packages/com.box3lab.box3/Editor/I18n/block-names.zh-CN.json";
         private static readonly Regex DynamicPairRegex = new Regex("\"(?<key>[^\"]+)\"\\s*:\\s*\"(?<value>[^\"]*)\"", RegexOptions.Compiled);
 
         private static Dictionary<string, string> _enEntries;

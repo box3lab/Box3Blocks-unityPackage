@@ -15,9 +15,9 @@ namespace BlockWorldMVP.Editor
 {
     public sealed partial class VoxelGzImportWindow : EditorWindow
     {
-        private const string BlockTextureFolder = "Packages/com.box3lab.box3blocks/Assets/block";
-        private const string BlockIdPath = "Packages/com.box3lab.box3blocks/Assets/block-id.json";
-        private const string BlockSpecPath = "Packages/com.box3lab.box3blocks/Assets/block-spec.json";
+        private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
+        private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
+        private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
         private const string GeneratedMeshFolder = "Assets/BlockWorldGenerated/Meshes/VoxelImport";
         private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
         private const string ChunkOpaqueMaterialPath = "Assets/BlockWorldGenerated/Materials/VoxelImport_ChunkOpaque.mat";

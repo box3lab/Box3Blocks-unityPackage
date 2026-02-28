@@ -25,8 +25,8 @@ This package generates a block world from JSON data.
 Notes:
 
 - `Recent` only updates when a block is actually placed in Scene.
-- Block textures are auto-scanned from `Packages/com.box3lab.box3blocks/Assets/block`.
-- Block metadata is read from `Packages/com.box3lab.box3blocks/Assets/block-spec.json` (fallback: `block-id.json`).
+- Block textures are auto-scanned from `Packages/com.box3lab.box3/Assets/block`.
+- Block metadata is read from `Packages/com.box3lab.box3/Assets/block-spec.json` (fallback: `block-id.json`).
 - `transparent: true` uses transparent material, so PNG alpha will render correctly.
 - If texture has `.png.mcmeta`, block face animation is played (supports multi-frame strips such as 4-frame textures).
 - Glow blocks show a color strip on the card bottom.

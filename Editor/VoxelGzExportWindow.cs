@@ -12,7 +12,7 @@ namespace BlockWorldMVP.Editor
 {
     public sealed class VoxelGzExportWindow : EditorWindow
     {
-        private const string BlockIdPath = "Packages/com.box3lab.box3blocks/Assets/block-id.json";
+        private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
 
         [Serializable]
