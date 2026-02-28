@@ -28,6 +28,7 @@ namespace BlockWorldMVP.Editor
             ["voxel.section.source"] = "Source",
             ["voxel.section.options"] = "Import Options",
             ["voxel.section.run"] = "Run",
+            ["voxel.section.export"] = "Export",
             ["voxel.section.status"] = "Status",
             ["voxel.source.mode"] = "Source Mode",
             ["voxel.source.local"] = "Local File",
@@ -54,6 +55,14 @@ namespace BlockWorldMVP.Editor
             ["voxel.option.fixed_filters"] = "Fixed filters: Air and Water are always ignored for stability.",
             ["voxel.run.import"] = "Import",
             ["voxel.run.cancel"] = "Cancel",
+            ["voxel.export.root"] = "Export Root",
+            ["voxel.export.gz_file"] = "Export GZ",
+            ["voxel.export.browse"] = "Browse",
+            ["voxel.export.select_file"] = "Save voxel gzip file",
+            ["voxel.export.run"] = "Export GZ",
+            ["voxel.export.err.no_root"] = "Export Root is empty.",
+            ["voxel.export.err.empty"] = "No PlacedBlock found under Export Root.",
+            ["voxel.export.done"] = "Export complete. Blocks: {0}, Skipped unknown: {1}",
             ["voxel.status.idle"] = "Idle",
             ["voxel.status.percent"] = "{0}%",
             ["voxel.status.processing_start"] = "Processing voxels...",
@@ -85,6 +94,7 @@ namespace BlockWorldMVP.Editor
             ["voxel.section.source"] = "导入来源",
             ["voxel.section.options"] = "导入选项",
             ["voxel.section.run"] = "执行",
+            ["voxel.section.export"] = "导出",
             ["voxel.section.status"] = "状态",
             ["voxel.source.mode"] = "来源模式",
             ["voxel.source.local"] = "本地文件",
@@ -111,6 +121,14 @@ namespace BlockWorldMVP.Editor
             ["voxel.option.fixed_filters"] = "固定过滤：默认始终忽略 Air 和 Water。",
             ["voxel.run.import"] = "导入",
             ["voxel.run.cancel"] = "取消",
+            ["voxel.export.root"] = "导出根节点",
+            ["voxel.export.gz_file"] = "导出 GZ",
+            ["voxel.export.browse"] = "浏览",
+            ["voxel.export.select_file"] = "保存体素 gzip 文件",
+            ["voxel.export.run"] = "导出 GZ",
+            ["voxel.export.err.no_root"] = "导出根节点为空。",
+            ["voxel.export.err.empty"] = "导出根节点下没有 PlacedBlock。",
+            ["voxel.export.done"] = "导出完成。方块数: {0}，跳过未知: {1}",
             ["voxel.status.idle"] = "空闲",
             ["voxel.status.percent"] = "{0}%",
             ["voxel.status.processing_start"] = "正在处理体素...",
@@ -240,6 +258,8 @@ namespace BlockWorldMVP.Editor
         private string _localGzPath = string.Empty;
         private string _url = string.Empty;
         private Transform _parent;
+        private Transform _exportRoot;
+        private string _exportGzPath = string.Empty;
         private Vector3Int _origin = Vector3Int.zero;
         private bool _ignoreAir = true;
         private bool _ignoreWater = true;
@@ -494,6 +514,44 @@ namespace BlockWorldMVP.Editor
                 }
                 EditorGUI.EndDisabledGroup();
             }
+        }
+
+        private void DrawExportSection()
+        {
+            _exportRoot = (Transform)EditorGUILayout.ObjectField(L("voxel.export.root"), _exportRoot, typeof(Transform), true);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                _exportGzPath = EditorGUILayout.TextField(L("voxel.export.gz_file"), _exportGzPath, _textFieldStyle);
+                if (GUILayout.Button(L("voxel.export.browse"), GUILayout.Width(78f)))
+                {
+                    string initialDir = Application.dataPath;
+                    if (!string.IsNullOrWhiteSpace(_exportGzPath))
+                    {
+                        string dir = Path.GetDirectoryName(_exportGzPath);
+                        if (!string.IsNullOrWhiteSpace(dir))
+                        {
+                            initialDir = dir;
+                        }
+                    }
+
+                    string selected = EditorUtility.SaveFilePanel(
+                        L("voxel.export.select_file"),
+                        initialDir,
+                        "voxel-export",
+                        "gz");
+                    if (!string.IsNullOrWhiteSpace(selected))
+                    {
+                        _exportGzPath = selected;
+                    }
+                }
+            }
+
+            EditorGUI.BeginDisabledGroup(_phase != Phase.Idle);
+            if (GUILayout.Button(L("voxel.export.run"), _primaryButtonStyle))
+            {
+                ExportGz();
+            }
+            EditorGUI.EndDisabledGroup();
         }
 
         private void DrawStatusSection()
@@ -834,6 +892,144 @@ namespace BlockWorldMVP.Editor
             Repaint();
         }
 
+        private void ExportGz()
+        {
+            try
+            {
+                if (_exportRoot == null)
+                {
+                    _status = L("voxel.export.err.no_root");
+                    EditorUtility.DisplayDialog(L("voxel.window.title"), _status, L("dialog.ok"));
+                    return;
+                }
+
+                string exportPath = _exportGzPath;
+                if (string.IsNullOrWhiteSpace(exportPath))
+                {
+                    exportPath = EditorUtility.SaveFilePanel(
+                        L("voxel.export.select_file"),
+                        Application.dataPath,
+                        "voxel-export",
+                        "gz");
+                }
+
+                if (string.IsNullOrWhiteSpace(exportPath))
+                {
+                    return;
+                }
+
+                if (!exportPath.EndsWith(".gz", StringComparison.OrdinalIgnoreCase))
+                {
+                    exportPath += ".gz";
+                }
+                _exportGzPath = exportPath;
+
+                List<PlacedBlock> allBlocks = CollectPlacedBlocksForExport(_exportRoot);
+                if (allBlocks.Count == 0)
+                {
+                    _status = L("voxel.export.err.empty");
+                    EditorUtility.DisplayDialog(L("voxel.window.title"), _status, L("dialog.ok"));
+                    return;
+                }
+
+                Dictionary<string, int> nameToId = LoadNameToBlockIdMap();
+                List<Vector3Int> positions = new List<Vector3Int>(allBlocks.Count);
+                List<int> ids = new List<int>(allBlocks.Count);
+                List<int> rots = new List<int>(allBlocks.Count);
+                int skippedUnknown = 0;
+
+                for (int i = 0; i < allBlocks.Count; i++)
+                {
+                    PlacedBlock block = allBlocks[i];
+                    if (block == null || string.IsNullOrWhiteSpace(block.BlockId))
+                    {
+                        skippedUnknown++;
+                        continue;
+                    }
+
+                    if (!nameToId.TryGetValue(block.BlockId, out int numericId))
+                    {
+                        skippedUnknown++;
+                        continue;
+                    }
+
+                    Vector3Int pos = Vector3Int.RoundToInt(block.transform.position);
+                    float yRot = NormalizeYRotation(block.transform.eulerAngles.y);
+                    int rotQuarter = Mathf.RoundToInt(yRot / 90f) & 3;
+
+                    positions.Add(pos);
+                    ids.Add(numericId);
+                    rots.Add(rotQuarter);
+                }
+
+                if (positions.Count == 0)
+                {
+                    _status = L("voxel.export.err.empty");
+                    EditorUtility.DisplayDialog(L("voxel.window.title"), _status, L("dialog.ok"));
+                    return;
+                }
+
+                int minX = int.MaxValue;
+                int minY = int.MaxValue;
+                int minZ = int.MaxValue;
+                int maxX = int.MinValue;
+                int maxY = int.MinValue;
+                int maxZ = int.MinValue;
+                for (int i = 0; i < positions.Count; i++)
+                {
+                    Vector3Int p = positions[i];
+                    if (p.x < minX) minX = p.x;
+                    if (p.y < minY) minY = p.y;
+                    if (p.z < minZ) minZ = p.z;
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.y > maxY) maxY = p.y;
+                    if (p.z > maxZ) maxZ = p.z;
+                }
+
+                int shapeX = maxX - minX + 1;
+                int shapeY = maxY - minY + 1;
+                int shapeZ = maxZ - minZ + 1;
+                int shapeXY = shapeX * shapeY;
+
+                int count = positions.Count;
+                int[] indices = new int[count];
+                int[] data = new int[count];
+                int[] rot = new int[count];
+                for (int i = 0; i < count; i++)
+                {
+                    Vector3Int p = positions[i];
+                    int x = p.x - minX;
+                    int y = p.y - minY;
+                    int z = p.z - minZ;
+                    indices[i] = x + (y * shapeX) + (z * shapeXY);
+                    data[i] = ids[i];
+                    rot[i] = rots[i];
+                }
+
+                VoxelPayload payload = new VoxelPayload
+                {
+                    shape = new[] { shapeX, shapeY, shapeZ },
+                    dir = new[] { 1, 1, 1 },
+                    indices = indices,
+                    data = data,
+                    rot = rot
+                };
+
+                string json = JsonUtility.ToJson(payload);
+                WriteGzipJsonToFile(exportPath, json);
+                AssetDatabase.Refresh();
+
+                string done = Lf("voxel.export.done", count, skippedUnknown);
+                _status = done;
+                EditorUtility.DisplayDialog(L("voxel.window.title"), done, L("dialog.ok"));
+            }
+            catch (Exception ex)
+            {
+                _status = Lf("voxel.err.failed_with_reason", ex.Message);
+                EditorUtility.DisplayDialog(L("voxel.window.title"), _status, L("dialog.ok"));
+            }
+        }
+
         private void PlaceSingleBlock(PreparedBlock prepared, string blockName, Vector3 position, Quaternion rotation)
         {
             if (_importRoot == null || prepared == null || prepared.mesh == null || prepared.material == null)
@@ -870,6 +1066,58 @@ namespace BlockWorldMVP.Editor
             if (clearStatus)
             {
                 _status = L("voxel.status.idle");
+            }
+        }
+
+        private static List<PlacedBlock> CollectPlacedBlocksForExport(Transform root)
+        {
+            List<PlacedBlock> list = new List<PlacedBlock>();
+            if (root == null)
+            {
+                return list;
+            }
+
+            PlacedBlock[] found = root.GetComponentsInChildren<PlacedBlock>(true);
+            if (found == null)
+            {
+                return list;
+            }
+
+            for (int i = 0; i < found.Length; i++)
+            {
+                if (found[i] != null)
+                {
+                    list.Add(found[i]);
+                }
+            }
+
+            return list;
+        }
+
+        private static float NormalizeYRotation(float y)
+        {
+            float n = y % 360f;
+            if (n < 0f)
+            {
+                n += 360f;
+            }
+
+            return n;
+        }
+
+        private static void WriteGzipJsonToFile(string path, string json)
+        {
+            string dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            byte[] bytes = Encoding.UTF8.GetBytes(json ?? string.Empty);
+            using (FileStream fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (GZipStream gz = new GZipStream(fs, System.IO.Compression.CompressionLevel.Optimal))
+            {
+                gz.Write(bytes, 0, bytes.Length);
             }
         }
 
@@ -1235,6 +1483,21 @@ namespace BlockWorldMVP.Editor
                 if (!string.IsNullOrWhiteSpace(name))
                 {
                     map[id] = name;
+                }
+            }
+
+            return map;
+        }
+
+        private static Dictionary<string, int> LoadNameToBlockIdMap()
+        {
+            Dictionary<int, string> idToName = LoadBlockIdMap();
+            Dictionary<string, int> map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<int, string> kv in idToName)
+            {
+                if (!string.IsNullOrWhiteSpace(kv.Value))
+                {
+                    map[kv.Value] = kv.Key;
                 }
             }
 
