@@ -1138,6 +1138,30 @@ namespace BlockWorldMVP.Editor
                 mr.sharedMaterial = prepared.material;
             }
 
+            // For non-transparent blocks (including animated ones), use the shared opaque chunk material
+            bool isTransparent = IsTransparentBlock(blockName);
+            if (!isTransparent)
+            {
+                Material opaque = ResolveChunkOpaqueMaterial();
+                if (opaque != null)
+                {
+                    if (prepared.usesSubmeshes && prepared.materials != null && prepared.materials.Length > 0)
+                    {
+                        Material[] shared = new Material[prepared.materials.Length];
+                        for (int i = 0; i < shared.Length; i++)
+                        {
+                            shared[i] = opaque;
+                        }
+
+                        mr.sharedMaterials = shared;
+                    }
+                    else
+                    {
+                        mr.sharedMaterial = opaque;
+                    }
+                }
+            }
+
             MeshCollider mc = go.AddComponent<MeshCollider>();
             mc.sharedMesh = meshToUse;
 
@@ -1410,7 +1434,7 @@ namespace BlockWorldMVP.Editor
             }
 
             material.SetTexture("_BumpMap", bump);
-            material.SetFloat("_BumpScale", 1f);
+            material.SetFloat("_BumpScale", 0.1f);
             material.EnableKeyword("_NORMALMAP");
             material.DisableKeyword("_PARALLAXMAP");
 
@@ -1418,7 +1442,7 @@ namespace BlockWorldMVP.Editor
             if (materialMap != null)
             {
                 material.SetTexture("_MetallicGlossMap", materialMap);
-                material.SetFloat("_Metallic", 1f);
+                material.SetFloat("_Metallic", 0.2f);
                 material.SetFloat("_Glossiness", 0.5f);
                 material.EnableKeyword("_METALLICGLOSSMAP");
             }

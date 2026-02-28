@@ -1089,7 +1089,7 @@ namespace BlockWorldMVP.Editor
             if (bump != null)
             {
                 material.SetTexture("_BumpMap", bump);
-                material.SetFloat("_BumpScale", 1f);
+                material.SetFloat("_BumpScale", 0.1f);
                 material.EnableKeyword("_NORMALMAP");
             }
 
@@ -1097,7 +1097,7 @@ namespace BlockWorldMVP.Editor
             if (metal != null)
             {
                 material.SetTexture("_MetallicGlossMap", metal);
-                material.SetFloat("_Metallic", 1f);
+                material.SetFloat("_Metallic", 0.2f);
                 material.SetFloat("_Glossiness", 0.5f);
                 material.EnableKeyword("_METALLICGLOSSMAP");
             }
@@ -1430,7 +1430,29 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
-            renderer.sharedMaterials = renderData.materials;
+            bool isTransparent = definition != null && definition.transparent;
+            if (!isTransparent)
+            {
+                Material opaque = GetOrCreateOpaqueAtlasMaterial(renderData.materials[0]);
+                if (opaque != null)
+                {
+                    Material[] shared = new Material[renderData.materials.Length];
+                    for (int i = 0; i < shared.Length; i++)
+                    {
+                        shared[i] = opaque;
+                    }
+
+                    renderer.sharedMaterials = shared;
+                }
+                else
+                {
+                    renderer.sharedMaterials = renderData.materials;
+                }
+            }
+            else
+            {
+                renderer.sharedMaterials = renderData.materials;
+            }
 
             if (!definition.hasAnimation || definition.sideAnimations.Count == 0)
             {
