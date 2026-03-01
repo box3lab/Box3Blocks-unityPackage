@@ -1085,39 +1085,7 @@ namespace BlockWorldMVP.Editor
 
         private static void ApplyMapsToOpaque(Material material)
         {
-            if (material == null)
-            {
-                return;
-            }
-
-            if (material.HasProperty("_EmissionColor"))
-            {
-                material.EnableKeyword("_EMISSION");
-                material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
-                material.SetColor("_EmissionColor", Color.white);
-                if (material.HasProperty("_EmissionMap"))
-                {
-                    Texture2D emissionAtlas = BlockAssetFactory.GetAtlasEmissionTexture();
-                    material.SetTexture("_EmissionMap", emissionAtlas);
-                }
-            }
-
-            Texture2D bump = BlockAssetFactory.GetAtlasBumpTexture();
-            if (bump != null)
-            {
-                material.SetTexture("_BumpMap", bump);
-                material.SetFloat("_BumpScale", 0.1f);
-                material.EnableKeyword("_NORMALMAP");
-            }
-
-            Texture2D metal = BlockAssetFactory.GetAtlasMaterialTexture();
-            if (metal != null)
-            {
-                material.SetTexture("_MetallicGlossMap", metal);
-                material.SetFloat("_Metallic", 0.2f);
-                material.SetFloat("_Glossiness", 0.5f);
-                material.EnableKeyword("_METALLICGLOSSMAP");
-            }
+            OpaqueBlockMaterialConfigurator.Apply(material);
         }
 
         private static int FloorDiv(int value, int divisor)
