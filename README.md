@@ -1,48 +1,110 @@
-# Box3 BlockWorld MVP (UPM)
+# Box3 使用说明
 
-This package generates a block world from JSON data.
+这是一个给关卡编辑者使用的 Unity 方块世界工具。  
+它的目标是：**在编辑器里快速搭建、导入、编辑、导出方块地形**。
 
-## Setup
+## 这个工具能做什么
 
-1. Create block prefabs (example: `grass`, `stone`).
-2. Create catalog: `Create -> Block World MVP -> Block Catalog`
-3. Create JSON template: `Assets -> Create -> Block World MVP -> Blocks JSON Template`
-4. Add `BlockWorldGenerator` to a GameObject.
-5. Assign `Catalog` and `Blocks Json`.
-6. Click `Build From JSON` in inspector.
+- 在 Scene 视图中像“笔刷”一样搭建方块世界
+- 支持 `Place / Erase / Replace / Rotate` 四种编辑模式
+- 支持批量尺寸编辑（水平与高度）
+- 支持按分类/搜索选择方块，支持最近使用
+- 识别透明方块、发光方块、动画方块
+- 支持从 `.gz` 体素数据导入地形（含旋转）
+- 支持把场景方块导出为 `.gz`
+- 自动生成/复用图集与材质，减少手工处理
 
-## Visual Builder (recommended)
+## 适用场景
 
-1. Open `Tools -> Block World MVP -> World Builder`
-2. Assign/create `Root`
-3. Search + choose category tabs (including `Recent`)
-4. Pick block cards in a 4-column grid
-5. In Scene view:
-   - `Place` mode: left click to place
-   - `Erase` mode: left click to remove
-6. Click `Clean Materials` to remove unused generated materials
+- 快速原型：白盒地图、玩法验证
+- 内容制作：体素地形、建筑拼装
+- 数据互通：与外部 voxel/gz 流程互导
 
-Notes:
+## 快速开始
 
-- `Recent` only updates when a block is actually placed in Scene.
-- Block textures are auto-scanned from `Packages/com.box3lab.box3/Assets/block`.
-- Block metadata is read from `Packages/com.box3lab.box3/Assets/block-spec.json` (fallback: `block-id.json`).
-- `transparent: true` uses transparent material, so PNG alpha will render correctly.
-- If texture has `.png.mcmeta`, block face animation is played (supports multi-frame strips such as 4-frame textures).
-- Glow blocks show a color strip on the card bottom.
-- Generated mesh/material assets are stored in `Assets/Box3`.
-- World Builder now uses atlas UV + one shared transparent material (`WorldBuilderAtlas_Transparent`), and animated faces use property blocks (no per-block material clone).
-- World Builder non-animated blocks now use single-submesh baked-UV mesh + single shared material (further draw-call reduction).
-- Block menu cards now render true 3D cube previews (top/side faces) instead of flat single-texture thumbnails.
-- Added `Tools -> Block World MVP -> Voxel GZ Importer` for MC-style `.gz` voxel import (`shape/dir/indices/data/rot`) into chunk-merged meshes.
-
-## JSON format
-
+1. 安装包（UPM）
 ```json
 {
-  "blocks": [
-    { "id": "grass", "x": 0, "y": 0, "z": 0 },
-    { "id": "stone", "x": 1, "y": 0, "z": 0 }
-  ]
+  "dependencies": {
+    "com.box3lab.box3": "https://github.com/box3lab/Box3Blocks-unityPackage.git"
+  }
 }
 ```
+
+2. 打开工具菜单
+- `Box3/方块库`：可视化搭建
+- `Box3/地形导入`：导入 `.gz`
+- `Box3/地形导出`：导出 `.gz`
+
+3. 在 `方块库` 中创建或指定 Root，然后直接在 Scene 里开始搭建
+
+## 方块编辑功能
+
+- `Place`：放置方块
+- `Erase`：删除方块
+- `Replace`：把命中的方块替换为当前选中方块
+- `Rotate`：按 90° 旋转方块
+- 尺寸控制：
+- `Horizontal (X/Z)` 控制水平范围
+- `Height (Y)` 控制垂直范围
+
+## 导入 / 导出功能
+
+### 导入（`Box3/地形导入`）
+- 读取 `.gz` 体素数据
+- 支持 `Chunk` 模式（性能优先）与 `Single Block` 模式（编辑优先）
+- 可选择碰撞体策略（表面/完整）
+
+### 导出（`Box3/地形导出`）
+- 从 Root 下已放置方块导出 `.gz`
+- 保留 block id、位置与旋转信息
+
+## 资源与规则
+
+包内默认资源目录：
+
+- `Packages/com.box3lab.box3/Assets/block`
+- `Packages/com.box3lab.box3/Assets/block-spec.json`
+- `Packages/com.box3lab.box3/Assets/block-id.json`
+
+方块贴图命名（六面）：
+
+- `{id}_back.png`
+- `{id}_bottom.png`
+- `{id}_front.png`
+- `{id}_left.png`
+- `{id}_right.png`
+- `{id}_top.png`
+
+可选：
+
+- `spec_{id}_block.png`：兜底贴图
+- `*.png.mcmeta`：动画配置
+
+## 特性说明
+
+- `transparent: true`：按透明方块渲染
+- `emissive/glow`：启用发光表现
+- `fluid: true`：作为流体方块处理（如水流动）
+
+## 生成内容位置
+
+工具自动生成的资源在：
+
+- `Assets/Box3/Textures/Atlases`
+- `Assets/Box3/Materials`
+- `Assets/Box3/Meshes`
+
+## 多语言（i18n）
+
+UI 文案：
+
+- `Packages/com.box3lab.box3/Editor/I18n/blockworld-ui.zh-CN.json`
+- `Packages/com.box3lab.box3/Editor/I18n/blockworld-ui.en.json`
+
+方块名：
+
+- `Packages/com.box3lab.box3/Editor/I18n/block-names.zh-CN.json`
+- `Packages/com.box3lab.box3/Editor/I18n/block-names.en.json`
+
+说明：窗口已不再使用硬编码 fallback 文案，新增文案请同步维护到 i18n JSON。

@@ -2,11 +2,14 @@
   "name": "com.box3lab.box3",
   "version": "0.1.0",
   "displayName": "Box3 Blocks",
-  "description": "Block-based world building tools and editors for Box3.",
+  "description": "Box3 voxel world builder, GZ importer/exporter, atlas/material pipeline, and i18n tools for Unity 2022.3.",
   "unity": "2022.3",
   "keywords": [
     "box3",
-    "blocks"
+    "blocks",
+    "voxel",
+    "world-builder",
+    "gz-import"
   ],
   "category": "Tools",
   "repository": {
