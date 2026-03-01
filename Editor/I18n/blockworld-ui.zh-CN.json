@@ -57,6 +57,10 @@
     { "key": "voxel.export.browse", "value": "浏览" },
     { "key": "voxel.export.select_file", "value": "保存地形 gzip 文件" },
     { "key": "voxel.export.run", "value": "导出地形文件" },
+    {
+      "key": "voxel.export.include_realtime_light_data",
+      "value": "导出发光方块点光源数据"
+    },
     { "key": "voxel.export.err.no_root", "value": "导出根节点为空。" },
     {
       "key": "voxel.export.err.empty",
@@ -93,6 +97,10 @@
       "key": "voxel.option.spawn_realtime_lights",
       "value": "生成实时点光源（发光方块）"
     },
+    { "key": "voxel.option.realtime_light_mode", "value": "点光源生成策略" },
+    { "key": "voxel.light_mode.none", "value": "禁用" },
+    { "key": "voxel.light_mode.all", "value": "全生成" },
+    { "key": "voxel.light_mode.data_only", "value": "仅有数据的发光方块" },
     { "key": "voxel.option.voxels_per_tick", "value": "每 Tick 方块数" },
 
     { "key": "voxel.run.import", "value": "导入" },
