@@ -254,6 +254,8 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
+            string expectedName = GetAssetFileNameWithoutExtension(AtlasTexturePath);
+            generatedTexture.name = expectedName;
             Texture2D existing = AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasTexturePath);
             if (existing == null)
             {
@@ -263,6 +265,7 @@ namespace BlockWorldMVP.Editor
             else
             {
                 EditorUtility.CopySerialized(generatedTexture, existing);
+                existing.name = expectedName;
                 EditorUtility.SetDirty(existing);
                 UnityEngine.Object.DestroyImmediate(generatedTexture);
                 atlasTexture = existing;
@@ -276,6 +279,8 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
+            string expectedName = GetAssetFileNameWithoutExtension(AtlasBumpTexturePath);
+            bumpTexture.name = expectedName;
             Texture2D existing = AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasBumpTexturePath);
             if (existing == null)
             {
@@ -285,6 +290,7 @@ namespace BlockWorldMVP.Editor
             }
 
             EditorUtility.CopySerialized(bumpTexture, existing);
+            existing.name = expectedName;
             EditorUtility.SetDirty(existing);
             UnityEngine.Object.DestroyImmediate(bumpTexture);
             ConfigureBumpAtlasImporter(AtlasBumpTexturePath);
@@ -297,6 +303,8 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
+            string expectedName = GetAssetFileNameWithoutExtension(AtlasMaterialTexturePath);
+            materialTexture.name = expectedName;
             Texture2D existing = AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasMaterialTexturePath);
             if (existing == null)
             {
@@ -306,9 +314,15 @@ namespace BlockWorldMVP.Editor
             }
 
             EditorUtility.CopySerialized(materialTexture, existing);
+            existing.name = expectedName;
             EditorUtility.SetDirty(existing);
             UnityEngine.Object.DestroyImmediate(materialTexture);
             ConfigureMaterialAtlasImporter(AtlasMaterialTexturePath);
+        }
+
+        private static string GetAssetFileNameWithoutExtension(string assetPath)
+        {
+            return Path.GetFileNameWithoutExtension(assetPath);
         }
 
         private static Material GetOrCreateTransparentAtlasMaterial(string materialPath, Texture2D atlasTexture)

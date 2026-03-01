@@ -34,6 +34,7 @@ namespace BlockWorldMVP.Editor
         private int _selectedCategory;
         private string _search = string.Empty;
         private Vector2 _scroll;
+        private Vector2 _categoryScroll;
         private EditTool _tool = EditTool.Place;
         private int _brushHorizontalSize = 1;
         private int _brushHeight = 1;
@@ -268,24 +269,38 @@ namespace BlockWorldMVP.Editor
             }
 
             EditorGUILayout.Space(4f);
-            if (_categories.Count > 0)
+            using (new EditorGUILayout.HorizontalScope())
             {
-                DrawCategoryTabsWrapped();
+                if (_categories.Count > 0)
+                {
+                    DrawCategoryTabsSidebar();
+                    GUILayout.Space(6f);
+                }
+
+                using (new EditorGUILayout.VerticalScope())
+                {
+                    float rightPaneWidth = Mathf.Max(220f, position.width - (_categories.Count > 0 ? 98f : 32f));
+                    int columns = CalculateColumnCount(rightPaneWidth);
+                    EditorGUILayout.LabelField(Lf("library.blocks_layout", _filteredBlocks.Count, columns), _subtleLabelStyle);
+                    EditorGUILayout.Space(2f);
+                    _scroll = GUILayout.BeginScrollView(
+                        _scroll,
+                        false,
+                        true,
+                        GUIStyle.none,
+                        GUI.skin.verticalScrollbar);
+                    DrawBlockGrid(columns, rightPaneWidth - 16f);
+                    EditorGUILayout.EndScrollView();
+                }
             }
 
-            int columns = CalculateColumnCount();
-            EditorGUILayout.LabelField(Lf("library.blocks_layout", _filteredBlocks.Count, columns), _subtleLabelStyle);
-            EditorGUILayout.Space(2f);
-            _scroll = EditorGUILayout.BeginScrollView(_scroll);
-            DrawBlockGrid(columns);
-
-            EditorGUILayout.EndScrollView();
             RequestAnimatedCardPreviewRepaint();
         }
 
-        private void DrawBlockGrid(int columns)
+        private void DrawBlockGrid(int columns, float availableWidth)
         {
-            float cellWidth = Mathf.Max(120f, (position.width - 40f) / columns);
+            float safeWidth = Mathf.Max(120f, availableWidth);
+            float cellWidth = Mathf.Max(120f, safeWidth / Mathf.Max(1, columns));
 
             int index = 0;
             while (index < _filteredBlocks.Count)
@@ -444,47 +459,34 @@ namespace BlockWorldMVP.Editor
             });
         }
 
-        private int CalculateColumnCount()
+        private int CalculateColumnCount(float availableWidth)
         {
             const float minCellWidth = 150f;
-            float available = Mathf.Max(1f, position.width - 40f);
-            return Mathf.Max(1, Mathf.FloorToInt(available / minCellWidth));
+            return Mathf.Max(1, Mathf.FloorToInt(Mathf.Max(1f, availableWidth) / minCellWidth));
         }
 
-        private void DrawCategoryTabsWrapped()
+        private void DrawCategoryTabsSidebar()
         {
-            float availableWidth = Mathf.Max(120f, position.width - 32f);
-            float lineWidth = 0f;
-            const float padX = 10f;
-            const float spacing = 4f;
-
-            EditorGUILayout.BeginHorizontal();
-            for (int i = 0; i < _categories.Count; i++)
+            using (new EditorGUILayout.VerticalScope(GUILayout.Width(92f)))
             {
-                string categoryKey = _categories[i];
-                string label = LocalizeCategoryLabel(categoryKey);
-                float buttonWidth = Mathf.Clamp(EditorStyles.miniButton.CalcSize(new GUIContent(label)).x + padX, 52f, 220f);
-
-                if (lineWidth > 0f && lineWidth + buttonWidth > availableWidth)
+                _categoryScroll = EditorGUILayout.BeginScrollView(_categoryScroll, GUILayout.Width(92f), GUILayout.ExpandHeight(true));
+                for (int i = 0; i < _categories.Count; i++)
                 {
-                    EditorGUILayout.EndHorizontal();
-                    EditorGUILayout.BeginHorizontal();
-                    lineWidth = 0f;
+                    string categoryKey = _categories[i];
+                    string label = LocalizeCategoryLabel(categoryKey);
+
+                    bool selected = i == _selectedCategory;
+                    GUIStyle style = selected ? _categoryTabSelectedStyle : _categoryTabStyle;
+                    bool clicked = GUILayout.Toggle(selected, label, style, GUILayout.Width(80f), GUILayout.Height(24f));
+                    if (clicked && !selected)
+                    {
+                        _selectedCategory = i;
+                        ApplyFilter();
+                    }
                 }
 
-                bool selected = i == _selectedCategory;
-                GUIStyle style = selected ? _categoryTabSelectedStyle : _categoryTabStyle;
-                bool clicked = GUILayout.Toggle(selected, label, style, GUILayout.Width(buttonWidth));
-                if (clicked && !selected)
-                {
-                    _selectedCategory = i;
-                    ApplyFilter();
-                }
-
-                lineWidth += buttonWidth + spacing;
+                EditorGUILayout.EndScrollView();
             }
-
-            EditorGUILayout.EndHorizontal();
         }
 
         private void OnSceneGUI(SceneView sceneView)
