@@ -52,7 +52,7 @@
     { "key": "voxel.export.select_file", "value": "Save voxel gzip file" },
     { "key": "voxel.export.run", "value": "Export GZ" },
     { "key": "voxel.export.err.no_root", "value": "Export Root is empty." },
-    { "key": "voxel.export.err.empty", "value": "No PlacedBlock found under Export Root." },
+    { "key": "voxel.export.err.empty", "value": "No Box3BlocksPlacedBlock found under Export Root." },
     { "key": "voxel.export.done", "value": "Export complete. Blocks: {0}, Skipped unknown: {1}" },
     { "key": "voxel.option.ignore_barrier", "value": "Ignore Barrier blocks" },
     { "key": "voxel.option.import_mode", "value": "Import Mode" },

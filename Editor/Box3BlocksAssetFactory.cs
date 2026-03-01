@@ -5,9 +5,9 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    internal static class BlockAssetFactory
+    internal static class Box3BlocksAssetFactory
     {
         internal sealed class FaceRenderData
         {
@@ -798,7 +798,7 @@ namespace BlockWorldMVP.Editor
                 return true;
             }
 
-            return BlockIdRules.IsEmissiveKeyword(id);
+            return Box3BlocksIdRules.IsEmissiveKeyword(id);
         }
 
         private static void EnsureEmissiveBlockIdCache()
@@ -829,7 +829,7 @@ namespace BlockWorldMVP.Editor
                 bool emits = HasMeaningfulEmission(body)
                     || ReadBoolField(body, "emissive")
                     || Regex.IsMatch(body, "\"glow\"\\s*:\\s*(true|1)", RegexOptions.IgnoreCase)
-                    || BlockIdRules.IsEmissiveKeyword(name);
+                    || Box3BlocksIdRules.IsEmissiveKeyword(name);
 
                 if (emits)
                 {
@@ -858,17 +858,17 @@ namespace BlockWorldMVP.Editor
 
         private static bool ReadBoolField(string text, string fieldName)
         {
-            return BlockJsonLite.ReadBoolField(text, fieldName);
+            return Box3BlocksJsonLite.ReadBoolField(text, fieldName);
         }
 
         private static float ParseFloatSafe(string text, float fallback)
         {
-            return BlockJsonLite.ParseFloatSafe(text, fallback);
+            return Box3BlocksJsonLite.ParseFloatSafe(text, fallback);
         }
 
         private static Dictionary<string, string> ExtractTopLevelObjectValues(string json)
         {
-            return BlockJsonLite.ExtractTopLevelObjectValues(json);
+            return Box3BlocksJsonLite.ExtractTopLevelObjectValues(json);
         }
 
         private static Texture2D LoadReadableTextureFromAsset(string assetPath)

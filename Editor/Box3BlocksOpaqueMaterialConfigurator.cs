@@ -1,9 +1,9 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    internal static class OpaqueBlockMaterialConfigurator
+    internal static class Box3BlocksOpaqueMaterialConfigurator
     {
         public static void Apply(Material material)
         {
@@ -19,11 +19,11 @@ namespace BlockWorldMVP.Editor
                 material.SetColor("_EmissionColor", Color.white);
                 if (material.HasProperty("_EmissionMap"))
                 {
-                    material.SetTexture("_EmissionMap", BlockAssetFactory.GetAtlasEmissionTexture());
+                    material.SetTexture("_EmissionMap", Box3BlocksAssetFactory.GetAtlasEmissionTexture());
                 }
             }
 
-            Texture2D bump = BlockAssetFactory.GetAtlasBumpTexture();
+            Texture2D bump = Box3BlocksAssetFactory.GetAtlasBumpTexture();
             if (bump != null)
             {
                 material.SetTexture("_BumpMap", bump);
@@ -32,7 +32,7 @@ namespace BlockWorldMVP.Editor
                 material.DisableKeyword("_PARALLAXMAP");
             }
 
-            Texture2D metallic = BlockAssetFactory.GetAtlasMaterialTexture();
+            Texture2D metallic = Box3BlocksAssetFactory.GetAtlasMaterialTexture();
             if (metallic != null)
             {
                 material.SetTexture("_MetallicGlossMap", metallic);

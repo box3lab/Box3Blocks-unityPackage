@@ -7,9 +7,9 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    public partial class BlockWorldBuilderWindow : EditorWindow
+    public partial class Box3BlocksBuilderWindow : EditorWindow
     {
         private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
         private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
@@ -59,7 +59,7 @@ namespace BlockWorldMVP.Editor
         [MenuItem("Box3/方块库", false, 0)]
         public static void Open()
         {
-            GetWindow<BlockWorldBuilderWindow>(L("window.title"));
+            GetWindow<Box3BlocksBuilderWindow>(L("window.title"));
         }
 
         private void OnEnable()
@@ -82,12 +82,12 @@ namespace BlockWorldMVP.Editor
 
         private static string L(string key)
         {
-            return BlockWorldBuilderI18n.Get(key);
+            return Box3BlocksI18n.Get(key);
         }
 
         private static string Lf(string key, params object[] args)
         {
-            return BlockWorldBuilderI18n.Format(key, args);
+            return Box3BlocksI18n.Format(key, args);
         }
 
         private static string LocalizeCategoryLabel(string category)
@@ -112,7 +112,7 @@ namespace BlockWorldMVP.Editor
                 return L("category.uncategorized");
             }
 
-            return BlockWorldBuilderI18n.GetCategoryLabel(category.Trim());
+            return Box3BlocksI18n.GetCategoryLabel(category.Trim());
         }
 
         private void OnGUI()
@@ -342,7 +342,7 @@ namespace BlockWorldMVP.Editor
             }
 
             string fallbackTitle = string.IsNullOrWhiteSpace(block.displayName) ? block.id : block.displayName;
-            string title = BlockWorldBuilderI18n.GetBlockDisplayName(block.id, fallbackTitle);
+            string title = Box3BlocksI18n.GetBlockDisplayName(block.id, fallbackTitle);
             string categoryLabel = LocalizeCategoryLabel(block.category);
             string subtitle = string.IsNullOrWhiteSpace(info) ? categoryLabel : $"{categoryLabel} | {info}";
             GUIStyle cardStyle = new GUIStyle(EditorStyles.miniButton)
@@ -516,7 +516,7 @@ namespace BlockWorldMVP.Editor
                 HandleUtility.AddDefaultControl(GUIUtility.GetControlID(FocusType.Passive));
             }
 
-            if (!TryGetTargetPosition(e.mousePosition, out Vector3Int target, out PlacedBlock hitBlock))
+            if (!TryGetTargetPosition(e.mousePosition, out Vector3Int target, out Box3BlocksPlacedBlock hitBlock))
             {
                 return;
             }
@@ -585,7 +585,7 @@ namespace BlockWorldMVP.Editor
             e.Use();
         }
 
-        private bool TryGetTargetPosition(Vector2 mousePosition, out Vector3Int target, out PlacedBlock hitBlock)
+        private bool TryGetTargetPosition(Vector2 mousePosition, out Vector3Int target, out Box3BlocksPlacedBlock hitBlock)
         {
             target = default;
             hitBlock = null;
@@ -593,7 +593,7 @@ namespace BlockWorldMVP.Editor
             Ray ray = HandleUtility.GUIPointToWorldRay(mousePosition);
             if (Physics.Raycast(ray, out RaycastHit hit, 1000f))
             {
-                hitBlock = hit.collider.GetComponentInParent<PlacedBlock>();
+                hitBlock = hit.collider.GetComponentInParent<Box3BlocksPlacedBlock>();
                 if (hitBlock != null)
                 {
                     Vector3Int blockPos = Vector3Int.RoundToInt(hitBlock.transform.position);
@@ -616,7 +616,7 @@ namespace BlockWorldMVP.Editor
 
             if (_tool == EditTool.Erase || _tool == EditTool.Replace || _tool == EditTool.Rotate)
             {
-                if (TryFindClosestBlockFromScreen(mousePosition, out PlacedBlock closest))
+                if (TryFindClosestBlockFromScreen(mousePosition, out Box3BlocksPlacedBlock closest))
                 {
                     hitBlock = closest;
                     target = Vector3Int.RoundToInt(closest.transform.position);
@@ -638,7 +638,7 @@ namespace BlockWorldMVP.Editor
             return true;
         }
 
-        private bool TryFindClosestBlockFromScreen(Vector2 mousePosition, out PlacedBlock block)
+        private bool TryFindClosestBlockFromScreen(Vector2 mousePosition, out Box3BlocksPlacedBlock block)
         {
             block = null;
             if (_root == null)
@@ -651,7 +651,7 @@ namespace BlockWorldMVP.Editor
             for (int i = 0; i < _root.childCount; i++)
             {
                 Transform child = _root.GetChild(i);
-                PlacedBlock candidate = child.GetComponent<PlacedBlock>();
+                Box3BlocksPlacedBlock candidate = child.GetComponent<Box3BlocksPlacedBlock>();
                 if (candidate == null)
                 {
                     continue;
@@ -713,14 +713,14 @@ namespace BlockWorldMVP.Editor
                 return false;
             }
 
-            if (!BlockAssetFactory.TryGetFaceRenderData(definition.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData))
+            if (!Box3BlocksAssetFactory.TryGetFaceRenderData(definition.sideTexturePaths, out Box3BlocksAssetFactory.FaceRenderData renderData))
             {
                 return false;
             }
 
             bool hasAnimatedFaces = HasAnimatedFaces(definition);
             Mesh meshToUse = hasAnimatedFaces
-                ? BlockAssetFactory.GetOrCreateCubeMesh()
+                ? Box3BlocksAssetFactory.GetOrCreateCubeMesh()
                 : GetOrCreateStaticBlockMesh(definition, renderData);
             if (meshToUse == null || renderData == null || renderData.materials == null)
             {
@@ -757,7 +757,7 @@ namespace BlockWorldMVP.Editor
             MeshCollider meshCollider = go.AddComponent<MeshCollider>();
             meshCollider.sharedMesh = meshToUse;
 
-            PlacedBlock marker = go.AddComponent<PlacedBlock>();
+            Box3BlocksPlacedBlock marker = go.AddComponent<Box3BlocksPlacedBlock>();
             marker.BlockId = definition.id;
             marker.HasAnimation = hasAnimatedFaces;
             ApplyEmissionForDefinition(meshRenderer, definition);
@@ -768,7 +768,7 @@ namespace BlockWorldMVP.Editor
             return true;
         }
 
-        private void EraseBlockBrush(PlacedBlock hitBlock, Vector3Int fallbackPosition)
+        private void EraseBlockBrush(Box3BlocksPlacedBlock hitBlock, Vector3Int fallbackPosition)
         {
             Vector3Int origin = hitBlock != null ? Vector3Int.RoundToInt(hitBlock.transform.position) : fallbackPosition;
             List<Vector3Int> positions = BuildBrushPositions(origin);
@@ -791,7 +791,7 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private void ReplaceBlockBrush(PlacedBlock hitBlock, Vector3Int fallbackPosition)
+        private void ReplaceBlockBrush(Box3BlocksPlacedBlock hitBlock, Vector3Int fallbackPosition)
         {
             if (_selectedIndex < 0 || _selectedIndex >= _filteredBlocks.Count)
             {
@@ -812,7 +812,7 @@ namespace BlockWorldMVP.Editor
                     continue;
                 }
 
-                PlacedBlock existing = target.GetComponent<PlacedBlock>();
+                Box3BlocksPlacedBlock existing = target.GetComponent<Box3BlocksPlacedBlock>();
                 if (existing != null && string.Equals(existing.BlockId, replacement.id, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -837,7 +837,7 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private void RotateBlockBrush(PlacedBlock hitBlock, Vector3Int fallbackPosition)
+        private void RotateBlockBrush(Box3BlocksPlacedBlock hitBlock, Vector3Int fallbackPosition)
         {
             Vector3Int origin = hitBlock != null ? Vector3Int.RoundToInt(hitBlock.transform.position) : fallbackPosition;
             List<Vector3Int> positions = BuildBrushPositions(origin);
@@ -865,7 +865,7 @@ namespace BlockWorldMVP.Editor
                     Transform child = _root.GetChild(i);
                     if (Vector3Int.RoundToInt(child.position) == position)
                     {
-                        PlacedBlock marker = child.GetComponent<PlacedBlock>();
+                        Box3BlocksPlacedBlock marker = child.GetComponent<Box3BlocksPlacedBlock>();
                         if (marker != null)
                         {
                             return child.gameObject;
@@ -877,7 +877,7 @@ namespace BlockWorldMVP.Editor
             Collider[] colliders = Physics.OverlapBox(position, Vector3.one * 0.45f);
             for (int i = 0; i < colliders.Length; i++)
             {
-                PlacedBlock marker = colliders[i].GetComponentInParent<PlacedBlock>();
+                Box3BlocksPlacedBlock marker = colliders[i].GetComponentInParent<Box3BlocksPlacedBlock>();
                 if (marker != null && marker.transform.parent == _root)
                 {
                     return marker.gameObject;
@@ -946,9 +946,9 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private List<PlacedBlock> CollectPlacedBlocksFromRoot()
+        private List<Box3BlocksPlacedBlock> CollectPlacedBlocksFromRoot()
         {
-            List<PlacedBlock> list = new List<PlacedBlock>();
+            List<Box3BlocksPlacedBlock> list = new List<Box3BlocksPlacedBlock>();
             if (_root == null)
             {
                 return list;
@@ -962,7 +962,7 @@ namespace BlockWorldMVP.Editor
                     continue;
                 }
 
-                PlacedBlock placed = child.GetComponent<PlacedBlock>();
+                Box3BlocksPlacedBlock placed = child.GetComponent<Box3BlocksPlacedBlock>();
                 if (placed != null)
                 {
                     list.Add(placed);
@@ -1064,7 +1064,7 @@ namespace BlockWorldMVP.Editor
 
         private static void ApplyMapsToOpaque(Material material)
         {
-            OpaqueBlockMaterialConfigurator.Apply(material);
+            Box3BlocksOpaqueMaterialConfigurator.Apply(material);
         }
 
         private static int FloorDiv(int value, int divisor)
@@ -1194,7 +1194,7 @@ namespace BlockWorldMVP.Editor
         private void ReloadBlockLibrary()
         {
             EnforceCrispImportForAllBlockTextures();
-            BlockAssetFactory.InvalidateCaches();
+            Box3BlocksAssetFactory.InvalidateCaches();
             _staticBlockMeshCache.Clear();
             ClearBlockCardPreviewCache();
             _allBlocks.Clear();
@@ -1387,7 +1387,7 @@ namespace BlockWorldMVP.Editor
             _selectedIndex = Mathf.Clamp(_selectedIndex, 0, Mathf.Max(0, _filteredBlocks.Count - 1));
         }
 
-        private static void ConfigureRendererMaterials(MeshRenderer renderer, BlockAssetFactory.FaceRenderData renderData, BlockDefinition definition)
+        private static void ConfigureRendererMaterials(MeshRenderer renderer, Box3BlocksAssetFactory.FaceRenderData renderData, BlockDefinition definition)
         {
             if (renderer == null || renderData == null || renderData.materials == null || renderData.faceMainTexSt == null)
             {
@@ -1421,7 +1421,7 @@ namespace BlockWorldMVP.Editor
             if (!definition.hasAnimation || definition.sideAnimations.Count == 0)
             {
                 ApplyFaceMainTexSt(renderer, renderData.faceMainTexSt);
-                BlockTextureAnimator existingAnimator = renderer.GetComponent<BlockTextureAnimator>();
+                Box3BlocksTextureAnimator existingAnimator = renderer.GetComponent<Box3BlocksTextureAnimator>();
                 if (existingAnimator != null)
                 {
                     if (Application.isPlaying)
@@ -1436,7 +1436,7 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
-            List<BlockTextureAnimator.FaceAnimation> runtimeAnimations = new List<BlockTextureAnimator.FaceAnimation>();
+            List<Box3BlocksTextureAnimator.FaceAnimation> runtimeAnimations = new List<Box3BlocksTextureAnimator.FaceAnimation>();
             for (int i = 0; i < SideOrder.Length && i < renderData.faceMainTexSt.Length; i++)
             {
                 string side = SideOrder[i];
@@ -1450,7 +1450,7 @@ namespace BlockWorldMVP.Editor
                     continue;
                 }
 
-                runtimeAnimations.Add(new BlockTextureAnimator.FaceAnimation
+                runtimeAnimations.Add(new Box3BlocksTextureAnimator.FaceAnimation
                 {
                     materialIndex = i,
                     frameCount = spec.frameCount,
@@ -1463,7 +1463,7 @@ namespace BlockWorldMVP.Editor
             if (runtimeAnimations.Count == 0)
             {
                 ApplyFaceMainTexSt(renderer, renderData.faceMainTexSt);
-                BlockTextureAnimator existingAnimator = renderer.GetComponent<BlockTextureAnimator>();
+                Box3BlocksTextureAnimator existingAnimator = renderer.GetComponent<Box3BlocksTextureAnimator>();
                 if (existingAnimator != null)
                 {
                     if (Application.isPlaying)
@@ -1478,10 +1478,10 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
-            BlockTextureAnimator animator = renderer.GetComponent<BlockTextureAnimator>();
+            Box3BlocksTextureAnimator animator = renderer.GetComponent<Box3BlocksTextureAnimator>();
             if (animator == null)
             {
-                animator = renderer.gameObject.AddComponent<BlockTextureAnimator>();
+                animator = renderer.gameObject.AddComponent<Box3BlocksTextureAnimator>();
             }
 
             animator.SetAnimations(runtimeAnimations.ToArray(), renderData.faceMainTexSt);
@@ -1512,7 +1512,7 @@ namespace BlockWorldMVP.Editor
             return false;
         }
 
-        private Mesh GetOrCreateStaticBlockMesh(BlockDefinition definition, BlockAssetFactory.FaceRenderData renderData)
+        private Mesh GetOrCreateStaticBlockMesh(BlockDefinition definition, Box3BlocksAssetFactory.FaceRenderData renderData)
         {
             if (definition == null || renderData == null || renderData.faceMainTexSt == null)
             {
@@ -1598,7 +1598,7 @@ namespace BlockWorldMVP.Editor
                 return cached;
             }
 
-            if (!BlockAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData)
+            if (!Box3BlocksAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out Box3BlocksAssetFactory.FaceRenderData renderData)
                 || renderData == null
                 || renderData.materials == null
                 || renderData.materials.Length == 0
@@ -1630,7 +1630,7 @@ namespace BlockWorldMVP.Editor
                 return null;
             }
 
-            if (!BlockAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData)
+            if (!Box3BlocksAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out Box3BlocksAssetFactory.FaceRenderData renderData)
                 || renderData == null
                 || renderData.materials == null
                 || renderData.materials.Length == 0

@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    public partial class BlockWorldBuilderWindow
+    public partial class Box3BlocksBuilderWindow
     {
         private class BlockDefinition
         {

@@ -8,9 +8,9 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    public sealed class VoxelGzExportWindow : EditorWindow
+    public sealed class Box3BlocksGzExportWindow : EditorWindow
     {
         private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
@@ -37,7 +37,7 @@ namespace BlockWorldMVP.Editor
             ["voxel.export.select_file"] = "Save voxel gzip file",
             ["voxel.export.run"] = "Export GZ",
             ["voxel.export.err.no_root"] = "Export Root is empty.",
-            ["voxel.export.err.empty"] = "No PlacedBlock found under Export Root.",
+            ["voxel.export.err.empty"] = "No Box3BlocksPlacedBlock found under Export Root.",
             ["voxel.export.done"] = "Export complete. Blocks: {0}, Skipped unknown: {1}",
             ["dialog.ok"] = "OK"
         };
@@ -53,7 +53,7 @@ namespace BlockWorldMVP.Editor
             ["voxel.export.select_file"] = "保存体素 gzip 文件",
             ["voxel.export.run"] = "导出 GZ",
             ["voxel.export.err.no_root"] = "导出根节点为空。",
-            ["voxel.export.err.empty"] = "导出根节点下没有 PlacedBlock。",
+            ["voxel.export.err.empty"] = "导出根节点下没有 Box3BlocksPlacedBlock。",
             ["voxel.export.done"] = "导出完成。方块数: {0}，跳过未知: {1}",
             ["dialog.ok"] = "确定"
         };
@@ -69,7 +69,7 @@ namespace BlockWorldMVP.Editor
         [MenuItem("Box3/地形导出", false, 21)]
         public static void Open()
         {
-            GetWindow<VoxelGzExportWindow>(L("voxel.export.window.title"));
+            GetWindow<Box3BlocksGzExportWindow>(L("voxel.export.window.title"));
         }
 
         private void OnEnable()
@@ -89,7 +89,7 @@ namespace BlockWorldMVP.Editor
 
         private static string L(string key)
         {
-            string localized = BlockWorldBuilderI18n.Get(key);
+            string localized = Box3BlocksI18n.Get(key);
             if (!string.Equals(localized, key, StringComparison.Ordinal))
             {
                 return localized;
@@ -234,7 +234,7 @@ namespace BlockWorldMVP.Editor
                 }
                 _exportGzPath = exportPath;
 
-                List<PlacedBlock> allBlocks = CollectPlacedBlocksForExport(_exportRoot);
+                List<Box3BlocksPlacedBlock> allBlocks = CollectPlacedBlocksForExport(_exportRoot);
                 if (allBlocks.Count == 0)
                 {
                     _status = L("voxel.export.err.empty");
@@ -250,7 +250,7 @@ namespace BlockWorldMVP.Editor
 
                 for (int i = 0; i < allBlocks.Count; i++)
                 {
-                    PlacedBlock block = allBlocks[i];
+                    Box3BlocksPlacedBlock block = allBlocks[i];
                     if (block == null || string.IsNullOrWhiteSpace(block.BlockId))
                     {
                         skippedUnknown++;
@@ -343,15 +343,15 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private static List<PlacedBlock> CollectPlacedBlocksForExport(Transform root)
+        private static List<Box3BlocksPlacedBlock> CollectPlacedBlocksForExport(Transform root)
         {
-            List<PlacedBlock> list = new List<PlacedBlock>();
+            List<Box3BlocksPlacedBlock> list = new List<Box3BlocksPlacedBlock>();
             if (root == null)
             {
                 return list;
             }
 
-            PlacedBlock[] found = root.GetComponentsInChildren<PlacedBlock>(true);
+            Box3BlocksPlacedBlock[] found = root.GetComponentsInChildren<Box3BlocksPlacedBlock>(true);
             if (found == null)
             {
                 return list;

@@ -1,11 +1,11 @@
 using System;
 using UnityEngine;
 
-namespace BlockWorldMVP
+namespace Box3Blocks
 {
     [ExecuteAlways]
     [RequireComponent(typeof(Renderer))]
-    public class BlockTextureAnimator : MonoBehaviour
+    public class Box3BlocksTextureAnimator : MonoBehaviour
     {
         [Serializable]
         public class FaceAnimation

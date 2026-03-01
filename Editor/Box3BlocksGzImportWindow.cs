@@ -9,11 +9,11 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
-using BlockWorldMVP;
+using Box3Blocks;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    public sealed partial class VoxelGzImportWindow : EditorWindow
+    public sealed partial class Box3BlocksGzImportWindow : EditorWindow
     {
         private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
         private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
@@ -119,7 +119,7 @@ namespace BlockWorldMVP.Editor
             ["voxel.export.select_file"] = "Save voxel gzip file",
             ["voxel.export.run"] = "Export GZ",
             ["voxel.export.err.no_root"] = "Export Root is empty.",
-            ["voxel.export.err.empty"] = "No PlacedBlock found under Export Root.",
+            ["voxel.export.err.empty"] = "No Box3BlocksPlacedBlock found under Export Root.",
             ["voxel.export.done"] = "Export complete. Blocks: {0}, Skipped unknown: {1}",
             ["voxel.status.idle"] = "Idle",
             ["voxel.status.percent"] = "{0}%",
@@ -189,7 +189,7 @@ namespace BlockWorldMVP.Editor
             ["voxel.export.select_file"] = "保存体素 gzip 文件",
             ["voxel.export.run"] = "导出 GZ",
             ["voxel.export.err.no_root"] = "导出根节点为空。",
-            ["voxel.export.err.empty"] = "导出根节点下没有 PlacedBlock。",
+            ["voxel.export.err.empty"] = "导出根节点下没有 Box3BlocksPlacedBlock。",
             ["voxel.export.done"] = "导出完成。方块数: {0}，跳过未知: {1}",
             ["voxel.status.idle"] = "空闲",
             ["voxel.status.percent"] = "{0}%",
@@ -275,7 +275,7 @@ namespace BlockWorldMVP.Editor
         [MenuItem("Box3/地形导入", false, 20)]
         public static void Open()
         {
-            GetWindow<VoxelGzImportWindow>(L("voxel.window.title"));
+            GetWindow<Box3BlocksGzImportWindow>(L("voxel.window.title"));
         }
 
         private void OnDisable()
@@ -305,7 +305,7 @@ namespace BlockWorldMVP.Editor
 
         private static string L(string key)
         {
-            string localized = BlockWorldBuilderI18n.Get(key);
+            string localized = Box3BlocksI18n.Get(key);
             if (!string.Equals(localized, key, StringComparison.Ordinal))
             {
                 return localized;
@@ -329,7 +329,7 @@ namespace BlockWorldMVP.Editor
         {
             // Keep fallback language aligned with the shared i18n resolver.
             // "dialog.ok" is guaranteed in both en/zh resources.
-            string marker = BlockWorldBuilderI18n.Get("dialog.ok");
+            string marker = Box3BlocksI18n.Get("dialog.ok");
             return string.Equals(marker, "确定", StringComparison.Ordinal);
         }
 
@@ -1005,7 +1005,7 @@ namespace BlockWorldMVP.Editor
                 }
                 _exportGzPath = exportPath;
 
-                List<PlacedBlock> allBlocks = CollectPlacedBlocksForExport(_exportRoot);
+                List<Box3BlocksPlacedBlock> allBlocks = CollectPlacedBlocksForExport(_exportRoot);
                 if (allBlocks.Count == 0)
                 {
                     _status = L("voxel.export.err.empty");
@@ -1021,7 +1021,7 @@ namespace BlockWorldMVP.Editor
 
                 for (int i = 0; i < allBlocks.Count; i++)
                 {
-                    PlacedBlock block = allBlocks[i];
+                    Box3BlocksPlacedBlock block = allBlocks[i];
                     if (block == null || string.IsNullOrWhiteSpace(block.BlockId))
                     {
                         skippedUnknown++;
@@ -1168,16 +1168,16 @@ namespace BlockWorldMVP.Editor
             MeshCollider mc = go.AddComponent<MeshCollider>();
             mc.sharedMesh = meshToUse;
 
-            PlacedBlock marker = go.AddComponent<PlacedBlock>();
+            Box3BlocksPlacedBlock marker = go.AddComponent<Box3BlocksPlacedBlock>();
             marker.BlockId = blockName;
             marker.HasAnimation = prepared.hasAnimation;
 
             if (prepared.hasAnimation && prepared.animations != null && prepared.animations.Length > 0)
             {
-                BlockTextureAnimator animator = go.GetComponent<BlockTextureAnimator>();
+                Box3BlocksTextureAnimator animator = go.GetComponent<Box3BlocksTextureAnimator>();
                 if (animator == null)
                 {
-                    animator = go.AddComponent<BlockTextureAnimator>();
+                    animator = go.AddComponent<Box3BlocksTextureAnimator>();
                 }
 
                 animator.SetAnimations(prepared.animations, prepared.faceMainTexSt);
@@ -1204,15 +1204,15 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private static List<PlacedBlock> CollectPlacedBlocksForExport(Transform root)
+        private static List<Box3BlocksPlacedBlock> CollectPlacedBlocksForExport(Transform root)
         {
-            List<PlacedBlock> list = new List<PlacedBlock>();
+            List<Box3BlocksPlacedBlock> list = new List<Box3BlocksPlacedBlock>();
             if (root == null)
             {
                 return list;
             }
 
-            PlacedBlock[] found = root.GetComponentsInChildren<PlacedBlock>(true);
+            Box3BlocksPlacedBlock[] found = root.GetComponentsInChildren<Box3BlocksPlacedBlock>(true);
             if (found == null)
             {
                 return list;
@@ -1318,7 +1318,7 @@ namespace BlockWorldMVP.Editor
                 return prepared;
             }
 
-            if (!BlockAssetFactory.TryGetFaceRenderData(def.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData)
+            if (!Box3BlocksAssetFactory.TryGetFaceRenderData(def.sideTexturePaths, out Box3BlocksAssetFactory.FaceRenderData renderData)
                 || renderData == null
                 || renderData.faceMainTexSt == null
                 || renderData.faceMainTexSt.Length < SideOrder.Length
@@ -1433,7 +1433,7 @@ namespace BlockWorldMVP.Editor
 
         private static void ApplyBumpToChunkOpaque(Material material)
         {
-            OpaqueBlockMaterialConfigurator.Apply(material);
+            Box3BlocksOpaqueMaterialConfigurator.Apply(material);
         }
 
         private static Mesh BuildTopSurfaceColliderMesh(ChunkKey key, HashSet<Vector3Int> chunkVoxels, HashSet<Vector3Int> allVoxels)
@@ -1830,15 +1830,15 @@ namespace BlockWorldMVP.Editor
             return true;
         }
 
-        private static bool TryBuildAnimations(Dictionary<string, string> sideTexturePaths, Vector4[] faceMainTexSt, out BlockTextureAnimator.FaceAnimation[] animations)
+        private static bool TryBuildAnimations(Dictionary<string, string> sideTexturePaths, Vector4[] faceMainTexSt, out Box3BlocksTextureAnimator.FaceAnimation[] animations)
         {
-            animations = Array.Empty<BlockTextureAnimator.FaceAnimation>();
+            animations = Array.Empty<Box3BlocksTextureAnimator.FaceAnimation>();
             if (sideTexturePaths == null || faceMainTexSt == null || faceMainTexSt.Length < SideOrder.Length)
             {
                 return false;
             }
 
-            List<BlockTextureAnimator.FaceAnimation> list = new List<BlockTextureAnimator.FaceAnimation>();
+            List<Box3BlocksTextureAnimator.FaceAnimation> list = new List<Box3BlocksTextureAnimator.FaceAnimation>();
             for (int i = 0; i < SideOrder.Length; i++)
             {
                 string side = SideOrder[i];
@@ -1857,7 +1857,7 @@ namespace BlockWorldMVP.Editor
                     continue;
                 }
 
-                list.Add(new BlockTextureAnimator.FaceAnimation
+                list.Add(new Box3BlocksTextureAnimator.FaceAnimation
                 {
                     materialIndex = i,
                     frameCount = spec.frameCount,
@@ -1879,7 +1879,7 @@ namespace BlockWorldMVP.Editor
         private static bool TryParseFaceAnimation(string textureAssetPath, out FaceAnimationSpec spec)
         {
             spec = null;
-            if (!FaceAnimationParser.TryParse(textureAssetPath, GetProjectAbsolutePath, out ParsedFaceAnimation parsed))
+            if (!Box3BlocksFaceAnimationParser.TryParse(textureAssetPath, GetProjectAbsolutePath, out ParsedFaceAnimation parsed))
             {
                 return false;
             }
@@ -2008,7 +2008,7 @@ namespace BlockWorldMVP.Editor
 
                 if (!map.ContainsKey(name))
                 {
-                    map[name] = BlockIdRules.IsTransparencyKeyword(name);
+                    map[name] = Box3BlocksIdRules.IsTransparencyKeyword(name);
                 }
             }
 
@@ -2070,7 +2070,7 @@ namespace BlockWorldMVP.Editor
                 return transparent;
             }
 
-            return BlockIdRules.IsTransparencyKeyword(blockName);
+            return Box3BlocksIdRules.IsTransparencyKeyword(blockName);
         }
 
         private bool IsEmissiveBlock(string blockName)
@@ -2085,7 +2085,7 @@ namespace BlockWorldMVP.Editor
                 return emits;
             }
 
-            return BlockIdRules.IsEmissiveKeyword(blockName);
+            return Box3BlocksIdRules.IsEmissiveKeyword(blockName);
         }
 
         private Color ResolveEmissiveLightColor(string blockName)
@@ -2097,7 +2097,7 @@ namespace BlockWorldMVP.Editor
                 return mapped;
             }
 
-            return BlockIdRules.InferLightColor(blockName);
+            return Box3BlocksIdRules.InferLightColor(blockName);
         }
 
         private static bool IsWaterBlock(string blockName)
@@ -2130,7 +2130,7 @@ namespace BlockWorldMVP.Editor
                     bool emits = HasMeaningfulEmission(body)
                         || ReadBoolField(body, "emissive")
                         || Regex.IsMatch(body, "\"glow\"\\s*:\\s*(true|1)", RegexOptions.IgnoreCase)
-                        || BlockIdRules.IsEmissiveKeyword(name);
+                        || Box3BlocksIdRules.IsEmissiveKeyword(name);
                     map[name] = emits;
                 }
             }
@@ -2159,7 +2159,7 @@ namespace BlockWorldMVP.Editor
 
                 if (!map.ContainsKey(name))
                 {
-                    map[name] = BlockIdRules.IsEmissiveKeyword(name);
+                    map[name] = Box3BlocksIdRules.IsEmissiveKeyword(name);
                 }
             }
 
@@ -2183,7 +2183,7 @@ namespace BlockWorldMVP.Editor
                         continue;
                     }
 
-                    Color color = ReadColorArrayField(body, "emissive", BlockIdRules.InferLightColor(name));
+                    Color color = ReadColorArrayField(body, "emissive", Box3BlocksIdRules.InferLightColor(name));
                     map[name] = color;
                 }
             }
@@ -2203,7 +2203,7 @@ namespace BlockWorldMVP.Editor
             float sum = 0f;
             for (int i = 0; i < Mathf.Min(3, parts.Length); i++)
             {
-                sum += Mathf.Abs(BlockJsonLite.ParseFloatSafe(parts[i], 0f));
+                sum += Mathf.Abs(Box3BlocksJsonLite.ParseFloatSafe(parts[i], 0f));
             }
 
             return sum > 0.001f;
@@ -2223,9 +2223,9 @@ namespace BlockWorldMVP.Editor
                 return fallback;
             }
 
-            float r = BlockJsonLite.ParseFloatSafe(parts[0], fallback.r);
-            float g = BlockJsonLite.ParseFloatSafe(parts[1], fallback.g);
-            float b = BlockJsonLite.ParseFloatSafe(parts[2], fallback.b);
+            float r = Box3BlocksJsonLite.ParseFloatSafe(parts[0], fallback.r);
+            float g = Box3BlocksJsonLite.ParseFloatSafe(parts[1], fallback.g);
+            float b = Box3BlocksJsonLite.ParseFloatSafe(parts[2], fallback.b);
 
             float max = Mathf.Max(r, Mathf.Max(g, b));
             if (max > 1f)
@@ -2260,12 +2260,12 @@ namespace BlockWorldMVP.Editor
 
         private static bool ReadBoolField(string text, string fieldName)
         {
-            return BlockJsonLite.ReadBoolField(text, fieldName);
+            return Box3BlocksJsonLite.ReadBoolField(text, fieldName);
         }
 
         private static Dictionary<string, string> ExtractTopLevelObjectValues(string json)
         {
-            return BlockJsonLite.ExtractTopLevelObjectValues(json);
+            return Box3BlocksJsonLite.ExtractTopLevelObjectValues(json);
         }
 
         private static int FloorDiv(int value, int divisor)

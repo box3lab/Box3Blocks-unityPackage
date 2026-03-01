@@ -4,9 +4,9 @@ using System.IO;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    public partial class BlockWorldBuilderWindow
+    public partial class Box3BlocksBuilderWindow
     {
         private static Dictionary<string, BlockMetadata> LoadBlockMetadata()
         {
@@ -39,7 +39,7 @@ namespace BlockWorldMVP.Editor
                 int numericId = ParseIntSafe(ReadNumberField(body, "id"), -1);
                 bool transparent = ReadBoolField(body, "transparent");
                 Color emissiveColor = ReadColorArrayField(body, "emissive", InferLightColor(name));
-                bool emitsLight = HasMeaningfulEmission(body) || BlockIdRules.IsEmissiveKeyword(name);
+                bool emitsLight = HasMeaningfulEmission(body) || Box3BlocksIdRules.IsEmissiveKeyword(name);
 
                 map[name] = new BlockMetadata
                 {
@@ -78,9 +78,9 @@ namespace BlockWorldMVP.Editor
                 {
                     numericId = ParseIntSafe(m.Groups["id"].Value, -1),
                     category = InferCategory(name),
-                    emitsLight = BlockIdRules.IsEmissiveKeyword(name),
-                    transparent = BlockIdRules.IsTransparencyKeyword(name),
-                    lightColor = BlockIdRules.InferLightColor(name)
+                    emitsLight = Box3BlocksIdRules.IsEmissiveKeyword(name),
+                    transparent = Box3BlocksIdRules.IsTransparencyKeyword(name),
+                    lightColor = Box3BlocksIdRules.InferLightColor(name)
                 };
             }
 
@@ -89,37 +89,37 @@ namespace BlockWorldMVP.Editor
 
         private static string ReadStringField(string text, string fieldName)
         {
-            return BlockJsonLite.ReadStringField(text, fieldName);
+            return Box3BlocksJsonLite.ReadStringField(text, fieldName);
         }
 
         private static string ReadNumberField(string text, string fieldName)
         {
-            return BlockJsonLite.ReadNumberField(text, fieldName);
+            return Box3BlocksJsonLite.ReadNumberField(text, fieldName);
         }
 
         private static bool ReadBoolField(string text, string fieldName)
         {
-            return BlockJsonLite.ReadBoolField(text, fieldName);
+            return Box3BlocksJsonLite.ReadBoolField(text, fieldName);
         }
 
         private static int ParseIntSafe(string text, int fallback)
         {
-            return BlockJsonLite.ParseIntSafe(text, fallback);
+            return Box3BlocksJsonLite.ParseIntSafe(text, fallback);
         }
 
         private static float ParseFloatSafe(string text, float fallback)
         {
-            return BlockJsonLite.ParseFloatSafe(text, fallback);
+            return Box3BlocksJsonLite.ParseFloatSafe(text, fallback);
         }
 
         private static bool HasLightKeyword(string id)
         {
-            return BlockIdRules.IsEmissiveKeyword(id);
+            return Box3BlocksIdRules.IsEmissiveKeyword(id);
         }
 
         private static bool IsTransparencyKeyword(string id)
         {
-            return BlockIdRules.IsTransparencyKeyword(id);
+            return Box3BlocksIdRules.IsTransparencyKeyword(id);
         }
 
         private static string InferCategory(string id)
@@ -160,7 +160,7 @@ namespace BlockWorldMVP.Editor
 
         private static Color InferLightColor(string id)
         {
-            return BlockIdRules.InferLightColor(id);
+            return Box3BlocksIdRules.InferLightColor(id);
         }
 
 
@@ -214,7 +214,7 @@ namespace BlockWorldMVP.Editor
         private static bool TryParseFaceAnimation(string textureAssetPath, out FaceAnimationSpec spec)
         {
             spec = null;
-            if (!FaceAnimationParser.TryParse(textureAssetPath, GetProjectAbsolutePath, out ParsedFaceAnimation parsed))
+            if (!Box3BlocksFaceAnimationParser.TryParse(textureAssetPath, GetProjectAbsolutePath, out ParsedFaceAnimation parsed))
             {
                 return false;
             }
@@ -230,7 +230,7 @@ namespace BlockWorldMVP.Editor
 
         private static Dictionary<string, string> ExtractTopLevelObjectValues(string json)
         {
-            return BlockJsonLite.ExtractTopLevelObjectValues(json);
+            return Box3BlocksJsonLite.ExtractTopLevelObjectValues(json);
         }
     }
 }

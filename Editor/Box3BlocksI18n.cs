@@ -7,9 +7,9 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    internal static class BlockWorldBuilderI18n
+    internal static class Box3BlocksI18n
     {
         private const string EnJsonPath = "Packages/com.box3lab.box3/Editor/I18n/blockworld-ui.en.json";
         private const string ZhCnJsonPath = "Packages/com.box3lab.box3/Editor/I18n/blockworld-ui.zh-CN.json";

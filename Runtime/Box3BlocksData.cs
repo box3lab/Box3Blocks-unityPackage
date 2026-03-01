@@ -1,9 +1,9 @@
 using System;
 
-namespace BlockWorldMVP
+namespace Box3Blocks
 {
     [Serializable]
-    public struct BlockData
+    public struct Box3BlocksData
     {
         public string id;
         public int x;

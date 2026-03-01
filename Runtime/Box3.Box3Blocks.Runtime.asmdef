@@ -1,12 +1,8 @@
 {
-  "name": "Box3.BlockWorldMVP.Editor",
-  "rootNamespace": "BlockWorldMVP.Editor",
-  "references": [
-    "Box3.BlockWorldMVP.Runtime"
-  ],
-  "includePlatforms": [
-    "Editor"
-  ],
+  "name": "Box3.Box3Blocks.Runtime",
+  "rootNamespace": "Box3Blocks",
+  "references": [],
+  "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": false,

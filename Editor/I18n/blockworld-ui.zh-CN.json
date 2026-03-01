@@ -60,7 +60,7 @@
     { "key": "voxel.export.err.no_root", "value": "导出根节点为空。" },
     {
       "key": "voxel.export.err.empty",
-      "value": "导出根节点下没有 PlacedBlock。"
+      "value": "导出根节点下没有 Box3BlocksPlacedBlock。"
     },
     {
       "key": "voxel.export.done",
