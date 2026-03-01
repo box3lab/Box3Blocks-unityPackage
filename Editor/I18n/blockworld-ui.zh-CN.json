@@ -17,7 +17,11 @@
     { "key": "tool.rotate", "value": "旋转" },
     { "key": "tool.horizontal", "value": "水平 (X/Z)" },
     { "key": "tool.height", "value": "高度 (Y)" },
-    { "key": "tool.brush_volume", "value": "笔刷体积: {0}x{1}x{2}" },
+
+    {
+      "key": "tool.spawn_point_light_for_emissive",
+      "value": "放置发光方块时生成点光源"
+    },
     {
       "key": "tool.assign_root_help",
       "value": "请先指定或创建根节点。只有存在根节点时才支持场景点击编辑。"
@@ -53,6 +57,10 @@
     { "key": "voxel.export.browse", "value": "浏览" },
     { "key": "voxel.export.select_file", "value": "保存地形 gzip 文件" },
     { "key": "voxel.export.run", "value": "导出地形文件" },
+    {
+      "key": "voxel.export.include_realtime_light_data",
+      "value": "导出发光方块点光源数据"
+    },
     { "key": "voxel.export.err.no_root", "value": "导出根节点为空。" },
     {
       "key": "voxel.export.err.empty",
@@ -85,7 +93,14 @@
       "value": "Chunk 使用 Alpha Clip（修复透明伪影）"
     },
     { "key": "voxel.option.alpha_cutoff", "value": "Chunk Alpha 阈值" },
-    { "key": "voxel.option.spawn_realtime_lights", "value": "生成实时点光源（发光方块）" },
+    {
+      "key": "voxel.option.spawn_realtime_lights",
+      "value": "生成实时点光源（发光方块）"
+    },
+    { "key": "voxel.option.realtime_light_mode", "value": "点光源生成策略" },
+    { "key": "voxel.light_mode.none", "value": "禁用" },
+    { "key": "voxel.light_mode.all", "value": "全生成" },
+    { "key": "voxel.light_mode.data_only", "value": "仅有数据的发光方块" },
     { "key": "voxel.option.voxels_per_tick", "value": "每 Tick 方块数" },
 
     { "key": "voxel.run.import", "value": "导入" },

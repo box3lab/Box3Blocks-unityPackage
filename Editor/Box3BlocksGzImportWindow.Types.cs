@@ -16,6 +16,12 @@ namespace Box3Blocks.Editor
             public int[] indices;
             public int[] data;
             public int[] rot;
+            public int[] lightIndices;
+            public int[] lightFlags;
+            public float[] lightIntensity;
+            public float[] lightRange;
+            public float[] lightColorRgb;
+            public float[] lightOffsetXyz;
         }
 
         private readonly struct ChunkKey : IEquatable<ChunkKey>
@@ -114,13 +120,23 @@ namespace Box3Blocks.Editor
             public readonly int rot;
             public readonly PreparedBlock prepared;
             public readonly string blockName;
+            public readonly bool hasLightData;
+            public readonly Color lightColor;
+            public readonly float lightIntensity;
+            public readonly float lightRange;
+            public readonly Vector3 lightOffset;
 
-            public PendingBlock(Vector3Int pos, int rot, PreparedBlock prepared, string blockName)
+            public PendingBlock(Vector3Int pos, int rot, PreparedBlock prepared, string blockName, bool hasLightData, Color lightColor, float lightIntensity, float lightRange, Vector3 lightOffset)
             {
                 this.pos = pos;
                 this.rot = rot;
                 this.prepared = prepared;
                 this.blockName = blockName;
+                this.hasLightData = hasLightData;
+                this.lightColor = lightColor;
+                this.lightIntensity = lightIntensity;
+                this.lightRange = lightRange;
+                this.lightOffset = lightOffset;
             }
         }
 
@@ -128,12 +144,41 @@ namespace Box3Blocks.Editor
         {
             public readonly Vector3Int pos;
             public readonly Color color;
+            public readonly float intensity;
+            public readonly float range;
+            public readonly Vector3 offset;
 
-            public EmissiveLightVoxel(Vector3Int pos, Color color)
+            public EmissiveLightVoxel(Vector3Int pos, Color color, float intensity, float range, Vector3 offset)
             {
                 this.pos = pos;
                 this.color = color;
+                this.intensity = intensity;
+                this.range = range;
+                this.offset = offset;
             }
+        }
+
+        private readonly struct PayloadLightData
+        {
+            public readonly Color color;
+            public readonly float intensity;
+            public readonly float range;
+            public readonly Vector3 offset;
+
+            public PayloadLightData(Color color, float intensity, float range, Vector3 offset)
+            {
+                this.color = color;
+                this.intensity = intensity;
+                this.range = range;
+                this.offset = offset;
+            }
+        }
+
+        private enum RealtimeLightMode
+        {
+            None = 0,
+            AllEmissive = 1,
+            DataOnly = 2
         }
 
         private enum SourceType

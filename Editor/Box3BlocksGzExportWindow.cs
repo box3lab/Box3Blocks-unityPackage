@@ -19,15 +19,23 @@ namespace Box3Blocks.Editor
         private sealed class VoxelPayload
         {
         
+            public string formatVersion;
             public int[] shape;
             public int[] dir;
             public int[] indices;
             public int[] data;
             public int[] rot;
+            public int[] lightIndices;
+            public int[] lightFlags;
+            public float[] lightIntensity;
+            public float[] lightRange;
+            public float[] lightColorRgb;
+            public float[] lightOffsetXyz;
         }
 
         private Transform _exportRoot;
         private string _exportGzPath = string.Empty;
+        private bool _exportRealtimeLightData = true;
         private string _status = string.Empty;
         private GUIStyle _sectionBoxStyle;
         private GUIStyle _sectionTitleStyle;
@@ -171,6 +179,7 @@ namespace Box3Blocks.Editor
 
                 string previewPath = string.IsNullOrWhiteSpace(_exportGzPath) ? "-" : _exportGzPath;
                 EditorGUILayout.LabelField(previewPath, _subtleLabelStyle);
+                _exportRealtimeLightData = EditorGUILayout.ToggleLeft(L("voxel.export.include_realtime_light_data"), _exportRealtimeLightData);
 
                 EditorGUILayout.Space(4f);
                 using (new EditorGUILayout.HorizontalScope())
@@ -243,6 +252,11 @@ namespace Box3Blocks.Editor
                 List<Vector3Int> positions = new List<Vector3Int>(allBlocks.Count);
                 List<int> ids = new List<int>(allBlocks.Count);
                 List<int> rots = new List<int>(allBlocks.Count);
+                List<bool> blockHasLight = _exportRealtimeLightData ? new List<bool>(allBlocks.Count) : null;
+                List<Color> blockLightColor = _exportRealtimeLightData ? new List<Color>(allBlocks.Count) : null;
+                List<float> blockLightIntensity = _exportRealtimeLightData ? new List<float>(allBlocks.Count) : null;
+                List<float> blockLightRange = _exportRealtimeLightData ? new List<float>(allBlocks.Count) : null;
+                List<Vector3> blockLightOffset = _exportRealtimeLightData ? new List<Vector3>(allBlocks.Count) : null;
                 int skippedUnknown = 0;
 
                 for (int i = 0; i < allBlocks.Count; i++)
@@ -267,6 +281,25 @@ namespace Box3Blocks.Editor
                     positions.Add(pos);
                     ids.Add(numericId);
                     rots.Add(rotQuarter);
+                    if (_exportRealtimeLightData)
+                    {
+                        if (TryReadBlockRealtimeLightData(block.transform, out Color lightColor, out float intensity, out float range, out Vector3 localOffset))
+                        {
+                            blockHasLight.Add(true);
+                            blockLightColor.Add(lightColor);
+                            blockLightIntensity.Add(intensity);
+                            blockLightRange.Add(range);
+                            blockLightOffset.Add(localOffset);
+                        }
+                        else
+                        {
+                            blockHasLight.Add(false);
+                            blockLightColor.Add(Color.black);
+                            blockLightIntensity.Add(0f);
+                            blockLightRange.Add(0f);
+                            blockLightOffset.Add(Vector3.zero);
+                        }
+                    }
                 }
 
                 if (positions.Count == 0)
@@ -315,14 +348,63 @@ namespace Box3Blocks.Editor
                     rot[i] = rots[i];
                 }
 
+                int[] lightIndices = null;
+                int[] lightFlags = null;
+                float[] lightIntensity = null;
+                float[] lightRange = null;
+                float[] lightColorRgb = null;
+                float[] lightOffsetXyz = null;
+                if (_exportRealtimeLightData)
+                {
+                    List<int> compactLightIndices = new List<int>(count);
+                    List<int> compactLightFlags = new List<int>(count);
+                    List<float> compactLightIntensity = new List<float>(count);
+                    List<float> compactLightRange = new List<float>(count);
+                    List<float> compactLightColorRgb = new List<float>(count * 3);
+                    List<float> compactLightOffsetXyz = new List<float>(count * 3);
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (!blockHasLight[i])
+                        {
+                            continue;
+                        }
+
+                        compactLightIndices.Add(indices[i]);
+                        compactLightFlags.Add(1);
+                        compactLightIntensity.Add(blockLightIntensity[i]);
+                        compactLightRange.Add(blockLightRange[i]);
+                        Color c = blockLightColor[i];
+                        compactLightColorRgb.Add(c.r);
+                        compactLightColorRgb.Add(c.g);
+                        compactLightColorRgb.Add(c.b);
+                        Vector3 o = blockLightOffset[i];
+                        compactLightOffsetXyz.Add(o.x);
+                        compactLightOffsetXyz.Add(o.y);
+                        compactLightOffsetXyz.Add(o.z);
+                    }
+
+                    lightIndices = compactLightIndices.ToArray();
+                    lightFlags = compactLightFlags.ToArray();
+                    lightIntensity = compactLightIntensity.ToArray();
+                    lightRange = compactLightRange.ToArray();
+                    lightColorRgb = compactLightColorRgb.ToArray();
+                    lightOffsetXyz = compactLightOffsetXyz.ToArray();
+                }
+
                 VoxelPayload payload = new VoxelPayload
                 {
-                 
+                    formatVersion = "unity",
                     shape = new[] { shapeX, shapeY, shapeZ },
                     dir = new[] { 1, 1, 1 },
                     indices = indices,
                     data = data,
-                    rot = rot
+                    rot = rot,
+                    lightIndices = _exportRealtimeLightData ? lightIndices : null,
+                    lightFlags = _exportRealtimeLightData ? lightFlags : null,
+                    lightIntensity = _exportRealtimeLightData ? lightIntensity : null,
+                    lightRange = _exportRealtimeLightData ? lightRange : null,
+                    lightColorRgb = _exportRealtimeLightData ? lightColorRgb : null,
+                    lightOffsetXyz = _exportRealtimeLightData ? lightOffsetXyz : null
                 };
 
                 string json = JsonUtility.ToJson(payload);
@@ -374,6 +456,59 @@ namespace Box3Blocks.Editor
             }
 
             return n;
+        }
+
+        private static bool TryReadBlockRealtimeLightData(Transform blockTransform, out Color color, out float intensity, out float range, out Vector3 localOffset)
+        {
+            color = Color.white;
+            intensity = 0f;
+            range = 0f;
+            localOffset = Vector3.zero;
+
+            if (blockTransform == null)
+            {
+                return false;
+            }
+
+            Light[] lights = blockTransform.GetComponentsInChildren<Light>(true);
+            if (lights == null || lights.Length == 0)
+            {
+                return false;
+            }
+
+            Light chosen = null;
+            for (int i = 0; i < lights.Length; i++)
+            {
+                Light light = lights[i];
+                if (light == null || light.type != LightType.Point)
+                {
+                    continue;
+                }
+
+                if (light.transform == blockTransform
+                    || string.Equals(light.gameObject.name, "__VoxelLight", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(light.gameObject.name, "__BlockLight", StringComparison.OrdinalIgnoreCase))
+                {
+                    chosen = light;
+                    break;
+                }
+
+                if (chosen == null)
+                {
+                    chosen = light;
+                }
+            }
+
+            if (chosen == null)
+            {
+                return false;
+            }
+
+            color = chosen.color;
+            intensity = Mathf.Max(0f, chosen.intensity);
+            range = Mathf.Max(0f, chosen.range);
+            localOffset = blockTransform.InverseTransformPoint(chosen.transform.position);
+            return true;
         }
 
         private static void WriteGzipJsonToFile(string path, string json)

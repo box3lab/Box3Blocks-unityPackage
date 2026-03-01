@@ -26,6 +26,15 @@ namespace Box3Blocks.Editor
         private static readonly int MainTexStShaderId = Shader.PropertyToID("_MainTex_ST");
         private static readonly int EmissionColorShaderId = Shader.PropertyToID("_EmissionColor");
         private const string RealtimeLightChildName = "__BlockLight";
+        private static readonly Vector3Int[] OcclusionNeighborOffsets =
+        {
+            Vector3Int.left,
+            Vector3Int.right,
+            Vector3Int.up,
+            Vector3Int.down,
+            new Vector3Int(0, 0, 1),
+            new Vector3Int(0, 0, -1),
+        };
 
         private Transform _root;
         private List<BlockDefinition> _allBlocks = new List<BlockDefinition>();
@@ -53,12 +62,24 @@ namespace Box3Blocks.Editor
         private GUIStyle _toolTabStyle;
         private GUIStyle _toolTabSelectedStyle;
         private GUIStyle _insetPanelStyle;
+        private GUIStyle _cardBoxStyle;
         private GUIStyle _cardTitleStyle;
         private GUIStyle _cardSubtitleStyle;
+        private GUIStyle _cardTitleSelectedStyle;
+        private GUIStyle _cardSubtitleSelectedStyle;
         private GUIStyle _rotateBadgeStyle;
+        private bool _filteredHasAnimatedBlocks;
+        private double _lastBlockListScrollTime;
+        private const double AnimatedCardPreviewFps = 4.0;
+        private float _blockListViewportHeight = 420f;
+        private const float CardVisiblePadding = 120f;
+        private readonly Dictionary<Vector3Int, GameObject> _blockLookup = new Dictionary<Vector3Int, GameObject>();
+        private Transform _blockLookupRoot;
+        private bool _blockLookupDirty = true;
         private readonly Dictionary<string, Mesh> _staticBlockMeshCache = new Dictionary<string, Mesh>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Texture2D> _blockCardPreviewCache = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, AnimatedPreviewCacheEntry> _animatedBlockCardPreviewCache = new Dictionary<string, AnimatedPreviewCacheEntry>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, CardRotateAnimState> _cardRotateAnimations = new Dictionary<string, CardRotateAnimState>(StringComparer.OrdinalIgnoreCase);
         private PreviewRenderUtility _blockCardPreviewUtility;
         private double _nextAnimatedPreviewRepaintTime;
 
@@ -71,12 +92,16 @@ namespace Box3Blocks.Editor
         private void OnEnable()
         {
             SceneView.duringSceneGui += OnSceneGUI;
+            _blockLookupDirty = true;
             ReloadBlockLibrary();
         }
 
         private void OnDisable()
         {
             SceneView.duringSceneGui -= OnSceneGUI;
+            _blockLookup.Clear();
+            _blockLookupRoot = null;
+            _blockLookupDirty = true;
             _staticBlockMeshCache.Clear();
             ClearBlockCardPreviewCache();
             if (_blockCardPreviewUtility != null)
@@ -229,6 +254,18 @@ namespace Box3Blocks.Editor
                 };
             }
 
+            if (_cardBoxStyle == null)
+            {
+                _cardBoxStyle = new GUIStyle("HelpBox")
+                {
+                    fixedHeight = Mathf.Max(136f, PreviewSize + 68f),
+                    wordWrap = true,
+                    alignment = TextAnchor.UpperCenter,
+                    fontSize = 11,
+                    padding = new RectOffset(6, 6, 8, 8)
+                };
+            }
+
             if (_cardTitleStyle == null)
             {
                 _cardTitleStyle = new GUIStyle(EditorStyles.label)
@@ -240,6 +277,12 @@ namespace Box3Blocks.Editor
                 };
             }
 
+            if (_cardTitleSelectedStyle == null)
+            {
+                _cardTitleSelectedStyle = new GUIStyle(_cardTitleStyle);
+                _cardTitleSelectedStyle.normal.textColor = new Color(0.78f, 1f, 0.8f, 1f);
+            }
+
             if (_cardSubtitleStyle == null)
             {
                 _cardSubtitleStyle = new GUIStyle(EditorStyles.miniLabel)
@@ -248,6 +291,12 @@ namespace Box3Blocks.Editor
                     wordWrap = true
                 };
                 _cardSubtitleStyle.normal.textColor = new Color(0.78f, 0.78f, 0.78f, 1f);
+            }
+
+            if (_cardSubtitleSelectedStyle == null)
+            {
+                _cardSubtitleSelectedStyle = new GUIStyle(_cardSubtitleStyle);
+                _cardSubtitleSelectedStyle.normal.textColor = new Color(0.68f, 0.95f, 0.72f, 1f);
             }
 
             if (_rotateBadgeStyle == null)
@@ -273,7 +322,12 @@ namespace Box3Blocks.Editor
 
         private void DrawRootSection()
         {
-            _root = (Transform)EditorGUILayout.ObjectField(L("root.root"), _root, typeof(Transform), true);
+            Transform newRoot = (Transform)EditorGUILayout.ObjectField(L("root.root"), _root, typeof(Transform), true);
+            if (newRoot != _root)
+            {
+                _root = newRoot;
+                _blockLookupDirty = true;
+            }
 
             using (new EditorGUILayout.HorizontalScope())
             {
@@ -316,7 +370,8 @@ namespace Box3Blocks.Editor
                 }
             }
 
-            EditorGUILayout.LabelField(Lf("tool.brush_volume", _brushHorizontalSize, _brushHorizontalSize, _brushHeight), _subtleLabelStyle);
+      
+            _spawnPointLightForEmissive = EditorGUILayout.ToggleLeft(L("tool.spawn_point_light_for_emissive"), _spawnPointLightForEmissive);
 
             if (_root == null)
             {
@@ -351,6 +406,7 @@ namespace Box3Blocks.Editor
                     {
                         float rightPaneWidth = Mathf.Max(220f, position.width - (_categories.Count > 0 ? 158f : 34f));
                         int columns = CalculateColumnCount(rightPaneWidth);
+                        Vector2 prevScroll = _scroll;
                         _scroll = GUILayout.BeginScrollView(
                             _scroll,
                             false,
@@ -359,11 +415,21 @@ namespace Box3Blocks.Editor
                             GUI.skin.verticalScrollbar);
                         DrawBlockGrid(columns, rightPaneWidth - 20f);
                         EditorGUILayout.EndScrollView();
+                        Rect viewportRect = GUILayoutUtility.GetLastRect();
+                        if (viewportRect.height > 1f)
+                        {
+                            _blockListViewportHeight = viewportRect.height;
+                        }
+                        if ((prevScroll - _scroll).sqrMagnitude > 0.0001f)
+                        {
+                            _lastBlockListScrollTime = EditorApplication.timeSinceStartup;
+                        }
                     }
                 }
             }
 
             RequestAnimatedCardPreviewRepaint();
+            RequestCardRotateAnimationRepaint();
         }
 
         private void DrawBlockGrid(int columns, float availableWidth)
@@ -373,18 +439,34 @@ namespace Box3Blocks.Editor
             int clampedColumns = Mathf.Max(1, columns);
             float totalGap = (clampedColumns - 1) * gap;
             float cellWidth = Mathf.Max(120f, (safeWidth - totalGap) / clampedColumns);
-
-            int index = 0;
-            while (index < _filteredBlocks.Count)
+            float cellHeight = Mathf.Max(136f, PreviewSize + 68f);
+            float rowHeight = cellHeight + gap;
+            int rowCount = Mathf.CeilToInt(_filteredBlocks.Count / (float)clampedColumns);
+            if (rowCount <= 0)
             {
+                return;
+            }
+
+            int startRow = Mathf.Clamp(Mathf.FloorToInt((_scroll.y - CardVisiblePadding) / Mathf.Max(1f, rowHeight)), 0, rowCount - 1);
+            int endRow = Mathf.Clamp(Mathf.CeilToInt((_scroll.y + _blockListViewportHeight + CardVisiblePadding) / Mathf.Max(1f, rowHeight)), startRow, rowCount - 1);
+
+            float topSpace = startRow * rowHeight;
+            if (topSpace > 0f)
+            {
+                GUILayout.Space(topSpace);
+            }
+
+            for (int row = startRow; row <= endRow; row++)
+            {
+                int rowStartIndex = row * clampedColumns;
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     for (int c = 0; c < clampedColumns; c++)
                     {
+                        int index = rowStartIndex + c;
                         if (index < _filteredBlocks.Count)
                         {
                             DrawBlockCard(index, _filteredBlocks[index], cellWidth);
-                            index++;
                         }
                         else
                         {
@@ -399,6 +481,13 @@ namespace Box3Blocks.Editor
                 }
 
                 GUILayout.Space(gap);
+            }
+
+            float bottomRows = Mathf.Max(0, rowCount - 1 - endRow);
+            float bottomSpace = bottomRows * rowHeight;
+            if (bottomSpace > 0f)
+            {
+                GUILayout.Space(bottomSpace);
             }
         }
 
@@ -423,39 +512,40 @@ namespace Box3Blocks.Editor
             string title = Box3BlocksI18n.GetBlockDisplayName(block.id, fallbackTitle);
             string categoryLabel = LocalizeCategoryLabel(block.category);
             string subtitle = string.IsNullOrWhiteSpace(info) ? categoryLabel : $"{categoryLabel} | {info}";
-            GUIStyle cardStyle = new GUIStyle("HelpBox")
-            {
-                fixedHeight = Mathf.Max(136f, PreviewSize + 68f),
-                wordWrap = true,
-                alignment = TextAnchor.UpperCenter,
-                fontSize = 11,
-                padding = new RectOffset(6, 6, 8, 8)
-            };
-
-            Rect rect = GUILayoutUtility.GetRect(width, cardStyle.fixedHeight, GUILayout.Width(width), GUILayout.Height(cardStyle.fixedHeight));
-            GUI.Box(rect, GUIContent.none, cardStyle);
+            Rect rect = GUILayoutUtility.GetRect(width, _cardBoxStyle.fixedHeight, GUILayout.Width(width), GUILayout.Height(_cardBoxStyle.fixedHeight));
+            GUI.Box(rect, GUIContent.none, _cardBoxStyle);
             Rect rotateRect = DrawCardRotateButton(rect, block);
+            bool isVisible = IsCardRectVisible(rect);
+
+            if (!isVisible)
+            {
+                return;
+            }
 
             Rect previewRect = new Rect(
                 rect.x + (rect.width - PreviewSize) * 0.5f,
                 rect.y + 10f,
                 PreviewSize,
                 PreviewSize);
-            Texture2D cardPreview = GetOrBuildBlockCardPreview(block);
+            float extraYaw = GetCardPreviewExtraAngle(block);
+            bool disposePreviewAfterDraw = false;
+            Texture2D cardPreview = Mathf.Abs(extraYaw) > 0.01f
+                ? BuildTransientCardPreview(block, extraYaw, out disposePreviewAfterDraw)
+                : GetOrBuildBlockCardPreview(block);
             if (cardPreview != null)
             {
                 GUI.DrawTexture(previewRect, cardPreview, ScaleMode.ScaleToFit, true);
             }
 
+            if (disposePreviewAfterDraw && cardPreview != null)
+            {
+                DestroyImmediate(cardPreview);
+            }
+
             Rect titleRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, 34f);
             Rect subtitleRect = new Rect(rect.x + 6f, previewRect.yMax + 36f, rect.width - 12f, rect.height - (PreviewSize + 46f));
-            GUIStyle titleStyle = new GUIStyle(_cardTitleStyle);
-            GUIStyle subtitleStyle = new GUIStyle(_cardSubtitleStyle);
-            if (_selectedIndex == index)
-            {
-                titleStyle.normal.textColor = new Color(0.78f, 1f, 0.8f, 1f);
-                subtitleStyle.normal.textColor = new Color(0.68f, 0.95f, 0.72f, 1f);
-            }
+            GUIStyle titleStyle = _selectedIndex == index ? _cardTitleSelectedStyle : _cardTitleStyle;
+            GUIStyle subtitleStyle = _selectedIndex == index ? _cardSubtitleSelectedStyle : _cardSubtitleStyle;
             EditorGUI.LabelField(titleRect, title, titleStyle);
             EditorGUI.LabelField(subtitleRect, subtitle, subtitleStyle);
 
@@ -484,7 +574,8 @@ namespace Box3Blocks.Editor
             {
                 if (block != null)
                 {
-                    block.placementRotationQuarter = (block.placementRotationQuarter + 1) & 3;
+                    block.placementRotationQuarter = (block.placementRotationQuarter + 3) & 3;
+                    StartCardRotateAnimation(block);
                     Repaint();
                 }
                 e.Use();
@@ -772,7 +863,6 @@ namespace Box3Blocks.Editor
             {
                 Handles.DrawWireCube(positions[i], Vector3.one);
             }
-            SceneView.RepaintAll();
         }
 
         private void PlaceBlockBrush(Vector3Int origin)
@@ -799,7 +889,7 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private bool TryPlaceSingleBlock(BlockDefinition definition, Vector3Int position)
+        private bool TryPlaceSingleBlock(BlockDefinition definition, Vector3Int position, bool? spawnRealtimeLightOverride = null)
         {
             if (FindBlockAt(position) != null)
             {
@@ -853,10 +943,13 @@ namespace Box3Blocks.Editor
             Box3BlocksPlacedBlock marker = go.AddComponent<Box3BlocksPlacedBlock>();
             marker.BlockId = definition.id;
             marker.HasAnimation = hasAnimatedFaces;
+            RegisterBlockInLookup(position, go);
             ApplyEmissionForDefinition(meshRenderer, definition);
-            ConfigureRealtimeLight(go.transform, definition, _spawnPointLightForEmissive);
+            bool shouldSpawnRealtimeLight = spawnRealtimeLightOverride ?? _spawnPointLightForEmissive;
+            ConfigureRealtimeLight(go.transform, definition, shouldSpawnRealtimeLight);
 
             RefreshTransparentAround(position);
+            RefreshOcclusionAround(position);
             EditorUtility.SetDirty(go);
             return true;
         }
@@ -874,6 +967,7 @@ namespace Box3Blocks.Editor
                     continue;
                 }
 
+                UnregisterBlockInLookup(positions[i], target);
                 Undo.DestroyObjectImmediate(target);
                 refresh.Add(positions[i]);
             }
@@ -881,6 +975,7 @@ namespace Box3Blocks.Editor
             foreach (Vector3Int pos in refresh)
             {
                 RefreshTransparentAround(pos);
+                RefreshOcclusionAround(pos);
             }
         }
 
@@ -911,6 +1006,7 @@ namespace Box3Blocks.Editor
                     continue;
                 }
 
+                UnregisterBlockInLookup(pos, target);
                 Undo.DestroyObjectImmediate(target);
                 if (TryPlaceSingleBlock(replacement, pos))
                 {
@@ -927,6 +1023,7 @@ namespace Box3Blocks.Editor
             foreach (Vector3Int pos in refresh)
             {
                 RefreshTransparentAround(pos);
+                RefreshOcclusionAround(pos);
             }
         }
 
@@ -951,33 +1048,58 @@ namespace Box3Blocks.Editor
 
         private GameObject FindBlockAt(Vector3Int position)
         {
-            if (_root != null)
+            EnsureBlockLookup();
+            if (_blockLookup.TryGetValue(position, out GameObject cached) && cached != null)
             {
-                for (int i = 0; i < _root.childCount; i++)
-                {
-                    Transform child = _root.GetChild(i);
-                    if (Vector3Int.RoundToInt(child.position) == position)
-                    {
-                        Box3BlocksPlacedBlock marker = child.GetComponent<Box3BlocksPlacedBlock>();
-                        if (marker != null)
-                        {
-                            return child.gameObject;
-                        }
-                    }
-                }
-            }
-
-            Collider[] colliders = Physics.OverlapBox(position, Vector3.one * 0.45f);
-            for (int i = 0; i < colliders.Length; i++)
-            {
-                Box3BlocksPlacedBlock marker = colliders[i].GetComponentInParent<Box3BlocksPlacedBlock>();
-                if (marker != null && marker.transform.parent == _root)
-                {
-                    return marker.gameObject;
-                }
+                return cached;
             }
 
             return null;
+        }
+
+        private void RefreshOcclusionAround(Vector3Int center)
+        {
+            UpdateOcclusionAt(center);
+            for (int i = 0; i < OcclusionNeighborOffsets.Length; i++)
+            {
+                UpdateOcclusionAt(center + OcclusionNeighborOffsets[i]);
+            }
+        }
+
+        private void UpdateOcclusionAt(Vector3Int position)
+        {
+            GameObject go = FindBlockAt(position);
+            if (go == null)
+            {
+                return;
+            }
+
+            MeshRenderer renderer = go.GetComponent<MeshRenderer>();
+            if (renderer == null)
+            {
+                return;
+            }
+
+            bool shouldRender = !IsBlockFullyOccluded(position);
+            if (renderer.enabled != shouldRender)
+            {
+                renderer.enabled = shouldRender;
+                EditorUtility.SetDirty(renderer);
+            }
+        }
+
+        private bool IsBlockFullyOccluded(Vector3Int position)
+        {
+            for (int i = 0; i < OcclusionNeighborOffsets.Length; i++)
+            {
+                Vector3Int neighborPos = position + OcclusionNeighborOffsets[i];
+                if (FindBlockAt(neighborPos) == null)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private List<Vector3Int> BuildBrushPositions(Vector3Int origin)
@@ -997,6 +1119,67 @@ namespace Box3Blocks.Editor
             }
 
             return positions;
+        }
+
+        private void EnsureBlockLookup()
+        {
+            if (_root == null)
+            {
+                if (_blockLookup.Count > 0)
+                {
+                    _blockLookup.Clear();
+                }
+
+                _blockLookupRoot = null;
+                _blockLookupDirty = true;
+                return;
+            }
+
+            if (!_blockLookupDirty && _blockLookupRoot == _root)
+            {
+                return;
+            }
+
+            _blockLookup.Clear();
+            _blockLookupRoot = _root;
+            for (int i = 0; i < _root.childCount; i++)
+            {
+                Transform child = _root.GetChild(i);
+                if (child == null)
+                {
+                    continue;
+                }
+
+                Box3BlocksPlacedBlock marker = child.GetComponent<Box3BlocksPlacedBlock>();
+                if (marker == null)
+                {
+                    continue;
+                }
+
+                _blockLookup[Vector3Int.RoundToInt(child.position)] = child.gameObject;
+            }
+
+            _blockLookupDirty = false;
+        }
+
+        private void RegisterBlockInLookup(Vector3Int position, GameObject go)
+        {
+            if (_root == null || go == null)
+            {
+                return;
+            }
+
+            EnsureBlockLookup();
+            _blockLookup[position] = go;
+        }
+
+        private void UnregisterBlockInLookup(Vector3Int position, GameObject go)
+        {
+            EnsureBlockLookup();
+            if (_blockLookup.TryGetValue(position, out GameObject existing) && (go == null || existing == go))
+            {
+                _blockLookup.Remove(position);
+            }
         }
 
         private BlockDefinition FindDefinitionById(string id)
@@ -1023,6 +1206,7 @@ namespace Box3Blocks.Editor
             GameObject go = new GameObject("BlockWorldRoot");
             Undo.RegisterCreatedObjectUndo(go, "Create Block Root");
             _root = go.transform;
+            _blockLookupDirty = true;
             Selection.activeObject = go;
         }
 
@@ -1037,6 +1221,8 @@ namespace Box3Blocks.Editor
             {
                 Undo.DestroyObjectImmediate(_root.GetChild(i).gameObject);
             }
+
+            _blockLookupDirty = true;
         }
 
         private List<Box3BlocksPlacedBlock> CollectPlacedBlocksFromRoot()
@@ -1462,6 +1648,7 @@ namespace Box3Blocks.Editor
         private void ApplyFilter()
         {
             _filteredBlocks.Clear();
+            _filteredHasAnimatedBlocks = false;
             string selectedCategory = _categories[Mathf.Clamp(_selectedCategory, 0, _categories.Count - 1)];
             IEnumerable<BlockDefinition> source = string.Equals(selectedCategory, CategoryRecent, StringComparison.OrdinalIgnoreCase)
                 ? EnumerateRecentBlocks()
@@ -1478,6 +1665,10 @@ namespace Box3Blocks.Editor
                 if (matchSearch && matchCategory)
                 {
                     _filteredBlocks.Add(block);
+                    if (!_filteredHasAnimatedBlocks && HasAnimatedFaces(block))
+                    {
+                        _filteredHasAnimatedBlocks = true;
+                    }
                 }
             }
 
@@ -1720,6 +1911,61 @@ namespace Box3Blocks.Editor
             return block.previewTexture;
         }
 
+        private Texture2D BuildTransientCardPreview(BlockDefinition block, float extraYawDeg, out bool createdTemporaryTexture)
+        {
+            createdTemporaryTexture = false;
+            if (block == null || string.IsNullOrWhiteSpace(block.id))
+            {
+                return null;
+            }
+
+            if (!Box3BlocksAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out Box3BlocksAssetFactory.FaceRenderData renderData)
+                || renderData == null
+                || renderData.materials == null
+                || renderData.materials.Length == 0
+                || renderData.materials[0] == null)
+            {
+                return block.previewTexture;
+            }
+
+            Mesh mesh = null;
+            bool destroyMesh = false;
+            if (HasAnimatedFaces(block))
+            {
+                if (renderData.faceMainTexSt == null || renderData.faceMainTexSt.Length < SideOrder.Length)
+                {
+                    return block.previewTexture;
+                }
+
+                float now = GetQuantizedAnimatedPreviewTime();
+                mesh = BuildAnimatedPreviewMesh(block.id, renderData.faceMainTexSt, block.sideAnimations, now);
+                destroyMesh = mesh != null;
+            }
+            else
+            {
+                mesh = GetOrCreateStaticBlockMesh(block, renderData);
+            }
+
+            if (mesh == null)
+            {
+                return block.previewTexture;
+            }
+
+            Texture2D preview = RenderBlockCardPreview(mesh, renderData.materials[0], block.placementRotationQuarter, extraYawDeg);
+            if (destroyMesh)
+            {
+                DestroyImmediate(mesh);
+            }
+
+            if (preview == null)
+            {
+                return block.previewTexture;
+            }
+
+            createdTemporaryTexture = true;
+            return preview;
+        }
+
         private Texture2D GetOrBuildAnimatedBlockCardPreview(BlockDefinition block)
         {
             if (block == null || string.IsNullOrWhiteSpace(block.id))
@@ -1738,7 +1984,19 @@ namespace Box3Blocks.Editor
                 return block.previewTexture;
             }
 
-            float now = Time.realtimeSinceStartup;
+            if (IsBlockListScrolling())
+            {
+                if (_animatedBlockCardPreviewCache.TryGetValue(block.id, out AnimatedPreviewCacheEntry cachedEntry)
+                    && cachedEntry != null
+                    && cachedEntry.texture != null)
+                {
+                    return cachedEntry.texture;
+                }
+
+                return block.previewTexture;
+            }
+
+            float now = GetQuantizedAnimatedPreviewTime();
             int signature = ComputeAnimatedPreviewSignature(block, now);
             if (_animatedBlockCardPreviewCache.TryGetValue(block.id, out AnimatedPreviewCacheEntry entry)
                 && entry != null
@@ -1866,7 +2124,7 @@ namespace Box3Blocks.Editor
             return BuildStaticBlockMesh(id + "_animPreview", animatedFaceSt);
         }
 
-        private Texture2D RenderBlockCardPreview(Mesh mesh, Material material, int rotationQuarter)
+        private Texture2D RenderBlockCardPreview(Mesh mesh, Material material, int rotationQuarter, float extraYawDeg = 0f)
         {
             if (mesh == null || material == null)
             {
@@ -1879,8 +2137,8 @@ namespace Box3Blocks.Editor
                 _blockCardPreviewUtility.cameraFieldOfView = 22f;
             }
 
-            Texture2D onBlack = RenderPreviewWithBackground(mesh, material, new Color(0f, 0f, 0f, 1f), rotationQuarter);
-            Texture2D onWhite = RenderPreviewWithBackground(mesh, material, new Color(1f, 1f, 1f, 1f), rotationQuarter);
+            Texture2D onBlack = RenderPreviewWithBackground(mesh, material, new Color(0f, 0f, 0f, 1f), rotationQuarter, extraYawDeg);
+            Texture2D onWhite = RenderPreviewWithBackground(mesh, material, new Color(1f, 1f, 1f, 1f), rotationQuarter, extraYawDeg);
             if (onBlack == null || onWhite == null)
             {
                 if (onBlack != null)
@@ -1902,7 +2160,7 @@ namespace Box3Blocks.Editor
             return composed;
         }
 
-        private Texture2D RenderPreviewWithBackground(Mesh mesh, Material material, Color backgroundColor, int rotationQuarter)
+        private Texture2D RenderPreviewWithBackground(Mesh mesh, Material material, Color backgroundColor, int rotationQuarter, float extraYawDeg = 0f)
         {
             const int size = 128;
             Rect r = new Rect(0f, 0f, size, size);
@@ -1929,7 +2187,7 @@ namespace Box3Blocks.Editor
             cam.transform.rotation = viewRot;
             cam.transform.LookAt(target);
 
-            Quaternion modelRot = Quaternion.Euler(0f, (rotationQuarter & 3) * 90f, 0f);
+            Quaternion modelRot = Quaternion.Euler(0f, ((rotationQuarter & 3) * 90f) + extraYawDeg, 0f);
             _blockCardPreviewUtility.DrawMesh(mesh, Matrix4x4.TRS(Vector3.zero, modelRot, Vector3.one), material, 0);
             cam.Render();
             return _blockCardPreviewUtility.EndStaticPreview();
@@ -2012,17 +2270,7 @@ namespace Box3Blocks.Editor
 
         private void RequestAnimatedCardPreviewRepaint()
         {
-            bool hasAnimatedVisible = false;
-            for (int i = 0; i < _filteredBlocks.Count; i++)
-            {
-                if (HasAnimatedFaces(_filteredBlocks[i]))
-                {
-                    hasAnimatedVisible = true;
-                    break;
-                }
-            }
-
-            if (!hasAnimatedVisible)
+            if (!_filteredHasAnimatedBlocks || IsBlockListScrolling() || !hasFocus)
             {
                 return;
             }
@@ -2033,8 +2281,102 @@ namespace Box3Blocks.Editor
                 return;
             }
 
-            _nextAnimatedPreviewRepaintTime = now + (1.0 / 12.0);
+            _nextAnimatedPreviewRepaintTime = now + (1.0 / AnimatedCardPreviewFps);
             Repaint();
+        }
+
+        private bool IsBlockListScrolling()
+        {
+            return EditorApplication.timeSinceStartup - _lastBlockListScrollTime < 0.16;
+        }
+
+        private bool IsCardRectVisible(Rect rect)
+        {
+            float minY = _scroll.y - CardVisiblePadding;
+            float maxY = _scroll.y + Mathf.Max(120f, _blockListViewportHeight) + CardVisiblePadding;
+            return rect.yMax >= minY && rect.yMin <= maxY;
+        }
+
+        private float GetCardPreviewExtraAngle(BlockDefinition block)
+        {
+            if (block == null || string.IsNullOrWhiteSpace(block.id))
+            {
+                return 0f;
+            }
+
+            if (!_cardRotateAnimations.TryGetValue(block.id, out CardRotateAnimState state) || state == null)
+            {
+                return 0f;
+            }
+
+            float elapsed = (float)(EditorApplication.timeSinceStartup - state.startTime);
+            if (elapsed >= state.duration)
+            {
+                _cardRotateAnimations.Remove(block.id);
+                return 0f;
+            }
+
+            float t = Mathf.Clamp01(elapsed / Mathf.Max(0.01f, state.duration));
+            return Mathf.Lerp(90f, 0f, Mathf.SmoothStep(0f, 1f, t));
+        }
+
+        private void StartCardRotateAnimation(BlockDefinition block)
+        {
+            if (block == null || string.IsNullOrWhiteSpace(block.id))
+            {
+                return;
+            }
+
+            _cardRotateAnimations[block.id] = new CardRotateAnimState
+            {
+                startTime = EditorApplication.timeSinceStartup,
+                duration = 0.16f
+            };
+        }
+
+        private void RequestCardRotateAnimationRepaint()
+        {
+            if (_cardRotateAnimations.Count == 0 || IsBlockListScrolling())
+            {
+                return;
+            }
+
+            List<string> completed = null;
+            double now = EditorApplication.timeSinceStartup;
+            foreach (KeyValuePair<string, CardRotateAnimState> kv in _cardRotateAnimations)
+            {
+                CardRotateAnimState state = kv.Value;
+                if (state == null || now - state.startTime >= state.duration)
+                {
+                    if (completed == null)
+                    {
+                        completed = new List<string>();
+                    }
+
+                    completed.Add(kv.Key);
+                }
+            }
+
+            if (completed != null)
+            {
+                for (int i = 0; i < completed.Count; i++)
+                {
+                    _cardRotateAnimations.Remove(completed[i]);
+                }
+            }
+
+            if (_cardRotateAnimations.Count > 0)
+            {
+                Repaint();
+            }
+        }
+
+        private static float GetQuantizedAnimatedPreviewTime()
+        {
+            double now = EditorApplication.timeSinceStartup;
+            double step = 1.0 / AnimatedCardPreviewFps;
+            double quantized = Math.Floor(now / step) * step;
+            return (float)quantized;
         }
 
         private static void ApplyFaceMainTexSt(Renderer renderer, Vector4[] faceMainTexSt)
@@ -2222,22 +2564,22 @@ namespace Box3Blocks.Editor
             _recentBlockIds.Insert(0, blockId);
         }
 
-        public static bool TryPlaceBlockAtApi(Transform root, string blockId, Vector3Int position, bool replaceExisting = true, int rotationQuarter = 0)
+        public static bool TryPlaceBlockAtApi(Transform root, string blockId, Vector3Int position, bool replaceExisting = true, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null && window.TryPlaceBlockAtInternal(root, blockId, position, replaceExisting, rotationQuarter);
+            return window != null && window.TryPlaceBlockAtInternal(root, blockId, position, replaceExisting, rotationQuarter, spawnRealtimeLight);
         }
 
-        public static bool TryPlaceBlockOnTopApi(Transform root, string blockId, int x, int z, int baseY = 0, bool replaceExisting = true, int rotationQuarter = 0)
+        public static bool TryPlaceBlockOnTopApi(Transform root, string blockId, int x, int z, int baseY = 0, bool replaceExisting = true, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null && window.TryPlaceBlockOnTopInternal(root, blockId, x, z, baseY, replaceExisting, rotationQuarter);
+            return window != null && window.TryPlaceBlockOnTopInternal(root, blockId, x, z, baseY, replaceExisting, rotationQuarter, spawnRealtimeLight);
         }
 
-        public static int PlaceBlocksInBoundsApi(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting = true, int rotationQuarter = 0)
+        public static int PlaceBlocksInBoundsApi(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting = true, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null ? window.PlaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, replaceExisting, rotationQuarter) : 0;
+            return window != null ? window.PlaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, replaceExisting, rotationQuarter, spawnRealtimeLight) : 0;
         }
 
         public static bool EraseBlockAtApi(Transform root, Vector3Int position)
@@ -2252,16 +2594,16 @@ namespace Box3Blocks.Editor
             return window != null ? window.EraseBlocksInBoundsInternal(root, minInclusive, maxInclusive) : 0;
         }
 
-        public static bool ReplaceBlockAtApi(Transform root, string blockId, Vector3Int position, int rotationQuarter = 0)
+        public static bool ReplaceBlockAtApi(Transform root, string blockId, Vector3Int position, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null && window.ReplaceBlockAtInternal(root, blockId, position, rotationQuarter);
+            return window != null && window.ReplaceBlockAtInternal(root, blockId, position, rotationQuarter, spawnRealtimeLight);
         }
 
-        public static int ReplaceBlocksInBoundsApi(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter = 0)
+        public static int ReplaceBlocksInBoundsApi(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null ? window.ReplaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, rotationQuarter) : 0;
+            return window != null ? window.ReplaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, rotationQuarter, spawnRealtimeLight) : 0;
         }
 
         public static bool RotateBlockAtApi(Transform root, Vector3Int position, int stepQuarter = 1)
@@ -2328,6 +2670,21 @@ namespace Box3Blocks.Editor
             return def != null && def.transparent;
         }
 
+        public static void SetSpawnRealtimeLightForEmissiveApi(bool enabled)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            if (window != null)
+            {
+                window._spawnPointLightForEmissive = enabled;
+            }
+        }
+
+        public static bool GetSpawnRealtimeLightForEmissiveApi()
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null && window._spawnPointLightForEmissive;
+        }
+
         private static Box3BlocksBuilderWindow GetApiWindowInstance()
         {
             Box3BlocksBuilderWindow[] existing = Resources.FindObjectsOfTypeAll<Box3BlocksBuilderWindow>();
@@ -2350,7 +2707,7 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private bool TryPlaceBlockAtInternal(Transform root, string blockId, Vector3Int position, bool replaceExisting, int rotationQuarter)
+        private bool TryPlaceBlockAtInternal(Transform root, string blockId, Vector3Int position, bool replaceExisting, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
             if (root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -2386,7 +2743,7 @@ namespace Box3Blocks.Editor
 
                 int previousRotation = definition.placementRotationQuarter;
                 definition.placementRotationQuarter = rotationQuarter & 3;
-                bool placed = TryPlaceSingleBlock(definition, position);
+                bool placed = TryPlaceSingleBlock(definition, position, spawnRealtimeLightOverride);
                 definition.placementRotationQuarter = previousRotation;
                 if (placed)
                 {
@@ -2401,7 +2758,7 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private bool TryPlaceBlockOnTopInternal(Transform root, string blockId, int x, int z, int baseY, bool replaceExisting, int rotationQuarter)
+        private bool TryPlaceBlockOnTopInternal(Transform root, string blockId, int x, int z, int baseY, bool replaceExisting, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
             if (root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -2426,10 +2783,10 @@ namespace Box3Blocks.Editor
             }
 
             int y = topY == int.MinValue ? baseY : topY + 1;
-            return TryPlaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), replaceExisting, rotationQuarter);
+            return TryPlaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), replaceExisting, rotationQuarter, spawnRealtimeLightOverride);
         }
 
-        private int PlaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting, int rotationQuarter)
+        private int PlaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
             if (root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -2454,7 +2811,7 @@ namespace Box3Blocks.Editor
                 {
                     for (int z = minZ; z <= maxZ; z++)
                     {
-                        if (TryPlaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), replaceExisting, rotationQuarter))
+                        if (TryPlaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), replaceExisting, rotationQuarter, spawnRealtimeLightOverride))
                         {
                             placed++;
                         }
@@ -2483,8 +2840,10 @@ namespace Box3Blocks.Editor
                     return false;
                 }
 
+                UnregisterBlockInLookup(position, existing);
                 Undo.DestroyObjectImmediate(existing);
                 RefreshTransparentAround(position);
+                RefreshOcclusionAround(position);
                 return true;
             }
             finally
@@ -2529,7 +2888,7 @@ namespace Box3Blocks.Editor
             return removed;
         }
 
-        private bool ReplaceBlockAtInternal(Transform root, string blockId, Vector3Int position, int rotationQuarter)
+        private bool ReplaceBlockAtInternal(Transform root, string blockId, Vector3Int position, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
             if (root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -2564,10 +2923,11 @@ namespace Box3Blocks.Editor
                     return false;
                 }
 
+                UnregisterBlockInLookup(position, existing);
                 Undo.DestroyObjectImmediate(existing);
                 int previousRotation = definition.placementRotationQuarter;
                 definition.placementRotationQuarter = rotationQuarter & 3;
-                bool placed = TryPlaceSingleBlock(definition, position);
+                bool placed = TryPlaceSingleBlock(definition, position, spawnRealtimeLightOverride);
                 definition.placementRotationQuarter = previousRotation;
                 if (placed)
                 {
@@ -2582,7 +2942,7 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private int ReplaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter)
+        private int ReplaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
             if (root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -2606,7 +2966,7 @@ namespace Box3Blocks.Editor
                 {
                     for (int z = minZ; z <= maxZ; z++)
                     {
-                        if (ReplaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), rotationQuarter))
+                        if (ReplaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), rotationQuarter, spawnRealtimeLightOverride))
                         {
                             replaced++;
                         }

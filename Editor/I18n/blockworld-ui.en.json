@@ -64,9 +64,10 @@
       "key": "tool.height",
       "value": "Height (Y)"
     },
+
     {
-      "key": "tool.brush_volume",
-      "value": "Brush Volume: {0}x{1}x{2}"
+      "key": "tool.spawn_point_light_for_emissive",
+      "value": "Spawn point light when placing emissive blocks"
     },
     {
       "key": "tool.assign_root_help",
@@ -197,6 +198,10 @@
       "value": "Export Terrain File"
     },
     {
+      "key": "voxel.export.include_realtime_light_data",
+      "value": "Export Realtime Light Data For Emissive Blocks"
+    },
+    {
       "key": "voxel.export.err.no_root",
       "value": "Export Root is empty."
     },
@@ -267,6 +272,22 @@
     {
       "key": "voxel.option.spawn_realtime_lights",
       "value": "Spawn Realtime Point Lights (Emissive Blocks)"
+    },
+    {
+      "key": "voxel.option.realtime_light_mode",
+      "value": "Realtime Light Mode"
+    },
+    {
+      "key": "voxel.light_mode.none",
+      "value": "None"
+    },
+    {
+      "key": "voxel.light_mode.all",
+      "value": "All Emissive"
+    },
+    {
+      "key": "voxel.light_mode.data_only",
+      "value": "Data-Only Emissive"
     },
     {
       "key": "voxel.option.voxels_per_tick",

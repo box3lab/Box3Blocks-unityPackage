@@ -98,7 +98,7 @@ namespace Box3Blocks.Editor
         private bool _clearPrevious = true;
         private bool _addSurfaceCollider;
         private bool _addMeshCollider;
-        private bool _spawnRealtimeLights = true;
+        private RealtimeLightMode _realtimeLightMode = RealtimeLightMode.AllEmissive;
 
         private Phase _phase = Phase.Idle;
         private string _status = string.Empty;
@@ -133,6 +133,7 @@ namespace Box3Blocks.Editor
         private HashSet<Vector3Int> _allVoxels;
         private List<PendingBlock> _pendingBlocks;
         private int _createdRealtimeLights;
+        private Dictionary<int, PayloadLightData> _payloadLightByFlatIndex;
 
         [MenuItem("Box3/地形导入", false, 20)]
         public static void Open()
@@ -328,9 +329,16 @@ namespace Box3Blocks.Editor
                     new[] { L("voxel.mode.chunk"), L("voxel.mode.single_block") });
                 _importMode = (ImportMode)Mathf.Clamp(modeIndex, 0, 1);
                 _clearPrevious = EditorGUILayout.ToggleLeft(L("voxel.option.replace_previous"), _clearPrevious);
-                _spawnRealtimeLights = EditorGUILayout.ToggleLeft(
-                    LOr("voxel.option.spawn_realtime_lights", "生成实时点光源（发光方块）"),
-                    _spawnRealtimeLights);
+                int lightModeIndex = EditorGUILayout.Popup(
+                    LOr("voxel.option.realtime_light_mode", "点光源生成策略"),
+                    (int)_realtimeLightMode,
+                    new[]
+                    {
+                        LOr("voxel.light_mode.none", "全不用"),
+                        LOr("voxel.light_mode.all", "全用"),
+                        LOr("voxel.light_mode.data_only", "仅有数据的发光方块")
+                    });
+                _realtimeLightMode = (RealtimeLightMode)Mathf.Clamp(lightModeIndex, 0, 2);
 
                 EditorGUILayout.Space(6f);
                 EditorGUILayout.LabelField(LOr("voxel.group.chunk", "Chunk 选项"), _optionsGroupTitleStyle);
@@ -473,6 +481,7 @@ namespace Box3Blocks.Editor
                 };
                 _pendingBlocks = _importMode == ImportMode.SingleBlock ? new List<PendingBlock>(_stats.total) : null;
                 _createdRealtimeLights = 0;
+                _payloadLightByFlatIndex = null;
 
                 PrepareRoot();
                 _phase = Phase.ProcessVoxels;
@@ -583,6 +592,8 @@ namespace Box3Blocks.Editor
                 rot = (rot + 2) & 3;
                 Vector3 worldPos = new Vector3(wx, wy, wz);
                 Quaternion worldRot = _rotLookup[rot];
+                bool isEmissive = IsEmissiveBlock(blockName);
+                bool hasLightData = TryGetPayloadLightData(i, idx, out Color payloadLightColor, out float payloadLightIntensity, out float payloadLightRange, out Vector3 payloadLightOffset);
                 if (_importMode == ImportMode.SingleBlock || prepared.hasAnimation)
                 {
                     bool isTransparent = IsTransparentBlock(blockName);
@@ -594,18 +605,17 @@ namespace Box3Blocks.Editor
 
                     if (_importMode == ImportMode.SingleBlock && isTransparent && !prepared.hasAnimation)
                     {
-                        _pendingBlocks?.Add(new PendingBlock(gridPos, rot, prepared, blockName));
+                        _pendingBlocks?.Add(new PendingBlock(gridPos, rot, prepared, blockName, hasLightData, payloadLightColor, payloadLightIntensity, payloadLightRange, payloadLightOffset));
                     }
                     else
                     {
-                        PlaceSingleBlock(prepared, blockName, worldPos, worldRot);
+                        PlaceSingleBlock(prepared, blockName, worldPos, worldRot, null, hasLightData, payloadLightColor, payloadLightIntensity, payloadLightRange, payloadLightOffset, isEmissive);
                         _stats.createdBlocks++;
                     }
                 }
                 else
                 {
                     bool isTransparent = IsTransparentBlock(blockName);
-                    bool isEmissive = IsEmissiveBlock(blockName);
                     Vector3Int gridPos = new Vector3Int(wx, wy, wz);
                     if (_allVoxels != null)
                     {
@@ -632,9 +642,13 @@ namespace Box3Blocks.Editor
                         });
                     }
 
-                    if (_spawnRealtimeLights && isEmissive)
+                    if (ShouldSpawnRealtimeLight(isEmissive, hasLightData))
                     {
-                        bucket.emissiveVoxels.Add(new EmissiveLightVoxel(gridPos, ResolveEmissiveLightColor(blockName)));
+                        Color lightColor = hasLightData ? payloadLightColor : ResolveEmissiveLightColor(blockName);
+                        float lightIntensity = hasLightData ? payloadLightIntensity : 1.05f;
+                        float lightRange = hasLightData ? payloadLightRange : 6f;
+                        Vector3 lightOffset = hasLightData ? payloadLightOffset : Vector3.zero;
+                        bucket.emissiveVoxels.Add(new EmissiveLightVoxel(gridPos, lightColor, lightIntensity, lightRange, lightOffset));
                     }
 
                     if (_addSurfaceCollider && _occupiedVoxels != null && _chunkVoxelPositions != null)
@@ -712,7 +726,18 @@ namespace Box3Blocks.Editor
 
                 Vector3 worldPos = new Vector3(pending.pos.x, pending.pos.y, pending.pos.z);
                 Quaternion worldRot = _rotLookup[pending.rot];
-                PlaceSingleBlock(pending.prepared, pending.blockName, worldPos, worldRot, mesh);
+                PlaceSingleBlock(
+                    pending.prepared,
+                    pending.blockName,
+                    worldPos,
+                    worldRot,
+                    mesh,
+                    pending.hasLightData,
+                    pending.lightColor,
+                    pending.lightIntensity,
+                    pending.lightRange,
+                    pending.lightOffset,
+                    IsEmissiveBlock(pending.blockName));
                 _stats.createdBlocks++;
             }
 
@@ -811,12 +836,12 @@ namespace Box3Blocks.Editor
                     }
                 }
 
-                if (_spawnRealtimeLights && bucket.emissiveVoxels.Count > 0)
+                if (_realtimeLightMode != RealtimeLightMode.None && bucket.emissiveVoxels.Count > 0)
                 {
                     for (int l = 0; l < bucket.emissiveVoxels.Count; l++)
                     {
                         EmissiveLightVoxel lightVoxel = bucket.emissiveVoxels[l];
-                        CreateRealtimeLight(go.transform, lightVoxel.pos, lightVoxel.color);
+                        CreateRealtimeLight(go.transform, lightVoxel.pos + lightVoxel.offset, lightVoxel.color, lightVoxel.intensity, lightVoxel.range);
                         _createdRealtimeLights++;
                     }
                 }
@@ -1007,7 +1032,18 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private void PlaceSingleBlock(PreparedBlock prepared, string blockName, Vector3 position, Quaternion rotation, Mesh overrideMesh = null)
+        private void PlaceSingleBlock(
+            PreparedBlock prepared,
+            string blockName,
+            Vector3 position,
+            Quaternion rotation,
+            Mesh overrideMesh = null,
+            bool hasLightData = false,
+            Color payloadLightColor = default,
+            float payloadLightIntensity = 1.05f,
+            float payloadLightRange = 6f,
+            Vector3 payloadLightOffset = default,
+            bool isEmissive = false)
         {
             Mesh meshToUse = overrideMesh ?? prepared?.mesh;
             if (_importRoot == null || prepared == null || meshToUse == null)
@@ -1078,10 +1114,155 @@ namespace Box3Blocks.Editor
 
             ApplyEmissionForBlockName(mr, blockName);
 
-            if (_spawnRealtimeLights && IsEmissiveBlock(blockName))
+            if (ShouldSpawnRealtimeLight(isEmissive || IsEmissiveBlock(blockName), hasLightData))
             {
-                CreateRealtimeLight(go.transform, Vector3.zero, ResolveEmissiveLightColor(blockName));
+                Color lightColor = hasLightData ? payloadLightColor : ResolveEmissiveLightColor(blockName);
+                float lightIntensity = hasLightData ? payloadLightIntensity : 1.05f;
+                float lightRange = hasLightData ? payloadLightRange : 6f;
+                CreateRealtimeLight(go.transform, payloadLightOffset, lightColor, lightIntensity, lightRange);
                 _createdRealtimeLights++;
+            }
+        }
+
+        private bool ShouldSpawnRealtimeLight(bool isEmissive, bool hasLightData)
+        {
+            switch (_realtimeLightMode)
+            {
+                case RealtimeLightMode.None:
+                    return false;
+                case RealtimeLightMode.AllEmissive:
+                    return isEmissive;
+                case RealtimeLightMode.DataOnly:
+                    return isEmissive && hasLightData;
+                default:
+                    return false;
+            }
+        }
+
+        private bool TryGetPayloadLightData(int voxelArrayIndex, int voxelFlatIndex, out Color color, out float intensity, out float range, out Vector3 offset)
+        {
+            color = Color.white;
+            intensity = 1.05f;
+            range = 6f;
+            offset = Vector3.zero;
+
+            if (_payload == null)
+            {
+                return false;
+            }
+
+            if (_payload.lightIndices != null && _payload.lightIndices.Length > 0)
+            {
+                EnsurePayloadLightLookup();
+                if (_payloadLightByFlatIndex != null && _payloadLightByFlatIndex.TryGetValue(voxelFlatIndex, out PayloadLightData lightData))
+                {
+                    color = lightData.color;
+                    intensity = lightData.intensity;
+                    range = lightData.range;
+                    offset = lightData.offset;
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (_payload.lightFlags == null || voxelArrayIndex < 0 || voxelArrayIndex >= _payload.lightFlags.Length)
+            {
+                return false;
+            }
+
+            if (_payload.lightFlags[voxelArrayIndex] == 0)
+            {
+                return false;
+            }
+
+            if (_payload.lightIntensity != null && voxelArrayIndex < _payload.lightIntensity.Length)
+            {
+                intensity = Mathf.Max(0f, _payload.lightIntensity[voxelArrayIndex]);
+            }
+
+            if (_payload.lightRange != null && voxelArrayIndex < _payload.lightRange.Length)
+            {
+                range = Mathf.Max(0f, _payload.lightRange[voxelArrayIndex]);
+            }
+
+            int c = voxelArrayIndex * 3;
+            if (_payload.lightColorRgb != null && c + 2 < _payload.lightColorRgb.Length)
+            {
+                color = new Color(
+                    Mathf.Clamp01(_payload.lightColorRgb[c]),
+                    Mathf.Clamp01(_payload.lightColorRgb[c + 1]),
+                    Mathf.Clamp01(_payload.lightColorRgb[c + 2]),
+                    1f);
+            }
+
+            int o = voxelArrayIndex * 3;
+            if (_payload.lightOffsetXyz != null && o + 2 < _payload.lightOffsetXyz.Length)
+            {
+                offset = new Vector3(_payload.lightOffsetXyz[o], _payload.lightOffsetXyz[o + 1], _payload.lightOffsetXyz[o + 2]);
+            }
+
+            return true;
+        }
+
+        private void EnsurePayloadLightLookup()
+        {
+            if (_payloadLightByFlatIndex != null)
+            {
+                return;
+            }
+
+            _payloadLightByFlatIndex = new Dictionary<int, PayloadLightData>();
+            if (_payload == null || _payload.lightIndices == null)
+            {
+                return;
+            }
+
+            int count = _payload.lightIndices.Length;
+            for (int i = 0; i < count; i++)
+            {
+                if (_payload.lightFlags != null && i < _payload.lightFlags.Length && _payload.lightFlags[i] == 0)
+                {
+                    continue;
+                }
+
+                int flatIndex = _payload.lightIndices[i];
+                if (_payloadLightByFlatIndex.ContainsKey(flatIndex))
+                {
+                    continue;
+                }
+
+                float intensity = 1.05f;
+                if (_payload.lightIntensity != null && i < _payload.lightIntensity.Length)
+                {
+                    intensity = Mathf.Max(0f, _payload.lightIntensity[i]);
+                }
+
+                float range = 6f;
+                if (_payload.lightRange != null && i < _payload.lightRange.Length)
+                {
+                    range = Mathf.Max(0f, _payload.lightRange[i]);
+                }
+
+                Color color = Color.white;
+                int c = i * 3;
+                if (_payload.lightColorRgb != null && c + 2 < _payload.lightColorRgb.Length)
+                {
+                    color = new Color(
+                        Mathf.Clamp01(_payload.lightColorRgb[c]),
+                        Mathf.Clamp01(_payload.lightColorRgb[c + 1]),
+                        Mathf.Clamp01(_payload.lightColorRgb[c + 2]),
+                        1f);
+                }
+
+                Vector3 offset = Vector3.zero;
+                int o = i * 3;
+                if (_payload.lightOffsetXyz != null && o + 2 < _payload.lightOffsetXyz.Length)
+                {
+                    offset = new Vector3(_payload.lightOffsetXyz[o], _payload.lightOffsetXyz[o + 1], _payload.lightOffsetXyz[o + 2]);
+                }
+
+                _payloadLightByFlatIndex.Add(flatIndex, new PayloadLightData(color, intensity, range, offset));
             }
         }
 
@@ -2138,7 +2319,7 @@ namespace Box3Blocks.Editor
             return new Color(Mathf.Clamp01(r), Mathf.Clamp01(g), Mathf.Clamp01(b), 1f);
         }
 
-        private static void CreateRealtimeLight(Transform parent, Vector3 localPosition, Color color)
+        private static void CreateRealtimeLight(Transform parent, Vector3 localPosition, Color color, float intensity = 1.05f, float range = 6f)
         {
             if (parent == null)
             {
@@ -2151,8 +2332,8 @@ namespace Box3Blocks.Editor
             Light light = lightGo.AddComponent<Light>();
             light.type = LightType.Point;
             light.color = color;
-            light.intensity = 1.05f;
-            light.range = 6f;
+            light.intensity = Mathf.Max(0f, intensity);
+            light.range = Mathf.Max(0f, range);
             light.bounceIntensity = 0f;
             light.shadows = LightShadows.None;
             light.renderMode = LightRenderMode.Auto;
