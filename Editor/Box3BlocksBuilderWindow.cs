@@ -50,6 +50,12 @@ namespace Box3Blocks.Editor
         private GUIStyle _searchFieldStyle;
         private GUIStyle _categoryTabStyle;
         private GUIStyle _categoryTabSelectedStyle;
+        private GUIStyle _toolTabStyle;
+        private GUIStyle _toolTabSelectedStyle;
+        private GUIStyle _insetPanelStyle;
+        private GUIStyle _cardTitleStyle;
+        private GUIStyle _cardSubtitleStyle;
+        private GUIStyle _rotateBadgeStyle;
         private readonly Dictionary<string, Mesh> _staticBlockMeshCache = new Dictionary<string, Mesh>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Texture2D> _blockCardPreviewCache = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, AnimatedPreviewCacheEntry> _animatedBlockCardPreviewCache = new Dictionary<string, AnimatedPreviewCacheEntry>(StringComparer.OrdinalIgnoreCase);
@@ -198,6 +204,61 @@ namespace Box3Blocks.Editor
                 };
                 _categoryTabSelectedStyle.normal.textColor = new Color(0.55f, 1f, 0.65f, 1f);
             }
+
+            if (_toolTabStyle == null)
+            {
+                _toolTabStyle = new GUIStyle(EditorStyles.miniButtonMid)
+                {
+                    fixedHeight = 26f,
+                    fontStyle = FontStyle.Bold
+                };
+            }
+
+            if (_toolTabSelectedStyle == null)
+            {
+                _toolTabSelectedStyle = new GUIStyle(_toolTabStyle);
+                _toolTabSelectedStyle.normal.textColor = new Color(0.62f, 0.8f, 1f, 1f);
+            }
+
+            if (_insetPanelStyle == null)
+            {
+                _insetPanelStyle = new GUIStyle("HelpBox")
+                {
+                    padding = new RectOffset(8, 8, 8, 8),
+                    margin = new RectOffset(0, 0, 0, 0)
+                };
+            }
+
+            if (_cardTitleStyle == null)
+            {
+                _cardTitleStyle = new GUIStyle(EditorStyles.label)
+                {
+                    alignment = TextAnchor.UpperCenter,
+                    wordWrap = true,
+                    fontSize = 12,
+                    fontStyle = FontStyle.Bold
+                };
+            }
+
+            if (_cardSubtitleStyle == null)
+            {
+                _cardSubtitleStyle = new GUIStyle(EditorStyles.miniLabel)
+                {
+                    alignment = TextAnchor.UpperCenter,
+                    wordWrap = true
+                };
+                _cardSubtitleStyle.normal.textColor = new Color(0.78f, 0.78f, 0.78f, 1f);
+            }
+
+            if (_rotateBadgeStyle == null)
+            {
+                _rotateBadgeStyle = new GUIStyle(EditorStyles.miniButton)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = FontStyle.Bold,
+                    fontSize = 10
+                };
+            }
         }
 
         private void DrawSection(string title, Action body)
@@ -231,26 +292,30 @@ namespace Box3Blocks.Editor
 
         private void DrawToolSection()
         {
-            _tool = (EditTool)GUILayout.Toolbar((int)_tool, new[] { L("tool.place"), L("tool.erase"), L("tool.replace"), L("tool.rotate") });
+            DrawToolTabs();
             EditorGUILayout.Space(4f);
 
-            using (new EditorGUILayout.HorizontalScope())
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
-                EditorGUILayout.LabelField(L("tool.horizontal"), _subtleLabelStyle, GUILayout.Width(104f));
-                int horizontalInput = Mathf.Max(1, EditorGUILayout.IntField(_brushHorizontalSize, GUILayout.Width(52f)));
-                float horizontalSliderMax = Mathf.Max(16f, horizontalInput);
-                _brushHorizontalSize = Mathf.Max(1, Mathf.RoundToInt(GUILayout.HorizontalSlider(horizontalInput, 1f, horizontalSliderMax)));
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField(L("tool.horizontal"), _subtleLabelStyle, GUILayout.Width(104f));
+                    int horizontalInput = Mathf.Max(1, EditorGUILayout.IntField(_brushHorizontalSize, GUILayout.Width(52f)));
+                    float horizontalSliderMax = Mathf.Max(16f, horizontalInput);
+                    _brushHorizontalSize = Mathf.Max(1, Mathf.RoundToInt(GUILayout.HorizontalSlider(horizontalInput, 1f, horizontalSliderMax)));
+                }
+
+                EditorGUILayout.Space(2f);
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField(L("tool.height"), _subtleLabelStyle, GUILayout.Width(104f));
+                    int heightInput = Mathf.Max(1, EditorGUILayout.IntField(_brushHeight, GUILayout.Width(52f)));
+                    float heightSliderMax = Mathf.Max(16f, heightInput);
+                    _brushHeight = Mathf.Max(1, Mathf.RoundToInt(GUILayout.HorizontalSlider(heightInput, 1f, heightSliderMax)));
+                }
             }
 
-            EditorGUILayout.Space(2f);
-
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.LabelField(L("tool.height"), _subtleLabelStyle, GUILayout.Width(70f));
-                int heightInput = Mathf.Max(1, EditorGUILayout.IntField(_brushHeight, GUILayout.Width(52f)));
-                float heightSliderMax = Mathf.Max(16f, heightInput);
-                _brushHeight = Mathf.Max(1, Mathf.RoundToInt(GUILayout.HorizontalSlider(heightInput, 1f, heightSliderMax)));
-            }
             EditorGUILayout.LabelField(Lf("tool.brush_volume", _brushHorizontalSize, _brushHorizontalSize, _brushHeight), _subtleLabelStyle);
 
             if (_root == null)
@@ -261,37 +326,40 @@ namespace Box3Blocks.Editor
 
         private void DrawBlockListSection()
         {
-            using (new EditorGUILayout.HorizontalScope())
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
-                string newSearch = EditorGUILayout.TextField(L("library.search"), _search, _searchFieldStyle);
-                if (!string.Equals(newSearch, _search, StringComparison.Ordinal))
+                using (new EditorGUILayout.HorizontalScope())
                 {
-                    _search = newSearch;
-                    ApplyFilter();
-                }
-            }
-
-            EditorGUILayout.Space(4f);
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                if (_categories.Count > 0)
-                {
-                    DrawCategoryTabsSidebar();
-                    GUILayout.Space(6f);
+                    string newSearch = EditorGUILayout.TextField(L("library.search"), _search, _searchFieldStyle);
+                    if (!string.Equals(newSearch, _search, StringComparison.Ordinal))
+                    {
+                        _search = newSearch;
+                        ApplyFilter();
+                    }
                 }
 
-                using (new EditorGUILayout.VerticalScope())
+                EditorGUILayout.Space(6f);
+                using (new EditorGUILayout.HorizontalScope())
                 {
-                    float rightPaneWidth = Mathf.Max(220f, position.width - (_categories.Count > 0 ? 98f : 32f));
-                    int columns = CalculateColumnCount(rightPaneWidth);
-                    _scroll = GUILayout.BeginScrollView(
-                        _scroll,
-                        false,
-                        true,
-                        GUIStyle.none,
-                        GUI.skin.verticalScrollbar);
-                    DrawBlockGrid(columns, rightPaneWidth - 16f);
-                    EditorGUILayout.EndScrollView();
+                    if (_categories.Count > 0)
+                    {
+                        DrawCategoryTabsSidebar();
+                        GUILayout.Space(8f);
+                    }
+
+                    using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
+                    {
+                        float rightPaneWidth = Mathf.Max(220f, position.width - (_categories.Count > 0 ? 158f : 34f));
+                        int columns = CalculateColumnCount(rightPaneWidth);
+                        _scroll = GUILayout.BeginScrollView(
+                            _scroll,
+                            false,
+                            true,
+                            GUIStyle.none,
+                            GUI.skin.verticalScrollbar);
+                        DrawBlockGrid(columns, rightPaneWidth - 20f);
+                        EditorGUILayout.EndScrollView();
+                    }
                 }
             }
 
@@ -300,15 +368,18 @@ namespace Box3Blocks.Editor
 
         private void DrawBlockGrid(int columns, float availableWidth)
         {
+            const float gap = 4f;
             float safeWidth = Mathf.Max(120f, availableWidth);
-            float cellWidth = Mathf.Max(120f, safeWidth / Mathf.Max(1, columns));
+            int clampedColumns = Mathf.Max(1, columns);
+            float totalGap = (clampedColumns - 1) * gap;
+            float cellWidth = Mathf.Max(120f, (safeWidth - totalGap) / clampedColumns);
 
             int index = 0;
             while (index < _filteredBlocks.Count)
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    for (int c = 0; c < columns; c++)
+                    for (int c = 0; c < clampedColumns; c++)
                     {
                         if (index < _filteredBlocks.Count)
                         {
@@ -319,8 +390,15 @@ namespace Box3Blocks.Editor
                         {
                             GUILayout.Space(cellWidth);
                         }
+
+                        if (c < clampedColumns - 1)
+                        {
+                            GUILayout.Space(gap);
+                        }
                     }
                 }
+
+                GUILayout.Space(gap);
             }
         }
 
@@ -345,13 +423,13 @@ namespace Box3Blocks.Editor
             string title = Box3BlocksI18n.GetBlockDisplayName(block.id, fallbackTitle);
             string categoryLabel = LocalizeCategoryLabel(block.category);
             string subtitle = string.IsNullOrWhiteSpace(info) ? categoryLabel : $"{categoryLabel} | {info}";
-            GUIStyle cardStyle = new GUIStyle(EditorStyles.miniButton)
+            GUIStyle cardStyle = new GUIStyle("HelpBox")
             {
-                fixedHeight = Mathf.Max(132f, PreviewSize + 60f),
+                fixedHeight = Mathf.Max(136f, PreviewSize + 68f),
                 wordWrap = true,
                 alignment = TextAnchor.UpperCenter,
                 fontSize = 11,
-                padding = new RectOffset(6, 6, 8, 6)
+                padding = new RectOffset(6, 6, 8, 8)
             };
 
             Rect rect = GUILayoutUtility.GetRect(width, cardStyle.fixedHeight, GUILayout.Width(width), GUILayout.Height(cardStyle.fixedHeight));
@@ -369,19 +447,17 @@ namespace Box3Blocks.Editor
                 GUI.DrawTexture(previewRect, cardPreview, ScaleMode.ScaleToFit, true);
             }
 
-            Rect textRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, rect.height - (PreviewSize + 20f));
-            GUIStyle textStyle = new GUIStyle(EditorStyles.label)
-            {
-                alignment = TextAnchor.UpperCenter,
-                wordWrap = true,
-                fontSize = 11
-            };
+            Rect titleRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, 34f);
+            Rect subtitleRect = new Rect(rect.x + 6f, previewRect.yMax + 36f, rect.width - 12f, rect.height - (PreviewSize + 46f));
+            GUIStyle titleStyle = new GUIStyle(_cardTitleStyle);
+            GUIStyle subtitleStyle = new GUIStyle(_cardSubtitleStyle);
             if (_selectedIndex == index)
             {
-                textStyle.normal.textColor = new Color(0.78f, 1f, 0.8f, 1f);
-                textStyle.fontStyle = FontStyle.Bold;
+                titleStyle.normal.textColor = new Color(0.78f, 1f, 0.8f, 1f);
+                subtitleStyle.normal.textColor = new Color(0.68f, 0.95f, 0.72f, 1f);
             }
-            EditorGUI.LabelField(textRect, $"{title}\n{subtitle}", textStyle);
+            EditorGUI.LabelField(titleRect, title, titleStyle);
+            EditorGUI.LabelField(subtitleRect, subtitle, subtitleStyle);
 
             if (_selectedIndex == index)
             {
@@ -428,13 +504,13 @@ namespace Box3Blocks.Editor
             Rect buttonRect = new Rect(cardRect.xMax - 48f, cardRect.y + 6f, 42f, 18f);
             if (block == null)
             {
-                GUI.Box(buttonRect, "R0", EditorStyles.miniButton);
+                GUI.Box(buttonRect, "R0", _rotateBadgeStyle);
                 return buttonRect;
             }
 
             int degrees = (block.placementRotationQuarter & 3) * 90;
             string label = Lf("card.rotate_badge", degrees);
-            GUI.Box(buttonRect, label, EditorStyles.miniButton);
+            GUI.Box(buttonRect, label, _rotateBadgeStyle);
             return buttonRect;
         }
 
@@ -450,14 +526,14 @@ namespace Box3Blocks.Editor
             EditorGUI.DrawRect(new Rect(rect.x, rect.y, t, rect.height), border);
             EditorGUI.DrawRect(new Rect(rect.xMax - t, rect.y, t, rect.height), border);
 
-            Rect badgeRect = new Rect(rect.x + 6f, rect.y + 6f, 62f, 16f);
-            EditorGUI.DrawRect(badgeRect, new Color(0.05f, 0.18f, 0.08f, 0.95f));
-            EditorGUI.LabelField(badgeRect, L("card.selected"), new GUIStyle(EditorStyles.miniLabel)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = new Color(0.5f, 1f, 0.55f, 1f) },
-                fontStyle = FontStyle.Bold
-            });
+            // Rect badgeRect = new Rect(rect.x + 6f, rect.y + 6f, 62f, 16f);
+            // EditorGUI.DrawRect(badgeRect, new Color(0.05f, 0.18f, 0.08f, 0.95f));
+            // EditorGUI.LabelField(badgeRect, L("card.selected"), new GUIStyle(EditorStyles.miniLabel)
+            // {
+            //     alignment = TextAnchor.MiddleCenter,
+            //     normal = { textColor = new Color(0.5f, 1f, 0.55f, 1f) },
+            //     fontStyle = FontStyle.Bold
+            // });
         }
 
         private int CalculateColumnCount(float availableWidth)
@@ -468,9 +544,9 @@ namespace Box3Blocks.Editor
 
         private void DrawCategoryTabsSidebar()
         {
-            using (new EditorGUILayout.VerticalScope(GUILayout.Width(92f)))
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle, GUILayout.Width(90f)))
             {
-                _categoryScroll = EditorGUILayout.BeginScrollView(_categoryScroll, GUILayout.Width(92f), GUILayout.ExpandHeight(true));
+                _categoryScroll = EditorGUILayout.BeginScrollView(_categoryScroll, GUILayout.Width(80f), GUILayout.ExpandHeight(true));
                 for (int i = 0; i < _categories.Count; i++)
                 {
                     string categoryKey = _categories[i];
@@ -478,7 +554,7 @@ namespace Box3Blocks.Editor
 
                     bool selected = i == _selectedCategory;
                     GUIStyle style = selected ? _categoryTabSelectedStyle : _categoryTabStyle;
-                    bool clicked = GUILayout.Toggle(selected, label, style, GUILayout.Width(80f), GUILayout.Height(24f));
+                    bool clicked = GUILayout.Toggle(selected, label, style, GUILayout.Width(74f), GUILayout.Height(24f));
                     if (clicked && !selected)
                     {
                         _selectedCategory = i;
@@ -487,6 +563,23 @@ namespace Box3Blocks.Editor
                 }
 
                 EditorGUILayout.EndScrollView();
+            }
+        }
+
+        private void DrawToolTabs()
+        {
+            string[] labels = { L("tool.place"), L("tool.erase"), L("tool.replace"), L("tool.rotate") };
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                for (int i = 0; i < labels.Length; i++)
+                {
+                    bool selected = (int)_tool == i;
+                    GUIStyle style = selected ? _toolTabSelectedStyle : _toolTabStyle;
+                    if (GUILayout.Toggle(selected, labels[i], style, GUILayout.Height(26f)))
+                    {
+                        _tool = (EditTool)i;
+                    }
+                }
             }
         }
 

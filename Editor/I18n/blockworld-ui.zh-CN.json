@@ -63,6 +63,9 @@
       "value": "导出完成。方块数: {0}，跳过未知: {1}"
     },
     { "key": "voxel.option.ignore_barrier", "value": "忽略屏障方块" },
+    { "key": "voxel.group.general", "value": "通用选项" },
+    { "key": "voxel.group.chunk", "value": "Chunk 选项" },
+    { "key": "voxel.group.performance", "value": "性能选项" },
     { "key": "voxel.option.import_mode", "value": "导入模式" },
     { "key": "voxel.mode.chunk", "value": "Chunk（推荐）" },
     { "key": "voxel.mode.single_block", "value": "单个方块（可编辑）" },
@@ -82,6 +85,7 @@
       "value": "Chunk 使用 Alpha Clip（修复透明伪影）"
     },
     { "key": "voxel.option.alpha_cutoff", "value": "Chunk Alpha 阈值" },
+    { "key": "voxel.option.spawn_realtime_lights", "value": "生成实时点光源（发光方块）" },
     { "key": "voxel.option.voxels_per_tick", "value": "每 Tick 方块数" },
 
     { "key": "voxel.run.import", "value": "导入" },

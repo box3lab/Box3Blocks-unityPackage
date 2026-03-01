@@ -32,7 +32,10 @@ namespace Box3Blocks.Editor
         private GUIStyle _sectionBoxStyle;
         private GUIStyle _sectionTitleStyle;
         private GUIStyle _primaryButtonStyle;
+        private GUIStyle _dangerButtonStyle;
         private GUIStyle _textFieldStyle;
+        private GUIStyle _subtleLabelStyle;
+        private GUIStyle _insetPanelStyle;
 
         [MenuItem("Box3/地形导出", false, 21)]
         public static void Open()
@@ -90,9 +93,36 @@ namespace Box3Blocks.Editor
                 };
             }
 
+            if (_dangerButtonStyle == null)
+            {
+                _dangerButtonStyle = new GUIStyle(EditorStyles.miniButton)
+                {
+                    fixedHeight = 24f
+                };
+                _dangerButtonStyle.normal.textColor = new Color(1f, 0.56f, 0.56f, 1f);
+                _dangerButtonStyle.hover.textColor = new Color(1f, 0.66f, 0.66f, 1f);
+            }
+
             if (_textFieldStyle == null)
             {
                 _textFieldStyle = new GUIStyle(EditorStyles.textField) { fixedHeight = 22f };
+            }
+
+            if (_subtleLabelStyle == null)
+            {
+                _subtleLabelStyle = new GUIStyle(EditorStyles.miniLabel)
+                {
+                    normal = { textColor = new Color(0.72f, 0.72f, 0.72f, 1f) }
+                };
+            }
+
+            if (_insetPanelStyle == null)
+            {
+                _insetPanelStyle = new GUIStyle("HelpBox")
+                {
+                    padding = new RectOffset(8, 8, 8, 8),
+                    margin = new RectOffset(0, 0, 0, 0)
+                };
             }
         }
 
@@ -108,43 +138,65 @@ namespace Box3Blocks.Editor
 
         private void DrawExportSection()
         {
-            _exportRoot = (Transform)EditorGUILayout.ObjectField(L("voxel.export.root"), _exportRoot, typeof(Transform), true);
-            using (new EditorGUILayout.HorizontalScope())
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
-                _exportGzPath = EditorGUILayout.TextField(L("voxel.export.gz_file"), _exportGzPath, _textFieldStyle);
-                if (GUILayout.Button(L("voxel.export.browse"), GUILayout.Width(78f)))
+                _exportRoot = (Transform)EditorGUILayout.ObjectField(L("voxel.export.root"), _exportRoot, typeof(Transform), true);
+
+                using (new EditorGUILayout.HorizontalScope())
                 {
-                    string initialDir = Application.dataPath;
-                    if (!string.IsNullOrWhiteSpace(_exportGzPath))
+                    _exportGzPath = EditorGUILayout.TextField(L("voxel.export.gz_file"), _exportGzPath, _textFieldStyle);
+                    if (GUILayout.Button(L("voxel.export.browse"), GUILayout.Width(78f)))
                     {
-                        string dir = Path.GetDirectoryName(_exportGzPath);
-                        if (!string.IsNullOrWhiteSpace(dir))
+                        string initialDir = Application.dataPath;
+                        if (!string.IsNullOrWhiteSpace(_exportGzPath))
                         {
-                            initialDir = dir;
+                            string dir = Path.GetDirectoryName(_exportGzPath);
+                            if (!string.IsNullOrWhiteSpace(dir))
+                            {
+                                initialDir = dir;
+                            }
+                        }
+
+                        string selected = EditorUtility.SaveFilePanel(
+                            L("voxel.export.select_file"),
+                            initialDir,
+                            "voxel-export",
+                            "gz");
+                        if (!string.IsNullOrWhiteSpace(selected))
+                        {
+                            _exportGzPath = selected;
                         }
                     }
+                }
 
-                    string selected = EditorUtility.SaveFilePanel(
-                        L("voxel.export.select_file"),
-                        initialDir,
-                        "voxel-export",
-                        "gz");
-                    if (!string.IsNullOrWhiteSpace(selected))
+                string previewPath = string.IsNullOrWhiteSpace(_exportGzPath) ? "-" : _exportGzPath;
+                EditorGUILayout.LabelField(previewPath, _subtleLabelStyle);
+
+                EditorGUILayout.Space(4f);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUI.BeginDisabledGroup(_exportRoot == null);
+                    if (GUILayout.Button(L("voxel.export.run"), _primaryButtonStyle))
                     {
-                        _exportGzPath = selected;
+                        ExportGz();
+                    }
+                    EditorGUI.EndDisabledGroup();
+
+                    if (GUILayout.Button(L("voxel.run.cancel"), _dangerButtonStyle))
+                    {
+                        _exportGzPath = string.Empty;
+                        _status = string.Empty;
                     }
                 }
-            }
-
-            if (GUILayout.Button(L("voxel.export.run"), _primaryButtonStyle))
-            {
-                ExportGz();
             }
         }
 
         private void DrawStatusSection()
         {
-            EditorGUILayout.HelpBox(string.IsNullOrWhiteSpace(_status) ? "-" : _status, MessageType.None);
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
+            {
+                EditorGUILayout.HelpBox(string.IsNullOrWhiteSpace(_status) ? "-" : _status, MessageType.None);
+            }
         }
 
         private void ExportGz()

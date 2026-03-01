@@ -213,6 +213,18 @@
       "value": "Ignore Barrier blocks"
     },
     {
+      "key": "voxel.group.general",
+      "value": "General"
+    },
+    {
+      "key": "voxel.group.chunk",
+      "value": "Chunk"
+    },
+    {
+      "key": "voxel.group.performance",
+      "value": "Performance"
+    },
+    {
       "key": "voxel.option.import_mode",
       "value": "Import Mode"
     },
@@ -251,6 +263,10 @@
     {
       "key": "voxel.option.alpha_cutoff",
       "value": "Chunk Alpha Cutoff"
+    },
+    {
+      "key": "voxel.option.spawn_realtime_lights",
+      "value": "Spawn Realtime Point Lights (Emissive Blocks)"
     },
     {
       "key": "voxel.option.voxels_per_tick",

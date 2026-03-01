@@ -109,6 +109,8 @@ namespace Box3Blocks.Editor
         private GUIStyle _primaryButtonStyle;
         private GUIStyle _dangerButtonStyle;
         private GUIStyle _textFieldStyle;
+        private GUIStyle _insetPanelStyle;
+        private GUIStyle _optionsGroupTitleStyle;
 
         private VoxelPayload _payload;
         private Dictionary<int, string> _idToName;
@@ -166,6 +168,17 @@ namespace Box3Blocks.Editor
         private static string L(string key)
         {
             return Box3BlocksI18n.Get(key);
+        }
+
+        private static string LOr(string key, string fallback)
+        {
+            string value = L(key);
+            if (string.IsNullOrWhiteSpace(value) || string.Equals(value, key, StringComparison.Ordinal))
+            {
+                return fallback;
+            }
+
+            return value;
         }
 
         private static string Lf(string key, params object[] args)
@@ -226,6 +239,24 @@ namespace Box3Blocks.Editor
                     fixedHeight = 22f
                 };
             }
+
+            if (_insetPanelStyle == null)
+            {
+                _insetPanelStyle = new GUIStyle("HelpBox")
+                {
+                    padding = new RectOffset(8, 8, 8, 8),
+                    margin = new RectOffset(0, 0, 0, 0)
+                };
+            }
+
+            if (_optionsGroupTitleStyle == null)
+            {
+                _optionsGroupTitleStyle = new GUIStyle(EditorStyles.miniBoldLabel)
+                {
+                    normal = { textColor = new Color(0.78f, 0.86f, 0.98f, 1f) }
+                };
+            }
+
         }
 
         private void DrawSection(string title, Action body)
@@ -240,85 +271,104 @@ namespace Box3Blocks.Editor
 
         private void DrawSourceSection()
         {
-            int sourceIndex = (int)_sourceType;
-            sourceIndex = EditorGUILayout.Popup(L("voxel.source.mode"), sourceIndex, new[] { L("voxel.source.local"), L("voxel.source.url") });
-            _sourceType = (SourceType)Mathf.Clamp(sourceIndex, 0, 1);
-
-            if (_sourceType == SourceType.LocalFile)
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
-                using (new EditorGUILayout.HorizontalScope())
+                int sourceIndex = (int)_sourceType;
+                sourceIndex = EditorGUILayout.Popup(L("voxel.source.mode"), sourceIndex, new[] { L("voxel.source.local"), L("voxel.source.url") });
+                _sourceType = (SourceType)Mathf.Clamp(sourceIndex, 0, 1);
+
+                if (_sourceType == SourceType.LocalFile)
                 {
-                    _localGzPath = EditorGUILayout.TextField(L("voxel.source.gz_file"), _localGzPath, _textFieldStyle);
-                    if (GUILayout.Button(L("voxel.source.browse"), GUILayout.Width(78f)))
+                    using (new EditorGUILayout.HorizontalScope())
                     {
-                        string selected = EditorUtility.OpenFilePanel(L("voxel.source.select_file"), Application.dataPath, "gz");
-                        if (!string.IsNullOrWhiteSpace(selected))
+                        _localGzPath = EditorGUILayout.TextField(L("voxel.source.gz_file"), _localGzPath, _textFieldStyle);
+                        if (GUILayout.Button(L("voxel.source.browse"), GUILayout.Width(78f)))
                         {
-                            _localGzPath = selected;
+                            string selected = EditorUtility.OpenFilePanel(L("voxel.source.select_file"), Application.dataPath, "gz");
+                            if (!string.IsNullOrWhiteSpace(selected))
+                            {
+                                _localGzPath = selected;
+                            }
                         }
                     }
                 }
-            }
-            else
-            {
-                _url = EditorGUILayout.TextField(L("voxel.source.url_value"), _url, _textFieldStyle);
-            }
-
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                _parent = (Transform)EditorGUILayout.ObjectField(L("voxel.source.parent"), _parent, typeof(Transform), true);
-                EditorGUI.BeginDisabledGroup(_phase != Phase.Idle);
-                if (GUILayout.Button(L("voxel.source.create_root"), GUILayout.Width(96f)))
+                else
                 {
-                    GameObject parentGo = new GameObject("VoxelImportRoot");
-                    Undo.RegisterCreatedObjectUndo(parentGo, "Create Voxel Import Root");
-                    _parent = parentGo.transform;
-                    Selection.activeObject = parentGo;
+                    _url = EditorGUILayout.TextField(L("voxel.source.url_value"), _url, _textFieldStyle);
                 }
-                EditorGUI.EndDisabledGroup();
+
+                EditorGUILayout.Space(2f);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    _parent = (Transform)EditorGUILayout.ObjectField(L("voxel.source.parent"), _parent, typeof(Transform), true);
+                    EditorGUI.BeginDisabledGroup(_phase != Phase.Idle);
+                    if (GUILayout.Button(L("voxel.source.create_root"), GUILayout.Width(96f)))
+                    {
+                        GameObject parentGo = new GameObject("VoxelImportRoot");
+                        Undo.RegisterCreatedObjectUndo(parentGo, "Create Voxel Import Root");
+                        _parent = parentGo.transform;
+                        Selection.activeObject = parentGo;
+                    }
+                    EditorGUI.EndDisabledGroup();
+                }
+
+                _origin = EditorGUILayout.Vector3IntField(L("voxel.source.origin"), _origin);
             }
-            _origin = EditorGUILayout.Vector3IntField(L("voxel.source.origin"), _origin);
         }
 
         private void DrawOptionsSection()
         {
-            _ignoreBarrier = EditorGUILayout.ToggleLeft(L("voxel.option.ignore_barrier"), _ignoreBarrier);
-            int modeIndex = EditorGUILayout.Popup(
-                L("voxel.option.import_mode"),
-                (int)_importMode,
-                new[] { L("voxel.mode.chunk"), L("voxel.mode.single_block") });
-            _importMode = (ImportMode)Mathf.Clamp(modeIndex, 0, 1);
-            _clearPrevious = EditorGUILayout.ToggleLeft(L("voxel.option.replace_previous"), _clearPrevious);
-            EditorGUI.BeginDisabledGroup(_importMode != ImportMode.Chunk);
-            _addSurfaceCollider = EditorGUILayout.ToggleLeft(L("voxel.option.surface_collider"), _addSurfaceCollider);
-            _addMeshCollider = EditorGUILayout.ToggleLeft(L("voxel.option.mesh_collider"), _addMeshCollider);
-            _chunkSize = Mathf.Max(1, EditorGUILayout.IntField(L("voxel.option.chunk_size"), _chunkSize));
-            _chunksPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.chunks_per_tick"), _chunksPerTick), 1, 64);
-            _chunkUseAlphaClip = EditorGUILayout.ToggleLeft(L("voxel.option.alpha_clip"), _chunkUseAlphaClip);
-            _chunkAlphaCutoff = Mathf.Clamp01(EditorGUILayout.Slider(L("voxel.option.alpha_cutoff"), _chunkAlphaCutoff, 0.01f, 0.9f));
-            EditorGUI.EndDisabledGroup();
-            _spawnRealtimeLights = EditorGUILayout.ToggleLeft(L("voxel.option.spawn_realtime_lights"), _spawnRealtimeLights);
-            _voxelsPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.voxels_per_tick"), _voxelsPerTick), 2000, 200000);
-         
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
+            {
+                EditorGUILayout.LabelField(LOr("voxel.group.general", "通用选项"), _optionsGroupTitleStyle);
+                _ignoreBarrier = EditorGUILayout.ToggleLeft(L("voxel.option.ignore_barrier"), _ignoreBarrier);
+                int modeIndex = EditorGUILayout.Popup(
+                    L("voxel.option.import_mode"),
+                    (int)_importMode,
+                    new[] { L("voxel.mode.chunk"), L("voxel.mode.single_block") });
+                _importMode = (ImportMode)Mathf.Clamp(modeIndex, 0, 1);
+                _clearPrevious = EditorGUILayout.ToggleLeft(L("voxel.option.replace_previous"), _clearPrevious);
+                _spawnRealtimeLights = EditorGUILayout.ToggleLeft(
+                    LOr("voxel.option.spawn_realtime_lights", "生成实时点光源（发光方块）"),
+                    _spawnRealtimeLights);
+
+                EditorGUILayout.Space(6f);
+                EditorGUILayout.LabelField(LOr("voxel.group.chunk", "Chunk 选项"), _optionsGroupTitleStyle);
+                EditorGUI.BeginDisabledGroup(_importMode != ImportMode.Chunk);
+                _addSurfaceCollider = EditorGUILayout.ToggleLeft(L("voxel.option.surface_collider"), _addSurfaceCollider);
+                _addMeshCollider = EditorGUILayout.ToggleLeft(L("voxel.option.mesh_collider"), _addMeshCollider);
+                _chunkSize = Mathf.Max(1, EditorGUILayout.IntField(L("voxel.option.chunk_size"), _chunkSize));
+                _chunksPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.chunks_per_tick"), _chunksPerTick), 1, 64);
+                _chunkUseAlphaClip = EditorGUILayout.ToggleLeft(L("voxel.option.alpha_clip"), _chunkUseAlphaClip);
+                _chunkAlphaCutoff = Mathf.Clamp01(EditorGUILayout.Slider(L("voxel.option.alpha_cutoff"), _chunkAlphaCutoff, 0.01f, 0.9f));
+                EditorGUI.EndDisabledGroup();
+
+                EditorGUILayout.Space(6f);
+                EditorGUILayout.LabelField(LOr("voxel.group.performance", "性能选项"), _optionsGroupTitleStyle);
+                _voxelsPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.voxels_per_tick"), _voxelsPerTick), 2000, 200000);
+            }
         }
 
         private void DrawRunSection()
         {
-            using (new EditorGUILayout.HorizontalScope())
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
-                EditorGUI.BeginDisabledGroup(_phase != Phase.Idle);
-                if (GUILayout.Button(L("voxel.run.import"), _primaryButtonStyle))
+                using (new EditorGUILayout.HorizontalScope())
                 {
-                    StartImport();
-                }
-                EditorGUI.EndDisabledGroup();
+                    EditorGUI.BeginDisabledGroup(_phase != Phase.Idle);
+                    if (GUILayout.Button(L("voxel.run.import"), _primaryButtonStyle))
+                    {
+                        StartImport();
+                    }
+                    EditorGUI.EndDisabledGroup();
 
-                EditorGUI.BeginDisabledGroup(_phase == Phase.Idle);
-                if (GUILayout.Button(L("voxel.run.cancel"), _dangerButtonStyle))
-                {
-                    CancelImport();
+                    EditorGUI.BeginDisabledGroup(_phase == Phase.Idle);
+                    if (GUILayout.Button(L("voxel.run.cancel"), _dangerButtonStyle))
+                    {
+                        CancelImport();
+                    }
+                    EditorGUI.EndDisabledGroup();
                 }
-                EditorGUI.EndDisabledGroup();
             }
         }
 
@@ -362,9 +412,12 @@ namespace Box3Blocks.Editor
 
         private void DrawStatusSection()
         {
-            EditorGUILayout.HelpBox(_status, MessageType.None);
-            Rect r = GUILayoutUtility.GetRect(1f, 20f, GUILayout.ExpandWidth(true));
-            EditorGUI.ProgressBar(r, Mathf.Clamp01(_progress), Lf("voxel.status.percent", Mathf.RoundToInt(_progress * 100f)));
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
+            {
+                EditorGUILayout.HelpBox(_status, MessageType.None);
+                Rect r = GUILayoutUtility.GetRect(1f, 20f, GUILayout.ExpandWidth(true));
+                EditorGUI.ProgressBar(r, Mathf.Clamp01(_progress), Lf("voxel.status.percent", Mathf.RoundToInt(_progress * 100f)));
+            }
         }
 
         private void StartImport()
