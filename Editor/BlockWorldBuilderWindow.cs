@@ -14,9 +14,9 @@ namespace BlockWorldMVP.Editor
         private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
         private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
         private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
-        private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
-        private const string GeneratedMeshFolder = "Assets/BlockWorldGenerated/Meshes";
-        private const string VoxelImportChunkOpaqueMaterialPath = "Assets/BlockWorldGenerated/Materials/VoxelImport_ChunkOpaque.mat";
+        private const string GeneratedMaterialFolder = "Assets/Box3/Materials";
+        private const string GeneratedMeshFolder = "Assets/Box3/Meshes";
+        private const string VoxelImportChunkOpaqueMaterialPath = "Assets/Box3/Materials/M_Block.mat";
         private const string CategoryAll = "All";
         private const string CategoryRecent = "Recent";
         private const string CategoryUncategorized = "Uncategorized";
@@ -52,7 +52,7 @@ namespace BlockWorldMVP.Editor
         private PreviewRenderUtility _blockCardPreviewUtility;
         private double _nextAnimatedPreviewRepaintTime;
 
-        [MenuItem("Box3/Block Library", false, 0)]
+        [MenuItem("Box3/方块库", false, 0)]
         public static void Open()
         {
             GetWindow<BlockWorldBuilderWindow>(L("window.title"));
@@ -1053,7 +1053,7 @@ namespace BlockWorldMVP.Editor
             Shader shader = Shader.Find("Standard");
             if (shader == null)
             {
-                Material fallback = new Material(atlasSource) { name = "VoxelImport_ChunkOpaque" };
+                Material fallback = new Material(atlasSource) { name = "M_Block" };
                 fallback.renderQueue = (int)RenderQueue.Geometry;
                 fallback.SetInt("_ZWrite", 1);
                 ApplyMapsToOpaque(fallback);
@@ -1062,7 +1062,7 @@ namespace BlockWorldMVP.Editor
                 return fallback;
             }
 
-            Material material = new Material(shader) { name = "VoxelImport_ChunkOpaque" };
+            Material material = new Material(shader) { name = "M_Block" };
             material.mainTexture = atlasSource.mainTexture;
             material.SetFloat("_Mode", 0f);
             material.SetInt("_SrcBlend", (int)BlendMode.One);

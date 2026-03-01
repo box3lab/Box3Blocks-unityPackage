@@ -11,12 +11,11 @@
   "category": "Tools",
   "repository": {
     "type": "git",
-    "url": "https://github.com/box3lab/Box3-Unity-Package.git"
+    "url": "https://github.com/box3lab/Box3Blocks-unityPackage.git"
   },
   "bugs": {
-    "url": "https://github.com/box3lab/Box3-Unity-Package/issues"
+    "url": "https://github.com/box3lab/Box3Blocks-unityPackage/issues"
   },
-  "homepage": "https://github.com/box3lab/Box3-Unity-Package",
   "author": {
     "name": "神岛实验室"
   }

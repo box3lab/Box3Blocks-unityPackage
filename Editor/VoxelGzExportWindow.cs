@@ -66,7 +66,7 @@ namespace BlockWorldMVP.Editor
         private GUIStyle _primaryButtonStyle;
         private GUIStyle _textFieldStyle;
 
-        [MenuItem("Box3/Terrain Export", false, 21)]
+        [MenuItem("Box3/地形导出", false, 21)]
         public static void Open()
         {
             GetWindow<VoxelGzExportWindow>(L("voxel.export.window.title"));

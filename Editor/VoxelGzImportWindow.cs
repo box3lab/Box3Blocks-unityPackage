@@ -18,9 +18,9 @@ namespace BlockWorldMVP.Editor
         private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
         private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
         private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
-        private const string GeneratedMeshFolder = "Assets/BlockWorldGenerated/Meshes/VoxelImport";
-        private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
-        private const string ChunkOpaqueMaterialPath = "Assets/BlockWorldGenerated/Materials/VoxelImport_ChunkOpaque.mat";
+        private const string GeneratedMeshFolder = "Assets/Box3/Meshes/Import";
+        private const string GeneratedMaterialFolder = "Assets/Box3/Materials";
+        private const string ChunkOpaqueMaterialPath = "Assets/Box3/Materials/M_Block.mat";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
         private static readonly Vector3[] FaceNormals =
         {
@@ -264,7 +264,7 @@ namespace BlockWorldMVP.Editor
         private HashSet<Vector3Int> _allVoxels;
         private List<PendingBlock> _pendingBlocks;
 
-        [MenuItem("Box3/Terrain Import", false, 20)]
+        [MenuItem("Box3/地形导入", false, 20)]
         public static void Open()
         {
             GetWindow<VoxelGzImportWindow>(L("voxel.window.title"));
@@ -1390,7 +1390,7 @@ namespace BlockWorldMVP.Editor
             Shader shader = Shader.Find("Standard");
             if (shader == null)
             {
-                _chunkOpaqueMaterialInstance = new Material(source) { name = "VoxelImport_ChunkOpaque" };
+                _chunkOpaqueMaterialInstance = new Material(source) { name = "M_Block" };
                 _chunkOpaqueMaterialInstance.renderQueue = (int)RenderQueue.Geometry;
                 _chunkOpaqueMaterialInstance.SetInt("_ZWrite", 1);
                 ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
@@ -1401,7 +1401,7 @@ namespace BlockWorldMVP.Editor
 
             Material m = new Material(shader)
             {
-                name = "VoxelImport_ChunkOpaque"
+                name = "M_Block"
             };
             m.mainTexture = source.mainTexture;
             m.SetFloat("_Mode", 0f);

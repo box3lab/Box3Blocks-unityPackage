@@ -18,15 +18,15 @@ namespace BlockWorldMVP.Editor
         private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
         private const string BumpTextureFolder = "Packages/com.box3lab.box3/Assets/bump";
         private const string MaterialTextureFolder = "Packages/com.box3lab.box3/Assets/material";
-        private static readonly string GeneratedRoot = "Assets/BlockWorldGenerated";
-        private static readonly string MeshFolder = "Assets/BlockWorldGenerated/Meshes";
-        private static readonly string MaterialFolder = "Assets/BlockWorldGenerated/Materials";
-        private static readonly string AtlasFolder = "Assets/BlockWorldGenerated/Atlases";
-        private static readonly string MeshAssetPath = "Assets/BlockWorldGenerated/Meshes/BlockCube.asset";
-        private static readonly string AtlasTexturePath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas.asset";
-        private static readonly string AtlasBumpTexturePath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Bump.asset";
-        private static readonly string AtlasMaterialTexturePath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Material.asset";
-        private static readonly string AtlasTransparentMaterialPath = "Assets/BlockWorldGenerated/Materials/WorldBuilderAtlas_Transparent.mat";
+        private static readonly string GeneratedRoot = "Assets/Box3";
+        private static readonly string MeshFolder = "Assets/Box3/Meshes";
+        private static readonly string MaterialFolder = "Assets/Box3/Materials";
+        private static readonly string AtlasFolder = "Assets/Box3/Textures/Atlases";
+        private static readonly string MeshAssetPath = "Assets/Box3/Meshes/BlockCube.asset";
+        private static readonly string AtlasTexturePath = "Assets/Box3/Textures/Atlases/T_Block_Color_Atlas.asset";
+        private static readonly string AtlasBumpTexturePath = "Assets/Box3/Textures/Atlases/T_Block_Bump_Atlas.asset";
+        private static readonly string AtlasMaterialTexturePath = "Assets/Box3/Textures/Atlases/T_Block_Metallic_Atlas.asset";
+        private static readonly string AtlasTransparentMaterialPath = "Assets/Box3/Materials/M_Block_Transparent.mat";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
         private static readonly Regex SideRegex = new Regex("^(.*)_(back|bottom|front|left|right|top)\\.png$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -224,7 +224,7 @@ namespace BlockWorldMVP.Editor
             PersistAtlasMaterialTexture(_atlasMaterialTexture);
             _atlasTransparentMaterial = GetOrCreateTransparentAtlasMaterial(AtlasTransparentMaterialPath, _atlasTexture);
 
-            const string legacyOpaqueMaterialPath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Opaque.mat";
+            const string legacyOpaqueMaterialPath = "Assets/Box3/Atlases/WorldBuilderAtlas_Opaque.mat";
             if (AssetDatabase.LoadAssetAtPath<Material>(legacyOpaqueMaterialPath) != null)
             {
                 AssetDatabase.DeleteAsset(legacyOpaqueMaterialPath);
@@ -682,26 +682,46 @@ namespace BlockWorldMVP.Editor
 
         private static void EnsureFolders()
         {
-            if (!AssetDatabase.IsValidFolder(GeneratedRoot))
+            EnsureFolderPath(GeneratedRoot);
+            EnsureFolderPath(MeshFolder);
+            EnsureFolderPath(MaterialFolder);
+            EnsureFolderPath(AtlasFolder);
+
+        }
+
+        private static void EnsureFolderPath(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath))
             {
-                AssetDatabase.CreateFolder("Assets", "BlockWorldGenerated");
+                return;
             }
 
-            if (!AssetDatabase.IsValidFolder(MeshFolder))
+            string normalized = folderPath.Replace("\\", "/");
+            if (AssetDatabase.IsValidFolder(normalized))
             {
-                AssetDatabase.CreateFolder(GeneratedRoot, "Meshes");
+                return;
             }
 
-            if (!AssetDatabase.IsValidFolder(MaterialFolder))
+            string[] parts = normalized.Split('/');
+            if (parts.Length == 0 || !string.Equals(parts[0], "Assets", StringComparison.Ordinal))
             {
-                AssetDatabase.CreateFolder(GeneratedRoot, "Materials");
+                return;
             }
 
-            if (!AssetDatabase.IsValidFolder(AtlasFolder))
+            string current = "Assets";
+            for (int i = 1; i < parts.Length; i++)
             {
-                AssetDatabase.CreateFolder(GeneratedRoot, "Atlases");
+                string next = $"{current}/{parts[i]}";
+                if (!AssetDatabase.IsValidFolder(next))
+                {
+                    AssetDatabase.CreateFolder(current, parts[i]);
+                }
+
+                current = next;
             }
         }
+
+       
 
         private static Mesh BuildCubeMesh()
         {
