@@ -2,7 +2,7 @@
   "entries": [
     {
       "key": "window.title",
-      "value": "Shendao Block Builder"
+      "value": "Box3 Block Builder"
     },
     {
       "key": "section.world_root",
@@ -110,11 +110,11 @@
     },
     {
       "key": "voxel.window.title",
-      "value": "Shendao Terrain Importer"
+      "value": "Box3 Terrain Importer"
     },
     {
       "key": "voxel.export.window.title",
-      "value": "Shendao Terrain Exporter"
+      "value": "Box3 Terrain Exporter"
     },
     {
       "key": "voxel.section.source",
