@@ -1434,9 +1434,10 @@ namespace BlockWorldMVP.Editor
                 material.EnableKeyword("_EMISSION");
                 material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
                 material.SetColor("_EmissionColor", Color.white);
-                if (material.HasProperty("_EmissionMap") && material.mainTexture != null)
+                if (material.HasProperty("_EmissionMap"))
                 {
-                    material.SetTexture("_EmissionMap", material.mainTexture);
+                    Texture2D emissionAtlas = BlockAssetFactory.GetAtlasEmissionTexture();
+                    material.SetTexture("_EmissionMap", emissionAtlas != null ? emissionAtlas : material.mainTexture);
                 }
             }
 
