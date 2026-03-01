@@ -370,7 +370,8 @@ namespace Box3Blocks.Editor
                 }
             }
 
-            EditorGUILayout.LabelField(Lf("tool.brush_volume", _brushHorizontalSize, _brushHorizontalSize, _brushHeight), _subtleLabelStyle);
+      
+            _spawnPointLightForEmissive = EditorGUILayout.ToggleLeft(L("tool.spawn_point_light_for_emissive"), _spawnPointLightForEmissive);
 
             if (_root == null)
             {

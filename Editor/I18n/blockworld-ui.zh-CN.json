@@ -17,7 +17,11 @@
     { "key": "tool.rotate", "value": "旋转" },
     { "key": "tool.horizontal", "value": "水平 (X/Z)" },
     { "key": "tool.height", "value": "高度 (Y)" },
-    { "key": "tool.brush_volume", "value": "笔刷体积: {0}x{1}x{2}" },
+
+    {
+      "key": "tool.spawn_point_light_for_emissive",
+      "value": "放置发光方块时生成点光源"
+    },
     {
       "key": "tool.assign_root_help",
       "value": "请先指定或创建根节点。只有存在根节点时才支持场景点击编辑。"
@@ -85,7 +89,10 @@
       "value": "Chunk 使用 Alpha Clip（修复透明伪影）"
     },
     { "key": "voxel.option.alpha_cutoff", "value": "Chunk Alpha 阈值" },
-    { "key": "voxel.option.spawn_realtime_lights", "value": "生成实时点光源（发光方块）" },
+    {
+      "key": "voxel.option.spawn_realtime_lights",
+      "value": "生成实时点光源（发光方块）"
+    },
     { "key": "voxel.option.voxels_per_tick", "value": "每 Tick 方块数" },
 
     { "key": "voxel.run.import", "value": "导入" },

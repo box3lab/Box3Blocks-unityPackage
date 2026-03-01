@@ -64,9 +64,10 @@
       "key": "tool.height",
       "value": "Height (Y)"
     },
+
     {
-      "key": "tool.brush_volume",
-      "value": "Brush Volume: {0}x{1}x{2}"
+      "key": "tool.spawn_point_light_for_emissive",
+      "value": "Spawn point light when placing emissive blocks"
     },
     {
       "key": "tool.assign_root_help",
