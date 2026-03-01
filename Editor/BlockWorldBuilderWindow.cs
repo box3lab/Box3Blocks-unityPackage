@@ -14,9 +14,9 @@ namespace BlockWorldMVP.Editor
         private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
         private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
         private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
-        private const string GeneratedMaterialFolder = "Assets/BlockWorldGenerated/Materials";
-        private const string GeneratedMeshFolder = "Assets/BlockWorldGenerated/Meshes";
-        private const string VoxelImportChunkOpaqueMaterialPath = "Assets/BlockWorldGenerated/Materials/VoxelImport_ChunkOpaque.mat";
+        private const string GeneratedMaterialFolder = "Assets/Box3/Materials";
+        private const string GeneratedMeshFolder = "Assets/Box3/Meshes";
+        private const string VoxelImportChunkOpaqueMaterialPath = "Assets/Box3/Materials/M_Block.mat";
         private const string CategoryAll = "All";
         private const string CategoryRecent = "Recent";
         private const string CategoryUncategorized = "Uncategorized";
@@ -24,6 +24,8 @@ namespace BlockWorldMVP.Editor
         private static readonly Regex SideRegex = new Regex(@"^(.*)_(back|bottom|front|left|right|top)\.png$", RegexOptions.Compiled);
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
         private static readonly int MainTexStShaderId = Shader.PropertyToID("_MainTex_ST");
+        private static readonly int EmissionColorShaderId = Shader.PropertyToID("_EmissionColor");
+        private const string RealtimeLightChildName = "__BlockLight";
 
         private Transform _root;
         private List<BlockDefinition> _allBlocks = new List<BlockDefinition>();
@@ -34,9 +36,11 @@ namespace BlockWorldMVP.Editor
         private int _selectedCategory;
         private string _search = string.Empty;
         private Vector2 _scroll;
+        private Vector2 _categoryScroll;
         private EditTool _tool = EditTool.Place;
         private int _brushHorizontalSize = 1;
         private int _brushHeight = 1;
+        private bool _spawnPointLightForEmissive = true;
         private const float PreviewSize = 75f;
         private GUIStyle _sectionBoxStyle;
         private GUIStyle _sectionTitleStyle;
@@ -52,7 +56,7 @@ namespace BlockWorldMVP.Editor
         private PreviewRenderUtility _blockCardPreviewUtility;
         private double _nextAnimatedPreviewRepaintTime;
 
-        [MenuItem("Box3/Block Library", false, 0)]
+        [MenuItem("Box3/方块库", false, 0)]
         public static void Open()
         {
             GetWindow<BlockWorldBuilderWindow>(L("window.title"));
@@ -268,24 +272,36 @@ namespace BlockWorldMVP.Editor
             }
 
             EditorGUILayout.Space(4f);
-            if (_categories.Count > 0)
+            using (new EditorGUILayout.HorizontalScope())
             {
-                DrawCategoryTabsWrapped();
+                if (_categories.Count > 0)
+                {
+                    DrawCategoryTabsSidebar();
+                    GUILayout.Space(6f);
+                }
+
+                using (new EditorGUILayout.VerticalScope())
+                {
+                    float rightPaneWidth = Mathf.Max(220f, position.width - (_categories.Count > 0 ? 98f : 32f));
+                    int columns = CalculateColumnCount(rightPaneWidth);
+                    _scroll = GUILayout.BeginScrollView(
+                        _scroll,
+                        false,
+                        true,
+                        GUIStyle.none,
+                        GUI.skin.verticalScrollbar);
+                    DrawBlockGrid(columns, rightPaneWidth - 16f);
+                    EditorGUILayout.EndScrollView();
+                }
             }
 
-            int columns = CalculateColumnCount();
-            EditorGUILayout.LabelField(Lf("library.blocks_layout", _filteredBlocks.Count, columns), _subtleLabelStyle);
-            EditorGUILayout.Space(2f);
-            _scroll = EditorGUILayout.BeginScrollView(_scroll);
-            DrawBlockGrid(columns);
-
-            EditorGUILayout.EndScrollView();
             RequestAnimatedCardPreviewRepaint();
         }
 
-        private void DrawBlockGrid(int columns)
+        private void DrawBlockGrid(int columns, float availableWidth)
         {
-            float cellWidth = Mathf.Max(120f, (position.width - 40f) / columns);
+            float safeWidth = Mathf.Max(120f, availableWidth);
+            float cellWidth = Mathf.Max(120f, safeWidth / Mathf.Max(1, columns));
 
             int index = 0;
             while (index < _filteredBlocks.Count)
@@ -444,47 +460,34 @@ namespace BlockWorldMVP.Editor
             });
         }
 
-        private int CalculateColumnCount()
+        private int CalculateColumnCount(float availableWidth)
         {
             const float minCellWidth = 150f;
-            float available = Mathf.Max(1f, position.width - 40f);
-            return Mathf.Max(1, Mathf.FloorToInt(available / minCellWidth));
+            return Mathf.Max(1, Mathf.FloorToInt(Mathf.Max(1f, availableWidth) / minCellWidth));
         }
 
-        private void DrawCategoryTabsWrapped()
+        private void DrawCategoryTabsSidebar()
         {
-            float availableWidth = Mathf.Max(120f, position.width - 32f);
-            float lineWidth = 0f;
-            const float padX = 10f;
-            const float spacing = 4f;
-
-            EditorGUILayout.BeginHorizontal();
-            for (int i = 0; i < _categories.Count; i++)
+            using (new EditorGUILayout.VerticalScope(GUILayout.Width(92f)))
             {
-                string categoryKey = _categories[i];
-                string label = LocalizeCategoryLabel(categoryKey);
-                float buttonWidth = Mathf.Clamp(EditorStyles.miniButton.CalcSize(new GUIContent(label)).x + padX, 52f, 220f);
-
-                if (lineWidth > 0f && lineWidth + buttonWidth > availableWidth)
+                _categoryScroll = EditorGUILayout.BeginScrollView(_categoryScroll, GUILayout.Width(92f), GUILayout.ExpandHeight(true));
+                for (int i = 0; i < _categories.Count; i++)
                 {
-                    EditorGUILayout.EndHorizontal();
-                    EditorGUILayout.BeginHorizontal();
-                    lineWidth = 0f;
+                    string categoryKey = _categories[i];
+                    string label = LocalizeCategoryLabel(categoryKey);
+
+                    bool selected = i == _selectedCategory;
+                    GUIStyle style = selected ? _categoryTabSelectedStyle : _categoryTabStyle;
+                    bool clicked = GUILayout.Toggle(selected, label, style, GUILayout.Width(80f), GUILayout.Height(24f));
+                    if (clicked && !selected)
+                    {
+                        _selectedCategory = i;
+                        ApplyFilter();
+                    }
                 }
 
-                bool selected = i == _selectedCategory;
-                GUIStyle style = selected ? _categoryTabSelectedStyle : _categoryTabStyle;
-                bool clicked = GUILayout.Toggle(selected, label, style, GUILayout.Width(buttonWidth));
-                if (clicked && !selected)
-                {
-                    _selectedCategory = i;
-                    ApplyFilter();
-                }
-
-                lineWidth += buttonWidth + spacing;
+                EditorGUILayout.EndScrollView();
             }
-
-            EditorGUILayout.EndHorizontal();
         }
 
         private void OnSceneGUI(SceneView sceneView)
@@ -757,6 +760,8 @@ namespace BlockWorldMVP.Editor
             PlacedBlock marker = go.AddComponent<PlacedBlock>();
             marker.BlockId = definition.id;
             marker.HasAnimation = hasAnimatedFaces;
+            ApplyEmissionForDefinition(meshRenderer, definition);
+            ConfigureRealtimeLight(go.transform, definition, _spawnPointLightForEmissive);
 
             RefreshTransparentAround(position);
             EditorUtility.SetDirty(go);
@@ -925,28 +930,7 @@ namespace BlockWorldMVP.Editor
             GameObject go = new GameObject("BlockWorldRoot");
             Undo.RegisterCreatedObjectUndo(go, "Create Block Root");
             _root = go.transform;
-            EnsureRuntimeCuller(_root);
             Selection.activeObject = go;
-        }
-
-        private static void EnsureRuntimeCuller(Transform root)
-        {
-            if (root == null)
-            {
-                return;
-            }
-
-            global::BlockWorldMVP.BlockWorldOcclusionCuller culler = root.GetComponent<global::BlockWorldMVP.BlockWorldOcclusionCuller>();
-            if (culler == null)
-            {
-                culler = Undo.AddComponent<global::BlockWorldMVP.BlockWorldOcclusionCuller>(root.gameObject);
-            }
-
-            if (culler != null)
-            {
-                culler.Rebuild();
-                EditorUtility.SetDirty(culler);
-            }
         }
 
         private void ClearRoot()
@@ -1053,7 +1037,7 @@ namespace BlockWorldMVP.Editor
             Shader shader = Shader.Find("Standard");
             if (shader == null)
             {
-                Material fallback = new Material(atlasSource) { name = "VoxelImport_ChunkOpaque" };
+                Material fallback = new Material(atlasSource) { name = "M_Block" };
                 fallback.renderQueue = (int)RenderQueue.Geometry;
                 fallback.SetInt("_ZWrite", 1);
                 ApplyMapsToOpaque(fallback);
@@ -1062,7 +1046,7 @@ namespace BlockWorldMVP.Editor
                 return fallback;
             }
 
-            Material material = new Material(shader) { name = "VoxelImport_ChunkOpaque" };
+            Material material = new Material(shader) { name = "M_Block" };
             material.mainTexture = atlasSource.mainTexture;
             material.SetFloat("_Mode", 0f);
             material.SetInt("_SrcBlend", (int)BlendMode.One);
@@ -1080,27 +1064,7 @@ namespace BlockWorldMVP.Editor
 
         private static void ApplyMapsToOpaque(Material material)
         {
-            if (material == null)
-            {
-                return;
-            }
-
-            Texture2D bump = BlockAssetFactory.GetAtlasBumpTexture();
-            if (bump != null)
-            {
-                material.SetTexture("_BumpMap", bump);
-                material.SetFloat("_BumpScale", 0.1f);
-                material.EnableKeyword("_NORMALMAP");
-            }
-
-            Texture2D metal = BlockAssetFactory.GetAtlasMaterialTexture();
-            if (metal != null)
-            {
-                material.SetTexture("_MetallicGlossMap", metal);
-                material.SetFloat("_Metallic", 0.2f);
-                material.SetFloat("_Glossiness", 0.5f);
-                material.EnableKeyword("_METALLICGLOSSMAP");
-            }
+            OpaqueBlockMaterialConfigurator.Apply(material);
         }
 
         private static int FloorDiv(int value, int divisor)
@@ -1521,6 +1485,7 @@ namespace BlockWorldMVP.Editor
             }
 
             animator.SetAnimations(runtimeAnimations.ToArray(), renderData.faceMainTexSt);
+            ApplyEmissionForDefinition(renderer, definition);
         }
 
         private static bool HasAnimatedFaces(BlockDefinition definition)
@@ -1996,6 +1961,86 @@ namespace BlockWorldMVP.Editor
                 block.SetVector(MainTexStShaderId, faceMainTexSt[i]);
                 renderer.SetPropertyBlock(block, i);
             }
+        }
+
+        private static void ApplyEmissionForDefinition(Renderer renderer, BlockDefinition definition)
+        {
+            if (renderer == null)
+            {
+                return;
+            }
+
+            Material[] shared = renderer.sharedMaterials;
+            if (shared == null || shared.Length == 0)
+            {
+                return;
+            }
+
+            Color emissionColor =  Color.white;
+            if (definition != null && definition.emitsLight)
+            {
+                emissionColor = Color.white;
+            }
+
+            MaterialPropertyBlock block = new MaterialPropertyBlock();
+            for (int i = 0; i < shared.Length; i++)
+            {
+                Material mat = shared[i];
+                if (mat == null || !mat.HasProperty(EmissionColorShaderId))
+                {
+                    continue;
+                }
+
+                block.Clear();
+                renderer.GetPropertyBlock(block, i);
+                block.SetColor(EmissionColorShaderId, emissionColor);
+                renderer.SetPropertyBlock(block, i);
+            }
+        }
+
+        private static void ConfigureRealtimeLight(Transform blockTransform, BlockDefinition definition, bool enablePointLight)
+        {
+            if (blockTransform == null)
+            {
+                return;
+            }
+
+            bool shouldEmit = enablePointLight && definition != null && definition.emitsLight;
+            Transform child = blockTransform.Find(RealtimeLightChildName);
+            if (!shouldEmit)
+            {
+                if (child != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(child.gameObject);
+                }
+
+                return;
+            }
+
+            if (child == null)
+            {
+                GameObject lightGo = new GameObject(RealtimeLightChildName);
+                lightGo.transform.SetParent(blockTransform, false);
+                lightGo.transform.localPosition = Vector3.zero;
+                child = lightGo.transform;
+            }
+
+            Light light = child.GetComponent<Light>();
+            if (light == null)
+            {
+                light = child.gameObject.AddComponent<Light>();
+            }
+
+            Color c = definition.lightColor.maxColorComponent > 0.001f
+                ? definition.lightColor
+                : Color.white;
+            light.type = LightType.Point;
+            light.color = c;
+            light.intensity = 1.1f;
+            light.range = 6f;
+            light.bounceIntensity = 0f;
+            light.shadows = LightShadows.None;
+            light.renderMode = LightRenderMode.Auto;
         }
 
         private static Texture2D ResolvePreviewTexture(BlockDefinition definition)

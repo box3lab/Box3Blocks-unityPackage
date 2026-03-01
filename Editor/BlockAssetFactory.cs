@@ -16,17 +16,19 @@ namespace BlockWorldMVP.Editor
         }
 
         private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
+        private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
         private const string BumpTextureFolder = "Packages/com.box3lab.box3/Assets/bump";
         private const string MaterialTextureFolder = "Packages/com.box3lab.box3/Assets/material";
-        private static readonly string GeneratedRoot = "Assets/BlockWorldGenerated";
-        private static readonly string MeshFolder = "Assets/BlockWorldGenerated/Meshes";
-        private static readonly string MaterialFolder = "Assets/BlockWorldGenerated/Materials";
-        private static readonly string AtlasFolder = "Assets/BlockWorldGenerated/Atlases";
-        private static readonly string MeshAssetPath = "Assets/BlockWorldGenerated/Meshes/BlockCube.asset";
-        private static readonly string AtlasTexturePath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas.asset";
-        private static readonly string AtlasBumpTexturePath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Bump.asset";
-        private static readonly string AtlasMaterialTexturePath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Material.asset";
-        private static readonly string AtlasTransparentMaterialPath = "Assets/BlockWorldGenerated/Materials/WorldBuilderAtlas_Transparent.mat";
+        private static readonly string GeneratedRoot = "Assets/Box3";
+        private static readonly string MeshFolder = "Assets/Box3/Meshes";
+        private static readonly string MaterialFolder = "Assets/Box3/Materials";
+        private static readonly string AtlasFolder = "Assets/Box3/Textures/Atlases";
+        private static readonly string MeshAssetPath = "Assets/Box3/Meshes/BlockCube.asset";
+        private static readonly string AtlasTexturePath = "Assets/Box3/Textures/Atlases/T_Block_Color_Atlas.asset";
+        private static readonly string AtlasBumpTexturePath = "Assets/Box3/Textures/Atlases/T_Block_Bump_Atlas.asset";
+        private static readonly string AtlasMaterialTexturePath = "Assets/Box3/Textures/Atlases/T_Block_Metallic_Atlas.asset";
+        private static readonly string AtlasEmissionTexturePath = "Assets/Box3/Textures/Atlases/T_Block_Emission_Atlas.asset";
+        private static readonly string AtlasTransparentMaterialPath = "Assets/Box3/Materials/M_Block_Transparent.mat";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
         private static readonly Regex SideRegex = new Regex("^(.*)_(back|bottom|front|left|right|top)\\.png$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -34,8 +36,10 @@ namespace BlockWorldMVP.Editor
         private static Texture2D _atlasTexture;
         private static Texture2D _atlasBumpTexture;
         private static Texture2D _atlasMaterialTexture;
+        private static Texture2D _atlasEmissionTexture;
         private static Material _atlasTransparentMaterial;
         private static bool _atlasReady;
+        private static HashSet<string> _emissiveBlockIds;
 
         public static void InvalidateCaches()
         {
@@ -43,7 +47,9 @@ namespace BlockWorldMVP.Editor
             _atlasTexture = null;
             _atlasBumpTexture = null;
             _atlasMaterialTexture = null;
+            _atlasEmissionTexture = null;
             _atlasTransparentMaterial = null;
+            _emissiveBlockIds = null;
             AtlasUvByTexturePath.Clear();
         }
 
@@ -142,6 +148,16 @@ namespace BlockWorldMVP.Editor
             return _atlasMaterialTexture;
         }
 
+        public static Texture2D GetAtlasEmissionTexture()
+        {
+            if (!EnsureAtlasResources())
+            {
+                return null;
+            }
+
+            return _atlasEmissionTexture;
+        }
+
         private static string GetFallbackTexturePath(Dictionary<string, string> sideTexturePaths)
         {
             for (int i = 0; i < SideOrder.Length; i++)
@@ -222,9 +238,11 @@ namespace BlockWorldMVP.Editor
             PersistAtlasBumpTexture(_atlasBumpTexture);
             _atlasMaterialTexture = BuildMaterialAtlasTexture(_atlasTexture, texturePaths);
             PersistAtlasMaterialTexture(_atlasMaterialTexture);
+            _atlasEmissionTexture = BuildEmissionAtlasTexture(_atlasTexture, texturePaths);
+            PersistAtlasEmissionTexture(_atlasEmissionTexture);
             _atlasTransparentMaterial = GetOrCreateTransparentAtlasMaterial(AtlasTransparentMaterialPath, _atlasTexture);
 
-            const string legacyOpaqueMaterialPath = "Assets/BlockWorldGenerated/Atlases/WorldBuilderAtlas_Opaque.mat";
+            const string legacyOpaqueMaterialPath = "Assets/Box3/Atlases/WorldBuilderAtlas_Opaque.mat";
             if (AssetDatabase.LoadAssetAtPath<Material>(legacyOpaqueMaterialPath) != null)
             {
                 AssetDatabase.DeleteAsset(legacyOpaqueMaterialPath);
@@ -240,6 +258,10 @@ namespace BlockWorldMVP.Editor
             {
                 AssetDatabase.ImportAsset(AtlasMaterialTexturePath, ImportAssetOptions.ForceUpdate);
             }
+            if (AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasEmissionTexturePath) != null)
+            {
+                AssetDatabase.ImportAsset(AtlasEmissionTexturePath, ImportAssetOptions.ForceUpdate);
+            }
             AssetDatabase.ImportAsset(AtlasTransparentMaterialPath, ImportAssetOptions.ForceUpdate);
 
             CleanupReadableTextures(readableTextures);
@@ -254,6 +276,8 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
+            string expectedName = GetAssetFileNameWithoutExtension(AtlasTexturePath);
+            generatedTexture.name = expectedName;
             Texture2D existing = AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasTexturePath);
             if (existing == null)
             {
@@ -263,6 +287,7 @@ namespace BlockWorldMVP.Editor
             else
             {
                 EditorUtility.CopySerialized(generatedTexture, existing);
+                existing.name = expectedName;
                 EditorUtility.SetDirty(existing);
                 UnityEngine.Object.DestroyImmediate(generatedTexture);
                 atlasTexture = existing;
@@ -276,6 +301,8 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
+            string expectedName = GetAssetFileNameWithoutExtension(AtlasBumpTexturePath);
+            bumpTexture.name = expectedName;
             Texture2D existing = AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasBumpTexturePath);
             if (existing == null)
             {
@@ -285,6 +312,7 @@ namespace BlockWorldMVP.Editor
             }
 
             EditorUtility.CopySerialized(bumpTexture, existing);
+            existing.name = expectedName;
             EditorUtility.SetDirty(existing);
             UnityEngine.Object.DestroyImmediate(bumpTexture);
             ConfigureBumpAtlasImporter(AtlasBumpTexturePath);
@@ -297,6 +325,8 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
+            string expectedName = GetAssetFileNameWithoutExtension(AtlasMaterialTexturePath);
+            materialTexture.name = expectedName;
             Texture2D existing = AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasMaterialTexturePath);
             if (existing == null)
             {
@@ -306,9 +336,39 @@ namespace BlockWorldMVP.Editor
             }
 
             EditorUtility.CopySerialized(materialTexture, existing);
+            existing.name = expectedName;
             EditorUtility.SetDirty(existing);
             UnityEngine.Object.DestroyImmediate(materialTexture);
             ConfigureMaterialAtlasImporter(AtlasMaterialTexturePath);
+        }
+
+        private static void PersistAtlasEmissionTexture(Texture2D emissionTexture)
+        {
+            if (emissionTexture == null)
+            {
+                return;
+            }
+
+            string expectedName = GetAssetFileNameWithoutExtension(AtlasEmissionTexturePath);
+            emissionTexture.name = expectedName;
+            Texture2D existing = AssetDatabase.LoadAssetAtPath<Texture2D>(AtlasEmissionTexturePath);
+            if (existing == null)
+            {
+                AssetDatabase.CreateAsset(emissionTexture, AtlasEmissionTexturePath);
+                ConfigureEmissionAtlasImporter(AtlasEmissionTexturePath);
+                return;
+            }
+
+            EditorUtility.CopySerialized(emissionTexture, existing);
+            existing.name = expectedName;
+            EditorUtility.SetDirty(existing);
+            UnityEngine.Object.DestroyImmediate(emissionTexture);
+            ConfigureEmissionAtlasImporter(AtlasEmissionTexturePath);
+        }
+
+        private static string GetAssetFileNameWithoutExtension(string assetPath)
+        {
+            return Path.GetFileNameWithoutExtension(assetPath);
         }
 
         private static Material GetOrCreateTransparentAtlasMaterial(string materialPath, Texture2D atlasTexture)
@@ -514,6 +574,91 @@ namespace BlockWorldMVP.Editor
             return materialAtlas;
         }
 
+        private static Texture2D BuildEmissionAtlasTexture(Texture2D colorAtlas, List<string> colorTexturePaths)
+        {
+            if (colorAtlas == null || colorTexturePaths == null)
+            {
+                return null;
+            }
+
+            int width = colorAtlas.width;
+            int height = colorAtlas.height;
+            if (width <= 0 || height <= 0)
+            {
+                return null;
+            }
+
+            Texture2D emissionAtlas = new Texture2D(width, height, TextureFormat.RGBA32, false, false)
+            {
+                name = "WorldBuilderAtlas_Emission",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                anisoLevel = 0
+            };
+
+            Color[] clear = new Color[width * height];
+            for (int i = 0; i < clear.Length; i++)
+            {
+                clear[i] = Color.black;
+            }
+            emissionAtlas.SetPixels(clear);
+
+            for (int i = 0; i < colorTexturePaths.Count; i++)
+            {
+                string colorPath = colorTexturePaths[i];
+                if (!AtlasUvByTexturePath.TryGetValue(colorPath, out Rect uvRect))
+                {
+                    continue;
+                }
+
+                if (!IsEmissionTexturePath(colorPath))
+                {
+                    continue;
+                }
+
+                Texture2D srcTex = LoadReadableTextureFromAsset(colorPath);
+                if (srcTex == null)
+                {
+                    continue;
+                }
+
+                int x = Mathf.RoundToInt(uvRect.x * width);
+                int y = Mathf.RoundToInt(uvRect.y * height);
+                int w = Mathf.RoundToInt(uvRect.width * width);
+                int h = Mathf.RoundToInt(uvRect.height * height);
+                if (w <= 0 || h <= 0)
+                {
+                    UnityEngine.Object.DestroyImmediate(srcTex);
+                    continue;
+                }
+
+                if (srcTex.width == w && srcTex.height == h)
+                {
+                    emissionAtlas.SetPixels(x, y, w, h, srcTex.GetPixels());
+                }
+                else
+                {
+                    Color[] src = srcTex.GetPixels();
+                    Color[] scaled = new Color[w * h];
+                    for (int yy = 0; yy < h; yy++)
+                    {
+                        int srcY = Mathf.Clamp(Mathf.RoundToInt((yy / (float)h) * (srcTex.height - 1)), 0, srcTex.height - 1);
+                        for (int xx = 0; xx < w; xx++)
+                        {
+                            int srcX = Mathf.Clamp(Mathf.RoundToInt((xx / (float)w) * (srcTex.width - 1)), 0, srcTex.width - 1);
+                            scaled[(yy * w) + xx] = src[(srcY * srcTex.width) + srcX];
+                        }
+                    }
+                    emissionAtlas.SetPixels(x, y, w, h, scaled);
+                }
+
+                UnityEngine.Object.DestroyImmediate(srcTex);
+            }
+
+            emissionAtlas.Apply();
+            return emissionAtlas;
+        }
+
         private static void ConfigureBumpAtlasImporter(string assetPath)
         {
             TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
@@ -540,6 +685,22 @@ namespace BlockWorldMVP.Editor
 
             importer.textureType = TextureImporterType.Default;
             importer.sRGBTexture = false;
+            importer.mipmapEnabled = false;
+            importer.filterMode = FilterMode.Point;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceUpdate);
+        }
+
+        private static void ConfigureEmissionAtlasImporter(string assetPath)
+        {
+            TextureImporter importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer == null)
+            {
+                return;
+            }
+
+            importer.textureType = TextureImporterType.Default;
+            importer.sRGBTexture = true;
             importer.mipmapEnabled = false;
             importer.filterMode = FilterMode.Point;
             importer.wrapMode = TextureWrapMode.Clamp;
@@ -616,6 +777,100 @@ namespace BlockWorldMVP.Editor
             return null;
         }
 
+        private static bool IsEmissionTexturePath(string colorPath)
+        {
+            if (string.IsNullOrWhiteSpace(colorPath))
+            {
+                return false;
+            }
+
+            string fileName = Path.GetFileNameWithoutExtension(colorPath);
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return false;
+            }
+
+            int split = fileName.LastIndexOf('_');
+            string id = split > 0 ? fileName.Substring(0, split) : fileName;
+            EnsureEmissiveBlockIdCache();
+            if (_emissiveBlockIds != null && _emissiveBlockIds.Contains(id))
+            {
+                return true;
+            }
+
+            return BlockIdRules.IsEmissiveKeyword(id);
+        }
+
+        private static void EnsureEmissiveBlockIdCache()
+        {
+            if (_emissiveBlockIds != null)
+            {
+                return;
+            }
+
+            _emissiveBlockIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string absPath = GetProjectAbsolutePath(BlockSpecPath);
+            if (!File.Exists(absPath))
+            {
+                return;
+            }
+
+            string json = File.ReadAllText(absPath);
+            Dictionary<string, string> objects = ExtractTopLevelObjectValues(json);
+            foreach (KeyValuePair<string, string> pair in objects)
+            {
+                string name = pair.Key;
+                string body = pair.Value;
+                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(body))
+                {
+                    continue;
+                }
+
+                bool emits = HasMeaningfulEmission(body)
+                    || ReadBoolField(body, "emissive")
+                    || Regex.IsMatch(body, "\"glow\"\\s*:\\s*(true|1)", RegexOptions.IgnoreCase)
+                    || BlockIdRules.IsEmissiveKeyword(name);
+
+                if (emits)
+                {
+                    _emissiveBlockIds.Add(name);
+                }
+            }
+        }
+
+        private static bool HasMeaningfulEmission(string body)
+        {
+            Match m = Regex.Match(body, "\"emissive\"\\s*:\\s*\\[(?<value>[^\\]]+)\\]", RegexOptions.IgnoreCase);
+            if (!m.Success)
+            {
+                return false;
+            }
+
+            string[] parts = m.Groups["value"].Value.Split(',');
+            float sum = 0f;
+            for (int i = 0; i < Mathf.Min(3, parts.Length); i++)
+            {
+                sum += Mathf.Abs(ParseFloatSafe(parts[i], 0f));
+            }
+
+            return sum > 0.001f;
+        }
+
+        private static bool ReadBoolField(string text, string fieldName)
+        {
+            return BlockJsonLite.ReadBoolField(text, fieldName);
+        }
+
+        private static float ParseFloatSafe(string text, float fallback)
+        {
+            return BlockJsonLite.ParseFloatSafe(text, fallback);
+        }
+
+        private static Dictionary<string, string> ExtractTopLevelObjectValues(string json)
+        {
+            return BlockJsonLite.ExtractTopLevelObjectValues(json);
+        }
+
         private static Texture2D LoadReadableTextureFromAsset(string assetPath)
         {
             if (string.IsNullOrWhiteSpace(assetPath))
@@ -682,26 +937,46 @@ namespace BlockWorldMVP.Editor
 
         private static void EnsureFolders()
         {
-            if (!AssetDatabase.IsValidFolder(GeneratedRoot))
+            EnsureFolderPath(GeneratedRoot);
+            EnsureFolderPath(MeshFolder);
+            EnsureFolderPath(MaterialFolder);
+            EnsureFolderPath(AtlasFolder);
+
+        }
+
+        private static void EnsureFolderPath(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath))
             {
-                AssetDatabase.CreateFolder("Assets", "BlockWorldGenerated");
+                return;
             }
 
-            if (!AssetDatabase.IsValidFolder(MeshFolder))
+            string normalized = folderPath.Replace("\\", "/");
+            if (AssetDatabase.IsValidFolder(normalized))
             {
-                AssetDatabase.CreateFolder(GeneratedRoot, "Meshes");
+                return;
             }
 
-            if (!AssetDatabase.IsValidFolder(MaterialFolder))
+            string[] parts = normalized.Split('/');
+            if (parts.Length == 0 || !string.Equals(parts[0], "Assets", StringComparison.Ordinal))
             {
-                AssetDatabase.CreateFolder(GeneratedRoot, "Materials");
+                return;
             }
 
-            if (!AssetDatabase.IsValidFolder(AtlasFolder))
+            string current = "Assets";
+            for (int i = 1; i < parts.Length; i++)
             {
-                AssetDatabase.CreateFolder(GeneratedRoot, "Atlases");
+                string next = $"{current}/{parts[i]}";
+                if (!AssetDatabase.IsValidFolder(next))
+                {
+                    AssetDatabase.CreateFolder(current, parts[i]);
+                }
+
+                current = next;
             }
         }
+
+       
 
         private static Mesh BuildCubeMesh()
         {
