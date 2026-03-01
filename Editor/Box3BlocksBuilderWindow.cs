@@ -1024,9 +1024,10 @@ namespace Box3Blocks.Editor
             Material existing = AssetDatabase.LoadAssetAtPath<Material>(VoxelImportChunkOpaqueMaterialPath);
             if (existing != null)
             {
-                if (existing.mainTexture != atlasSource.mainTexture)
+                Texture atlasMain = atlasSource.mainTexture;
+                if (atlasMain != null && existing.mainTexture != atlasMain)
                 {
-                    existing.mainTexture = atlasSource.mainTexture;
+                    existing.mainTexture = atlasMain;
                     EditorUtility.SetDirty(existing);
                 }
 
@@ -1047,7 +1048,10 @@ namespace Box3Blocks.Editor
             }
 
             Material material = new Material(shader) { name = "M_Block" };
-            material.mainTexture = atlasSource.mainTexture;
+            if (atlasSource.mainTexture != null)
+            {
+                material.mainTexture = atlasSource.mainTexture;
+            }
             material.SetFloat("_Mode", 0f);
             material.SetInt("_SrcBlend", (int)BlendMode.One);
             material.SetInt("_DstBlend", (int)BlendMode.Zero);

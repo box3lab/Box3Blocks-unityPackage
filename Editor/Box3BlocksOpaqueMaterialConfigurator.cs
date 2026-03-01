@@ -19,7 +19,11 @@ namespace Box3Blocks.Editor
                 material.SetColor("_EmissionColor", Color.white);
                 if (material.HasProperty("_EmissionMap"))
                 {
-                    material.SetTexture("_EmissionMap", Box3BlocksAssetFactory.GetAtlasEmissionTexture());
+                    Texture2D emission = Box3BlocksAssetFactory.GetAtlasEmissionTexture();
+                    if (emission != null)
+                    {
+                        material.SetTexture("_EmissionMap", emission);
+                    }
                 }
             }
 

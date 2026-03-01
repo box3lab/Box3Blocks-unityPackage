@@ -1379,9 +1379,10 @@ namespace Box3Blocks.Editor
 
             if (_chunkOpaqueMaterialInstance != null)
             {
-                if (_chunkOpaqueMaterialInstance.mainTexture != source.mainTexture)
+                Texture sourceMain = source.mainTexture;
+                if (sourceMain != null && _chunkOpaqueMaterialInstance.mainTexture != sourceMain)
                 {
-                    _chunkOpaqueMaterialInstance.mainTexture = source.mainTexture;
+                    _chunkOpaqueMaterialInstance.mainTexture = sourceMain;
                 }
 
                 ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
@@ -1392,7 +1393,10 @@ namespace Box3Blocks.Editor
             if (existing != null)
             {
                 _chunkOpaqueMaterialInstance = existing;
-                _chunkOpaqueMaterialInstance.mainTexture = source.mainTexture;
+                if (source.mainTexture != null)
+                {
+                    _chunkOpaqueMaterialInstance.mainTexture = source.mainTexture;
+                }
                 ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
                 EditorUtility.SetDirty(_chunkOpaqueMaterialInstance);
                 return _chunkOpaqueMaterialInstance;
@@ -1414,7 +1418,10 @@ namespace Box3Blocks.Editor
             {
                 name = "M_Block"
             };
-            m.mainTexture = source.mainTexture;
+            if (source.mainTexture != null)
+            {
+                m.mainTexture = source.mainTexture;
+            }
             m.SetFloat("_Mode", 0f);
             m.SetInt("_SrcBlend", (int)BlendMode.One);
             m.SetInt("_DstBlend", (int)BlendMode.Zero);
