@@ -37,8 +37,17 @@ namespace BlockWorldMVP.Editor
             {
                 material.SetTexture("_MetallicGlossMap", metallic);
                 material.SetFloat("_Metallic", 0.2f);
-                material.SetFloat("_Glossiness", 0.5f);
                 material.EnableKeyword("_METALLICGLOSSMAP");
+            }
+
+            if (material.HasProperty("_Glossiness"))
+            {
+                material.SetFloat("_Glossiness", 0.15f);
+            }
+
+            if (material.HasProperty("_GlossMapScale"))
+            {
+                material.SetFloat("_GlossMapScale", 0.15f);
             }
 
             material.SetFloat("_Mode", 0f);
