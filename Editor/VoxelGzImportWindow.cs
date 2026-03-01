@@ -255,6 +255,8 @@ namespace BlockWorldMVP.Editor
         private Dictionary<string, BlockDefinition> _blockDefs;
         private Dictionary<string, PreparedBlock> _preparedByName;
         private Dictionary<string, bool> _transparentByName;
+        private Dictionary<string, bool> _emissiveByName;
+        private Dictionary<string, Color> _emissiveLightColorByName;
         private Dictionary<ChunkKey, ChunkBucket> _chunkBuckets;
         private List<ChunkKey> _chunkKeys;
         private Transform _importRoot;
@@ -546,6 +548,8 @@ namespace BlockWorldMVP.Editor
 
                 _idToName = LoadBlockIdMap();
                 _transparentByName = LoadBlockTransparencyMap();
+                _emissiveByName = LoadBlockEmissiveMap();
+                _emissiveLightColorByName = LoadBlockLightColorMap();
                 _blockDefs = LoadBlockDefinitions();
                 _preparedByName = new Dictionary<string, PreparedBlock>(StringComparer.OrdinalIgnoreCase);
                 bool useChunkMode = _importMode == ImportMode.Chunk;
@@ -708,7 +712,7 @@ namespace BlockWorldMVP.Editor
                 else
                 {
                     bool isTransparent = IsTransparentBlock(blockName);
-                    bool isEmissive = IsEmissiveKeyword(blockName);
+                    bool isEmissive = IsEmissiveBlock(blockName);
                     Vector3Int gridPos = new Vector3Int(wx, wy, wz);
                     if (_allVoxels != null)
                     {
@@ -737,7 +741,7 @@ namespace BlockWorldMVP.Editor
 
                     if (_spawnRealtimeLights && isEmissive)
                     {
-                        bucket.emissivePositions.Add(gridPos);
+                        bucket.emissiveVoxels.Add(new EmissiveLightVoxel(gridPos, ResolveEmissiveLightColor(blockName)));
                     }
 
                     if (_addSurfaceCollider && _occupiedVoxels != null && _chunkVoxelPositions != null)
@@ -845,7 +849,7 @@ namespace BlockWorldMVP.Editor
             {
                 ChunkKey key = _chunkKeys[i];
                 if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket)
-                    || (bucket.opaqueCombines.Count == 0 && bucket.transparentVoxels.Count == 0 && bucket.emissivePositions.Count == 0))
+                    || (bucket.opaqueCombines.Count == 0 && bucket.transparentVoxels.Count == 0 && bucket.emissiveVoxels.Count == 0))
                 {
                     continue;
                 }
@@ -914,12 +918,12 @@ namespace BlockWorldMVP.Editor
                     }
                 }
 
-                if (_spawnRealtimeLights && bucket.emissivePositions.Count > 0)
+                if (_spawnRealtimeLights && bucket.emissiveVoxels.Count > 0)
                 {
-                    for (int l = 0; l < bucket.emissivePositions.Count; l++)
+                    for (int l = 0; l < bucket.emissiveVoxels.Count; l++)
                     {
-                        Vector3Int p = bucket.emissivePositions[l];
-                        CreateRealtimeLight(go.transform, p, Color.white);
+                        EmissiveLightVoxel lightVoxel = bucket.emissiveVoxels[l];
+                        CreateRealtimeLight(go.transform, lightVoxel.pos, lightVoxel.color);
                         _createdRealtimeLights++;
                     }
                 }
@@ -1198,9 +1202,9 @@ namespace BlockWorldMVP.Editor
 
             ApplyEmissionForBlockName(mr, blockName);
 
-            if (_spawnRealtimeLights && IsEmissiveKeyword(blockName))
+            if (_spawnRealtimeLights && IsEmissiveBlock(blockName))
             {
-                CreateRealtimeLight(go.transform, Vector3.zero, Color.white);
+                CreateRealtimeLight(go.transform, Vector3.zero, ResolveEmissiveLightColor(blockName));
                 _createdRealtimeLights++;
             }
         }
@@ -2086,6 +2090,33 @@ namespace BlockWorldMVP.Editor
             return BlockIdRules.IsTransparencyKeyword(blockName);
         }
 
+        private bool IsEmissiveBlock(string blockName)
+        {
+            if (string.IsNullOrWhiteSpace(blockName))
+            {
+                return false;
+            }
+
+            if (_emissiveByName != null && _emissiveByName.TryGetValue(blockName, out bool emits))
+            {
+                return emits;
+            }
+
+            return BlockIdRules.IsEmissiveKeyword(blockName);
+        }
+
+        private Color ResolveEmissiveLightColor(string blockName)
+        {
+            if (!string.IsNullOrWhiteSpace(blockName)
+                && _emissiveLightColorByName != null
+                && _emissiveLightColorByName.TryGetValue(blockName, out Color mapped))
+            {
+                return mapped;
+            }
+
+            return BlockIdRules.InferLightColor(blockName);
+        }
+
         private static bool IsWaterBlock(string blockName)
         {
             return blockName.IndexOf("water", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -2096,9 +2127,132 @@ namespace BlockWorldMVP.Editor
             return blockName.IndexOf("barrier", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private static bool IsEmissiveKeyword(string blockName)
+        private static Dictionary<string, bool> LoadBlockEmissiveMap()
         {
-            return BlockIdRules.IsEmissiveKeyword(blockName);
+            Dictionary<string, bool> map = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            string absPath = GetProjectAbsolutePath(BlockSpecPath);
+            if (File.Exists(absPath))
+            {
+                string json = File.ReadAllText(absPath);
+                Dictionary<string, string> objects = ExtractTopLevelObjectValues(json);
+                foreach (KeyValuePair<string, string> pair in objects)
+                {
+                    string name = pair.Key;
+                    string body = pair.Value;
+                    if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(body))
+                    {
+                        continue;
+                    }
+
+                    bool emits = HasMeaningfulEmission(body)
+                        || ReadBoolField(body, "emissive")
+                        || Regex.IsMatch(body, "\"glow\"\\s*:\\s*(true|1)", RegexOptions.IgnoreCase)
+                        || BlockIdRules.IsEmissiveKeyword(name);
+                    map[name] = emits;
+                }
+            }
+
+            if (map.Count > 0)
+            {
+                return map;
+            }
+
+            string fallback = GetProjectAbsolutePath(BlockIdPath);
+            if (!File.Exists(fallback))
+            {
+                return map;
+            }
+
+            string fallbackJson = File.ReadAllText(fallback);
+            MatchCollection flatMatches = FlatMapRegex.Matches(fallbackJson);
+            for (int i = 0; i < flatMatches.Count; i++)
+            {
+                Match m = flatMatches[i];
+                string name = m.Groups["name"].Value;
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+
+                if (!map.ContainsKey(name))
+                {
+                    map[name] = BlockIdRules.IsEmissiveKeyword(name);
+                }
+            }
+
+            return map;
+        }
+
+        private static Dictionary<string, Color> LoadBlockLightColorMap()
+        {
+            Dictionary<string, Color> map = new Dictionary<string, Color>(StringComparer.OrdinalIgnoreCase);
+            string absPath = GetProjectAbsolutePath(BlockSpecPath);
+            if (File.Exists(absPath))
+            {
+                string json = File.ReadAllText(absPath);
+                Dictionary<string, string> objects = ExtractTopLevelObjectValues(json);
+                foreach (KeyValuePair<string, string> pair in objects)
+                {
+                    string name = pair.Key;
+                    string body = pair.Value;
+                    if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(body))
+                    {
+                        continue;
+                    }
+
+                    Color color = ReadColorArrayField(body, "emissive", BlockIdRules.InferLightColor(name));
+                    map[name] = color;
+                }
+            }
+
+            return map;
+        }
+
+        private static bool HasMeaningfulEmission(string body)
+        {
+            Match m = Regex.Match(body, "\"emissive\"\\s*:\\s*\\[(?<value>[^\\]]+)\\]", RegexOptions.IgnoreCase);
+            if (!m.Success)
+            {
+                return false;
+            }
+
+            string[] parts = m.Groups["value"].Value.Split(',');
+            float sum = 0f;
+            for (int i = 0; i < Mathf.Min(3, parts.Length); i++)
+            {
+                sum += Mathf.Abs(BlockJsonLite.ParseFloatSafe(parts[i], 0f));
+            }
+
+            return sum > 0.001f;
+        }
+
+        private static Color ReadColorArrayField(string text, string fieldName, Color fallback)
+        {
+            Match match = Regex.Match(text, $"\"{Regex.Escape(fieldName)}\"\\s*:\\s*\\[(?<value>[^\\]]+)\\]", RegexOptions.IgnoreCase);
+            if (!match.Success)
+            {
+                return fallback;
+            }
+
+            string[] parts = match.Groups["value"].Value.Split(',');
+            if (parts.Length < 3)
+            {
+                return fallback;
+            }
+
+            float r = BlockJsonLite.ParseFloatSafe(parts[0], fallback.r);
+            float g = BlockJsonLite.ParseFloatSafe(parts[1], fallback.g);
+            float b = BlockJsonLite.ParseFloatSafe(parts[2], fallback.b);
+
+            float max = Mathf.Max(r, Mathf.Max(g, b));
+            if (max > 1f)
+            {
+                r /= max;
+                g /= max;
+                b /= max;
+            }
+
+            return new Color(Mathf.Clamp01(r), Mathf.Clamp01(g), Mathf.Clamp01(b), 1f);
         }
 
         private static void CreateRealtimeLight(Transform parent, Vector3 localPosition, Color color)

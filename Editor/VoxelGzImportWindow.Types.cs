@@ -75,7 +75,7 @@ namespace BlockWorldMVP.Editor
         {
             public readonly List<CombineInstance> opaqueCombines = new List<CombineInstance>(2048);
             public readonly List<TransparentVoxel> transparentVoxels = new List<TransparentVoxel>(512);
-            public readonly List<Vector3Int> emissivePositions = new List<Vector3Int>(64);
+            public readonly List<EmissiveLightVoxel> emissiveVoxels = new List<EmissiveLightVoxel>(64);
         }
 
         private sealed class ImportStats
@@ -121,6 +121,18 @@ namespace BlockWorldMVP.Editor
                 this.rot = rot;
                 this.prepared = prepared;
                 this.blockName = blockName;
+            }
+        }
+
+        private readonly struct EmissiveLightVoxel
+        {
+            public readonly Vector3Int pos;
+            public readonly Color color;
+
+            public EmissiveLightVoxel(Vector3Int pos, Color color)
+            {
+                this.pos = pos;
+                this.color = color;
             }
         }
 
