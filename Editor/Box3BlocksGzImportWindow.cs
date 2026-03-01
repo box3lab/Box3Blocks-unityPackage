@@ -78,146 +78,6 @@ namespace Box3Blocks.Editor
         };
         private static readonly Regex SideRegex = new Regex(@"^(.*)_(back|bottom|front|left|right|top)\.png$", RegexOptions.Compiled);
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
-        private static readonly Dictionary<string, string> FallbackEn = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["voxel.window.title"] = "Voxel GZ Importer",
-            ["voxel.section.source"] = "Source",
-            ["voxel.section.options"] = "Import Options",
-            ["voxel.section.run"] = "Run",
-            ["voxel.section.export"] = "Export",
-            ["voxel.section.status"] = "Status",
-            ["voxel.source.mode"] = "Source Mode",
-            ["voxel.source.local"] = "Local File",
-            ["voxel.source.url"] = "URL",
-            ["voxel.source.gz_file"] = "GZ File",
-            ["voxel.source.browse"] = "Browse",
-            ["voxel.source.select_file"] = "Select voxel gzip file",
-            ["voxel.source.url_value"] = "URL",
-            ["voxel.source.parent"] = "Parent",
-            ["voxel.source.create_root"] = "Create Root",
-            ["voxel.source.origin"] = "Origin",
-            ["voxel.option.ignore_barrier"] = "Ignore Barrier blocks",
-            ["voxel.option.import_mode"] = "Import Mode",
-            ["voxel.mode.chunk"] = "Chunk (Recommended)",
-            ["voxel.mode.single_block"] = "Single Block (Editable)",
-            ["voxel.option.replace_previous"] = "Replace previous __VoxelImportGz",
-            ["voxel.option.surface_collider"] = "Add Surface Collider (Top Faces Only)",
-            ["voxel.option.mesh_collider"] = "Add Full MeshCollider",
-            ["voxel.option.chunk_size"] = "Chunk Size (1 = Whole Scene)",
-            ["voxel.option.chunks_per_tick"] = "Chunks / Tick",
-            ["voxel.option.alpha_clip"] = "Chunk: Use Alpha Clip (fix transparent artifacts)",
-            ["voxel.option.alpha_cutoff"] = "Chunk Alpha Cutoff",
-            ["voxel.option.spawn_realtime_lights"] = "Spawn Realtime Lights (Emissive Blocks)",
-            ["voxel.option.max_realtime_lights"] = "Max Realtime Lights",
-            ["voxel.option.voxels_per_tick"] = "Voxels / Tick",
-            ["voxel.option.fixed_filters"] = "Fixed filters: Air and Water are always ignored for stability.",
-            ["voxel.run.import"] = "Import",
-            ["voxel.run.cancel"] = "Cancel",
-            ["voxel.export.root"] = "Export Root",
-            ["voxel.export.gz_file"] = "Export GZ",
-            ["voxel.export.browse"] = "Browse",
-            ["voxel.export.select_file"] = "Save voxel gzip file",
-            ["voxel.export.run"] = "Export GZ",
-            ["voxel.export.err.no_root"] = "Export Root is empty.",
-            ["voxel.export.err.empty"] = "No Box3BlocksPlacedBlock found under Export Root.",
-            ["voxel.export.done"] = "Export complete. Blocks: {0}, Skipped unknown: {1}",
-            ["voxel.status.idle"] = "Idle",
-            ["voxel.status.percent"] = "{0}%",
-            ["voxel.status.processing_start"] = "Processing voxels...",
-            ["voxel.status.processing_progress"] = "Processing voxels: {0}/{1}",
-            ["voxel.status.placing_blocks"] = "Placing blocks...",
-            ["voxel.status.placing_progress"] = "Placing blocks: {0}/{1}",
-            ["voxel.status.building_start"] = "Building chunk meshes...",
-            ["voxel.status.building_progress"] = "Building chunks: {0}/{1}",
-            ["voxel.done.title"] = "Import complete.",
-            ["voxel.done.total"] = "Total Voxels: {0}",
-            ["voxel.done.imported"] = "Imported Voxels: {0}",
-            ["voxel.done.chunks"] = "Created Chunks: {0}",
-            ["voxel.done.blocks"] = "Created Blocks: {0}",
-            ["voxel.done.surface_colliders"] = "Surface Colliders: {0}",
-            ["voxel.done.mesh_colliders"] = "Mesh Colliders: {0}",
-            ["voxel.done.skipped"] = "Skipped Air/Water/Barrier/Unknown/Invalid: {0}/{1}/{2}/{3}/{4}",
-            ["voxel.done.time"] = "Time: {0}s",
-            ["voxel.err.failed_with_reason"] = "Failed: {0}",
-            ["voxel.err.empty_json"] = "Failed: empty gzip json.",
-            ["voxel.err.json_parse"] = "json parse failed.",
-            ["voxel.err.shape_invalid"] = "shape is missing or invalid.",
-            ["voxel.err.indices_data_missing"] = "indices/data is missing.",
-            ["voxel.err.shape_values_invalid"] = "shape values must be > 0.",
-            ["voxel.err.gz_path_empty"] = "GZ file path is empty.",
-            ["voxel.err.gz_not_found"] = "GZ file not found.",
-            ["voxel.err.url_empty"] = "URL is empty."
-        };
-        private static readonly Dictionary<string, string> FallbackZh = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["voxel.window.title"] = "体素 GZ 导入器",
-            ["voxel.section.source"] = "导入来源",
-            ["voxel.section.options"] = "导入选项",
-            ["voxel.section.run"] = "执行",
-            ["voxel.section.export"] = "导出",
-            ["voxel.section.status"] = "状态",
-            ["voxel.source.mode"] = "来源模式",
-            ["voxel.source.local"] = "本地文件",
-            ["voxel.source.url"] = "网络地址",
-            ["voxel.source.gz_file"] = "GZ 文件",
-            ["voxel.source.browse"] = "浏览",
-            ["voxel.source.select_file"] = "选择体素 gzip 文件",
-            ["voxel.source.url_value"] = "URL",
-            ["voxel.source.parent"] = "父节点",
-            ["voxel.source.create_root"] = "创建根节点",
-            ["voxel.source.origin"] = "原点",
-            ["voxel.option.ignore_barrier"] = "忽略 Barrier 方块",
-            ["voxel.option.import_mode"] = "导入模式",
-            ["voxel.mode.chunk"] = "Chunk（推荐）",
-            ["voxel.mode.single_block"] = "单个方块（可编辑）",
-            ["voxel.option.replace_previous"] = "替换上一次 __VoxelImportGz",
-            ["voxel.option.surface_collider"] = "添加表面碰撞（仅顶面）",
-            ["voxel.option.mesh_collider"] = "添加完整 MeshCollider",
-            ["voxel.option.chunk_size"] = "Chunk 尺寸（1=整体）",
-            ["voxel.option.chunks_per_tick"] = "每 Tick Chunk 数",
-            ["voxel.option.alpha_clip"] = "Chunk 使用 Alpha Clip（修复透明伪影）",
-            ["voxel.option.alpha_cutoff"] = "Chunk Alpha 阈值",
-            ["voxel.option.spawn_realtime_lights"] = "生成实时点光源（发光方块）",
-            ["voxel.option.max_realtime_lights"] = "实时点光源上限",
-            ["voxel.option.voxels_per_tick"] = "每 Tick 体素数",
-            ["voxel.option.fixed_filters"] = "固定过滤：默认始终忽略 Air 和 Water。",
-            ["voxel.run.import"] = "导入",
-            ["voxel.run.cancel"] = "取消",
-            ["voxel.export.root"] = "导出根节点",
-            ["voxel.export.gz_file"] = "导出 GZ",
-            ["voxel.export.browse"] = "浏览",
-            ["voxel.export.select_file"] = "保存体素 gzip 文件",
-            ["voxel.export.run"] = "导出 GZ",
-            ["voxel.export.err.no_root"] = "导出根节点为空。",
-            ["voxel.export.err.empty"] = "导出根节点下没有 Box3BlocksPlacedBlock。",
-            ["voxel.export.done"] = "导出完成。方块数: {0}，跳过未知: {1}",
-            ["voxel.status.idle"] = "空闲",
-            ["voxel.status.percent"] = "{0}%",
-            ["voxel.status.processing_start"] = "正在处理体素...",
-            ["voxel.status.processing_progress"] = "处理体素: {0}/{1}",
-            ["voxel.status.placing_blocks"] = "正在放置方块...",
-            ["voxel.status.placing_progress"] = "放置方块: {0}/{1}",
-            ["voxel.status.building_start"] = "正在构建 Chunk 网格...",
-            ["voxel.status.building_progress"] = "构建 Chunk: {0}/{1}",
-            ["voxel.done.title"] = "导入完成。",
-            ["voxel.done.total"] = "体素总数: {0}",
-            ["voxel.done.imported"] = "导入体素: {0}",
-            ["voxel.done.chunks"] = "生成 Chunk: {0}",
-            ["voxel.done.blocks"] = "生成方块: {0}",
-            ["voxel.done.surface_colliders"] = "表面碰撞体: {0}",
-            ["voxel.done.mesh_colliders"] = "完整 MeshCollider: {0}",
-            ["voxel.done.skipped"] = "跳过 Air/Water/Barrier/Unknown/Invalid: {0}/{1}/{2}/{3}/{4}",
-            ["voxel.done.time"] = "耗时: {0}s",
-            ["voxel.err.failed_with_reason"] = "失败: {0}",
-            ["voxel.err.empty_json"] = "失败: gzip json 为空。",
-            ["voxel.err.json_parse"] = "json 解析失败。",
-            ["voxel.err.shape_invalid"] = "shape 缺失或格式错误。",
-            ["voxel.err.indices_data_missing"] = "indices/data 缺失。",
-            ["voxel.err.shape_values_invalid"] = "shape 值必须大于 0。",
-            ["voxel.err.gz_path_empty"] = "GZ 文件路径为空。",
-            ["voxel.err.gz_not_found"] = "未找到 GZ 文件。",
-            ["voxel.err.url_empty"] = "URL 为空。"
-        };
 
         private SourceType _sourceType = SourceType.LocalFile;
         private string _localGzPath = string.Empty;
@@ -305,32 +165,12 @@ namespace Box3Blocks.Editor
 
         private static string L(string key)
         {
-            string localized = Box3BlocksI18n.Get(key);
-            if (!string.Equals(localized, key, StringComparison.Ordinal))
-            {
-                return localized;
-            }
-
-            Dictionary<string, string> fallback = IsChineseUI() ? FallbackZh : FallbackEn;
-            if (fallback.TryGetValue(key, out string value) && !string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-
-            return key;
+            return Box3BlocksI18n.Get(key);
         }
 
         private static string Lf(string key, params object[] args)
         {
             return string.Format(CultureInfo.InvariantCulture, L(key), args);
-        }
-
-        private static bool IsChineseUI()
-        {
-            // Keep fallback language aligned with the shared i18n resolver.
-            // "dialog.ok" is guaranteed in both en/zh resources.
-            string marker = Box3BlocksI18n.Get("dialog.ok");
-            return string.Equals(marker, "确定", StringComparison.Ordinal);
         }
 
         private void EnsureStyles()
@@ -459,7 +299,7 @@ namespace Box3Blocks.Editor
             EditorGUI.EndDisabledGroup();
             _spawnRealtimeLights = EditorGUILayout.ToggleLeft(L("voxel.option.spawn_realtime_lights"), _spawnRealtimeLights);
             _voxelsPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.voxels_per_tick"), _voxelsPerTick), 2000, 200000);
-            EditorGUILayout.LabelField(L("voxel.option.fixed_filters"), _subtleLabelStyle);
+         
         }
 
         private void DrawRunSection()
@@ -966,7 +806,7 @@ namespace Box3Blocks.Editor
                 Lf("voxel.done.blocks", _stats.createdBlocks) + "\n" +
                 Lf("voxel.done.surface_colliders", _stats.createdSurfaceColliders) + "\n" +
                 Lf("voxel.done.mesh_colliders", _stats.createdMeshColliders) + "\n" +
-                Lf("voxel.done.skipped", _stats.skippedAir, _stats.skippedWater, _stats.skippedBarrier, _stats.skippedUnknown, _stats.skippedInvalid) + "\n" +
+                Lf("voxel.done.skipped", _stats.skippedBarrier) + "\n" +
                 Lf("voxel.done.time", sec.ToString("F2", CultureInfo.InvariantCulture));
             _status = summary.Replace("\n", " | ");
             EditorUtility.DisplayDialog(L("voxel.window.title"), summary, L("dialog.ok"));

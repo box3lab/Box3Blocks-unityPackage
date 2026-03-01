@@ -26,38 +26,6 @@ namespace Box3Blocks.Editor
             public int[] rot;
         }
 
-        private static readonly Dictionary<string, string> FallbackEn = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["voxel.export.window.title"] = "Voxel GZ Exporter",
-            ["voxel.section.export"] = "Export",
-            ["voxel.section.status"] = "Status",
-            ["voxel.export.root"] = "Export Root",
-            ["voxel.export.gz_file"] = "Export GZ",
-            ["voxel.export.browse"] = "Browse",
-            ["voxel.export.select_file"] = "Save voxel gzip file",
-            ["voxel.export.run"] = "Export GZ",
-            ["voxel.export.err.no_root"] = "Export Root is empty.",
-            ["voxel.export.err.empty"] = "No Box3BlocksPlacedBlock found under Export Root.",
-            ["voxel.export.done"] = "Export complete. Blocks: {0}, Skipped unknown: {1}",
-            ["dialog.ok"] = "OK"
-        };
-
-        private static readonly Dictionary<string, string> FallbackZh = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["voxel.export.window.title"] = "体素 GZ 导出器",
-            ["voxel.section.export"] = "导出",
-            ["voxel.section.status"] = "状态",
-            ["voxel.export.root"] = "导出根节点",
-            ["voxel.export.gz_file"] = "导出 GZ",
-            ["voxel.export.browse"] = "浏览",
-            ["voxel.export.select_file"] = "保存体素 gzip 文件",
-            ["voxel.export.run"] = "导出 GZ",
-            ["voxel.export.err.no_root"] = "导出根节点为空。",
-            ["voxel.export.err.empty"] = "导出根节点下没有 Box3BlocksPlacedBlock。",
-            ["voxel.export.done"] = "导出完成。方块数: {0}，跳过未知: {1}",
-            ["dialog.ok"] = "确定"
-        };
-
         private Transform _exportRoot;
         private string _exportGzPath = string.Empty;
         private string _status = string.Empty;
@@ -89,35 +57,12 @@ namespace Box3Blocks.Editor
 
         private static string L(string key)
         {
-            string localized = Box3BlocksI18n.Get(key);
-            if (!string.Equals(localized, key, StringComparison.Ordinal))
-            {
-                return localized;
-            }
-
-            Dictionary<string, string> fallback = IsChineseUI() ? FallbackZh : FallbackEn;
-            return fallback.TryGetValue(key, out string value) ? value : key;
+            return Box3BlocksI18n.Get(key);
         }
 
         private static string Lf(string key, params object[] args)
         {
             return string.Format(CultureInfo.InvariantCulture, L(key), args);
-        }
-
-        private static bool IsChineseUI()
-        {
-            string prefLanguage = EditorPrefs.GetString("Editor.kLanguage", string.Empty);
-            if (!string.IsNullOrWhiteSpace(prefLanguage))
-            {
-                string lower = prefLanguage.Trim().ToLowerInvariant();
-                if (lower.StartsWith("zh", StringComparison.Ordinal) || lower.Contains("chinese", StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            SystemLanguage lang = Application.systemLanguage;
-            return lang == SystemLanguage.ChineseSimplified || lang == SystemLanguage.ChineseTraditional;
         }
 
         private void EnsureStyles()
