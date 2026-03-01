@@ -24,6 +24,7 @@ namespace BlockWorldMVP.Editor
         private static readonly Regex SideRegex = new Regex(@"^(.*)_(back|bottom|front|left|right|top)\.png$", RegexOptions.Compiled);
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
         private static readonly int MainTexStShaderId = Shader.PropertyToID("_MainTex_ST");
+        private static readonly int EmissionColorShaderId = Shader.PropertyToID("_EmissionColor");
 
         private Transform _root;
         private List<BlockDefinition> _allBlocks = new List<BlockDefinition>();
@@ -757,6 +758,7 @@ namespace BlockWorldMVP.Editor
             PlacedBlock marker = go.AddComponent<PlacedBlock>();
             marker.BlockId = definition.id;
             marker.HasAnimation = hasAnimatedFaces;
+            ApplyEmissionForDefinition(meshRenderer, definition);
 
             RefreshTransparentAround(position);
             EditorUtility.SetDirty(go);
@@ -1083,6 +1085,16 @@ namespace BlockWorldMVP.Editor
             if (material == null)
             {
                 return;
+            }
+
+            if (material.HasProperty("_EmissionColor"))
+            {
+                material.EnableKeyword("_EMISSION");
+                material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                if (material.HasProperty("_EmissionMap") && material.mainTexture != null)
+                {
+                    material.SetTexture("_EmissionMap", material.mainTexture);
+                }
             }
 
             Texture2D bump = BlockAssetFactory.GetAtlasBumpTexture();
@@ -1521,6 +1533,7 @@ namespace BlockWorldMVP.Editor
             }
 
             animator.SetAnimations(runtimeAnimations.ToArray(), renderData.faceMainTexSt);
+            ApplyEmissionForDefinition(renderer, definition);
         }
 
         private static bool HasAnimatedFaces(BlockDefinition definition)
@@ -1994,6 +2007,39 @@ namespace BlockWorldMVP.Editor
             {
                 renderer.GetPropertyBlock(block, i);
                 block.SetVector(MainTexStShaderId, faceMainTexSt[i]);
+                renderer.SetPropertyBlock(block, i);
+            }
+        }
+
+        private static void ApplyEmissionForDefinition(Renderer renderer, BlockDefinition definition)
+        {
+            if (renderer == null)
+            {
+                return;
+            }
+
+            Material[] shared = renderer.sharedMaterials;
+            if (shared == null || shared.Length == 0)
+            {
+                return;
+            }
+
+            Color emissionColor = (definition != null && definition.emitsLight)
+                ? new Color(definition.lightColor.r * 1.6f, definition.lightColor.g * 1.6f, definition.lightColor.b * 1.6f, 1f)
+                : Color.black;
+
+            MaterialPropertyBlock block = new MaterialPropertyBlock();
+            for (int i = 0; i < shared.Length; i++)
+            {
+                Material mat = shared[i];
+                if (mat == null || !mat.HasProperty(EmissionColorShaderId))
+                {
+                    continue;
+                }
+
+                block.Clear();
+                renderer.GetPropertyBlock(block, i);
+                block.SetColor(EmissionColorShaderId, emissionColor);
                 renderer.SetPropertyBlock(block, i);
             }
         }
