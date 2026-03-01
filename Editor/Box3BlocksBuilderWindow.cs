@@ -73,6 +73,9 @@ namespace Box3Blocks.Editor
         private const double AnimatedCardPreviewFps = 4.0;
         private float _blockListViewportHeight = 420f;
         private const float CardVisiblePadding = 120f;
+        private readonly Dictionary<Vector3Int, GameObject> _blockLookup = new Dictionary<Vector3Int, GameObject>();
+        private Transform _blockLookupRoot;
+        private bool _blockLookupDirty = true;
         private readonly Dictionary<string, Mesh> _staticBlockMeshCache = new Dictionary<string, Mesh>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Texture2D> _blockCardPreviewCache = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, AnimatedPreviewCacheEntry> _animatedBlockCardPreviewCache = new Dictionary<string, AnimatedPreviewCacheEntry>(StringComparer.OrdinalIgnoreCase);
@@ -89,12 +92,16 @@ namespace Box3Blocks.Editor
         private void OnEnable()
         {
             SceneView.duringSceneGui += OnSceneGUI;
+            _blockLookupDirty = true;
             ReloadBlockLibrary();
         }
 
         private void OnDisable()
         {
             SceneView.duringSceneGui -= OnSceneGUI;
+            _blockLookup.Clear();
+            _blockLookupRoot = null;
+            _blockLookupDirty = true;
             _staticBlockMeshCache.Clear();
             ClearBlockCardPreviewCache();
             if (_blockCardPreviewUtility != null)
@@ -315,7 +322,12 @@ namespace Box3Blocks.Editor
 
         private void DrawRootSection()
         {
-            _root = (Transform)EditorGUILayout.ObjectField(L("root.root"), _root, typeof(Transform), true);
+            Transform newRoot = (Transform)EditorGUILayout.ObjectField(L("root.root"), _root, typeof(Transform), true);
+            if (newRoot != _root)
+            {
+                _root = newRoot;
+                _blockLookupDirty = true;
+            }
 
             using (new EditorGUILayout.HorizontalScope())
             {
@@ -426,18 +438,34 @@ namespace Box3Blocks.Editor
             int clampedColumns = Mathf.Max(1, columns);
             float totalGap = (clampedColumns - 1) * gap;
             float cellWidth = Mathf.Max(120f, (safeWidth - totalGap) / clampedColumns);
-
-            int index = 0;
-            while (index < _filteredBlocks.Count)
+            float cellHeight = Mathf.Max(136f, PreviewSize + 68f);
+            float rowHeight = cellHeight + gap;
+            int rowCount = Mathf.CeilToInt(_filteredBlocks.Count / (float)clampedColumns);
+            if (rowCount <= 0)
             {
+                return;
+            }
+
+            int startRow = Mathf.Clamp(Mathf.FloorToInt((_scroll.y - CardVisiblePadding) / Mathf.Max(1f, rowHeight)), 0, rowCount - 1);
+            int endRow = Mathf.Clamp(Mathf.CeilToInt((_scroll.y + _blockListViewportHeight + CardVisiblePadding) / Mathf.Max(1f, rowHeight)), startRow, rowCount - 1);
+
+            float topSpace = startRow * rowHeight;
+            if (topSpace > 0f)
+            {
+                GUILayout.Space(topSpace);
+            }
+
+            for (int row = startRow; row <= endRow; row++)
+            {
+                int rowStartIndex = row * clampedColumns;
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     for (int c = 0; c < clampedColumns; c++)
                     {
+                        int index = rowStartIndex + c;
                         if (index < _filteredBlocks.Count)
                         {
                             DrawBlockCard(index, _filteredBlocks[index], cellWidth);
-                            index++;
                         }
                         else
                         {
@@ -452,6 +480,13 @@ namespace Box3Blocks.Editor
                 }
 
                 GUILayout.Space(gap);
+            }
+
+            float bottomRows = Mathf.Max(0, rowCount - 1 - endRow);
+            float bottomSpace = bottomRows * rowHeight;
+            if (bottomSpace > 0f)
+            {
+                GUILayout.Space(bottomSpace);
             }
         }
 
@@ -538,7 +573,7 @@ namespace Box3Blocks.Editor
             {
                 if (block != null)
                 {
-                    block.placementRotationQuarter = (block.placementRotationQuarter + 1) & 3;
+                    block.placementRotationQuarter = (block.placementRotationQuarter + 3) & 3;
                     StartCardRotateAnimation(block);
                     Repaint();
                 }
@@ -827,7 +862,6 @@ namespace Box3Blocks.Editor
             {
                 Handles.DrawWireCube(positions[i], Vector3.one);
             }
-            SceneView.RepaintAll();
         }
 
         private void PlaceBlockBrush(Vector3Int origin)
@@ -908,6 +942,7 @@ namespace Box3Blocks.Editor
             Box3BlocksPlacedBlock marker = go.AddComponent<Box3BlocksPlacedBlock>();
             marker.BlockId = definition.id;
             marker.HasAnimation = hasAnimatedFaces;
+            RegisterBlockInLookup(position, go);
             ApplyEmissionForDefinition(meshRenderer, definition);
             ConfigureRealtimeLight(go.transform, definition, _spawnPointLightForEmissive);
 
@@ -930,6 +965,7 @@ namespace Box3Blocks.Editor
                     continue;
                 }
 
+                UnregisterBlockInLookup(positions[i], target);
                 Undo.DestroyObjectImmediate(target);
                 refresh.Add(positions[i]);
             }
@@ -968,6 +1004,7 @@ namespace Box3Blocks.Editor
                     continue;
                 }
 
+                UnregisterBlockInLookup(pos, target);
                 Undo.DestroyObjectImmediate(target);
                 if (TryPlaceSingleBlock(replacement, pos))
                 {
@@ -1009,30 +1046,10 @@ namespace Box3Blocks.Editor
 
         private GameObject FindBlockAt(Vector3Int position)
         {
-            if (_root != null)
+            EnsureBlockLookup();
+            if (_blockLookup.TryGetValue(position, out GameObject cached) && cached != null)
             {
-                for (int i = 0; i < _root.childCount; i++)
-                {
-                    Transform child = _root.GetChild(i);
-                    if (Vector3Int.RoundToInt(child.position) == position)
-                    {
-                        Box3BlocksPlacedBlock marker = child.GetComponent<Box3BlocksPlacedBlock>();
-                        if (marker != null)
-                        {
-                            return child.gameObject;
-                        }
-                    }
-                }
-            }
-
-            Collider[] colliders = Physics.OverlapBox(position, Vector3.one * 0.45f);
-            for (int i = 0; i < colliders.Length; i++)
-            {
-                Box3BlocksPlacedBlock marker = colliders[i].GetComponentInParent<Box3BlocksPlacedBlock>();
-                if (marker != null && marker.transform.parent == _root)
-                {
-                    return marker.gameObject;
-                }
+                return cached;
             }
 
             return null;
@@ -1102,6 +1119,67 @@ namespace Box3Blocks.Editor
             return positions;
         }
 
+        private void EnsureBlockLookup()
+        {
+            if (_root == null)
+            {
+                if (_blockLookup.Count > 0)
+                {
+                    _blockLookup.Clear();
+                }
+
+                _blockLookupRoot = null;
+                _blockLookupDirty = true;
+                return;
+            }
+
+            if (!_blockLookupDirty && _blockLookupRoot == _root)
+            {
+                return;
+            }
+
+            _blockLookup.Clear();
+            _blockLookupRoot = _root;
+            for (int i = 0; i < _root.childCount; i++)
+            {
+                Transform child = _root.GetChild(i);
+                if (child == null)
+                {
+                    continue;
+                }
+
+                Box3BlocksPlacedBlock marker = child.GetComponent<Box3BlocksPlacedBlock>();
+                if (marker == null)
+                {
+                    continue;
+                }
+
+                _blockLookup[Vector3Int.RoundToInt(child.position)] = child.gameObject;
+            }
+
+            _blockLookupDirty = false;
+        }
+
+        private void RegisterBlockInLookup(Vector3Int position, GameObject go)
+        {
+            if (_root == null || go == null)
+            {
+                return;
+            }
+
+            EnsureBlockLookup();
+            _blockLookup[position] = go;
+        }
+
+        private void UnregisterBlockInLookup(Vector3Int position, GameObject go)
+        {
+            EnsureBlockLookup();
+            if (_blockLookup.TryGetValue(position, out GameObject existing) && (go == null || existing == go))
+            {
+                _blockLookup.Remove(position);
+            }
+        }
+
         private BlockDefinition FindDefinitionById(string id)
         {
             if (string.IsNullOrWhiteSpace(id))
@@ -1126,6 +1204,7 @@ namespace Box3Blocks.Editor
             GameObject go = new GameObject("BlockWorldRoot");
             Undo.RegisterCreatedObjectUndo(go, "Create Block Root");
             _root = go.transform;
+            _blockLookupDirty = true;
             Selection.activeObject = go;
         }
 
@@ -1140,6 +1219,8 @@ namespace Box3Blocks.Editor
             {
                 Undo.DestroyObjectImmediate(_root.GetChild(i).gameObject);
             }
+
+            _blockLookupDirty = true;
         }
 
         private List<Box3BlocksPlacedBlock> CollectPlacedBlocksFromRoot()
@@ -2234,7 +2315,7 @@ namespace Box3Blocks.Editor
             }
 
             float t = Mathf.Clamp01(elapsed / Mathf.Max(0.01f, state.duration));
-            return Mathf.Lerp(-90f, 0f, Mathf.SmoothStep(0f, 1f, t));
+            return Mathf.Lerp(90f, 0f, Mathf.SmoothStep(0f, 1f, t));
         }
 
         private void StartCardRotateAnimation(BlockDefinition block)
@@ -2742,6 +2823,7 @@ namespace Box3Blocks.Editor
                     return false;
                 }
 
+                UnregisterBlockInLookup(position, existing);
                 Undo.DestroyObjectImmediate(existing);
                 RefreshTransparentAround(position);
                 RefreshOcclusionAround(position);
@@ -2824,6 +2906,7 @@ namespace Box3Blocks.Editor
                     return false;
                 }
 
+                UnregisterBlockInLookup(position, existing);
                 Undo.DestroyObjectImmediate(existing);
                 int previousRotation = definition.placementRotationQuarter;
                 definition.placementRotationQuarter = rotationQuarter & 3;
