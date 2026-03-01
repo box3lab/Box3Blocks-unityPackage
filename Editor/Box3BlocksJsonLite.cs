@@ -4,9 +4,9 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    internal static class BlockJsonLite
+    internal static class Box3BlocksJsonLite
     {
         public static string ReadStringField(string text, string fieldName)
         {

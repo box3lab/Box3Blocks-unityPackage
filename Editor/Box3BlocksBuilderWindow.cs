@@ -7,9 +7,9 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    public partial class BlockWorldBuilderWindow : EditorWindow
+    public partial class Box3BlocksBuilderWindow : EditorWindow
     {
         private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
         private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
@@ -50,6 +50,12 @@ namespace BlockWorldMVP.Editor
         private GUIStyle _searchFieldStyle;
         private GUIStyle _categoryTabStyle;
         private GUIStyle _categoryTabSelectedStyle;
+        private GUIStyle _toolTabStyle;
+        private GUIStyle _toolTabSelectedStyle;
+        private GUIStyle _insetPanelStyle;
+        private GUIStyle _cardTitleStyle;
+        private GUIStyle _cardSubtitleStyle;
+        private GUIStyle _rotateBadgeStyle;
         private readonly Dictionary<string, Mesh> _staticBlockMeshCache = new Dictionary<string, Mesh>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Texture2D> _blockCardPreviewCache = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, AnimatedPreviewCacheEntry> _animatedBlockCardPreviewCache = new Dictionary<string, AnimatedPreviewCacheEntry>(StringComparer.OrdinalIgnoreCase);
@@ -59,7 +65,7 @@ namespace BlockWorldMVP.Editor
         [MenuItem("Box3/方块库", false, 0)]
         public static void Open()
         {
-            GetWindow<BlockWorldBuilderWindow>(L("window.title"));
+            GetWindow<Box3BlocksBuilderWindow>(L("window.title"));
         }
 
         private void OnEnable()
@@ -82,12 +88,12 @@ namespace BlockWorldMVP.Editor
 
         private static string L(string key)
         {
-            return BlockWorldBuilderI18n.Get(key);
+            return Box3BlocksI18n.Get(key);
         }
 
         private static string Lf(string key, params object[] args)
         {
-            return BlockWorldBuilderI18n.Format(key, args);
+            return Box3BlocksI18n.Format(key, args);
         }
 
         private static string LocalizeCategoryLabel(string category)
@@ -112,7 +118,7 @@ namespace BlockWorldMVP.Editor
                 return L("category.uncategorized");
             }
 
-            return BlockWorldBuilderI18n.GetCategoryLabel(category.Trim());
+            return Box3BlocksI18n.GetCategoryLabel(category.Trim());
         }
 
         private void OnGUI()
@@ -198,6 +204,61 @@ namespace BlockWorldMVP.Editor
                 };
                 _categoryTabSelectedStyle.normal.textColor = new Color(0.55f, 1f, 0.65f, 1f);
             }
+
+            if (_toolTabStyle == null)
+            {
+                _toolTabStyle = new GUIStyle(EditorStyles.miniButtonMid)
+                {
+                    fixedHeight = 26f,
+                    fontStyle = FontStyle.Bold
+                };
+            }
+
+            if (_toolTabSelectedStyle == null)
+            {
+                _toolTabSelectedStyle = new GUIStyle(_toolTabStyle);
+                _toolTabSelectedStyle.normal.textColor = new Color(0.62f, 0.8f, 1f, 1f);
+            }
+
+            if (_insetPanelStyle == null)
+            {
+                _insetPanelStyle = new GUIStyle("HelpBox")
+                {
+                    padding = new RectOffset(8, 8, 8, 8),
+                    margin = new RectOffset(0, 0, 0, 0)
+                };
+            }
+
+            if (_cardTitleStyle == null)
+            {
+                _cardTitleStyle = new GUIStyle(EditorStyles.label)
+                {
+                    alignment = TextAnchor.UpperCenter,
+                    wordWrap = true,
+                    fontSize = 12,
+                    fontStyle = FontStyle.Bold
+                };
+            }
+
+            if (_cardSubtitleStyle == null)
+            {
+                _cardSubtitleStyle = new GUIStyle(EditorStyles.miniLabel)
+                {
+                    alignment = TextAnchor.UpperCenter,
+                    wordWrap = true
+                };
+                _cardSubtitleStyle.normal.textColor = new Color(0.78f, 0.78f, 0.78f, 1f);
+            }
+
+            if (_rotateBadgeStyle == null)
+            {
+                _rotateBadgeStyle = new GUIStyle(EditorStyles.miniButton)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = FontStyle.Bold,
+                    fontSize = 10
+                };
+            }
         }
 
         private void DrawSection(string title, Action body)
@@ -231,26 +292,30 @@ namespace BlockWorldMVP.Editor
 
         private void DrawToolSection()
         {
-            _tool = (EditTool)GUILayout.Toolbar((int)_tool, new[] { L("tool.place"), L("tool.erase"), L("tool.replace"), L("tool.rotate") });
+            DrawToolTabs();
             EditorGUILayout.Space(4f);
 
-            using (new EditorGUILayout.HorizontalScope())
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
-                EditorGUILayout.LabelField(L("tool.horizontal"), _subtleLabelStyle, GUILayout.Width(104f));
-                int horizontalInput = Mathf.Max(1, EditorGUILayout.IntField(_brushHorizontalSize, GUILayout.Width(52f)));
-                float horizontalSliderMax = Mathf.Max(16f, horizontalInput);
-                _brushHorizontalSize = Mathf.Max(1, Mathf.RoundToInt(GUILayout.HorizontalSlider(horizontalInput, 1f, horizontalSliderMax)));
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField(L("tool.horizontal"), _subtleLabelStyle, GUILayout.Width(104f));
+                    int horizontalInput = Mathf.Max(1, EditorGUILayout.IntField(_brushHorizontalSize, GUILayout.Width(52f)));
+                    float horizontalSliderMax = Mathf.Max(16f, horizontalInput);
+                    _brushHorizontalSize = Mathf.Max(1, Mathf.RoundToInt(GUILayout.HorizontalSlider(horizontalInput, 1f, horizontalSliderMax)));
+                }
+
+                EditorGUILayout.Space(2f);
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField(L("tool.height"), _subtleLabelStyle, GUILayout.Width(104f));
+                    int heightInput = Mathf.Max(1, EditorGUILayout.IntField(_brushHeight, GUILayout.Width(52f)));
+                    float heightSliderMax = Mathf.Max(16f, heightInput);
+                    _brushHeight = Mathf.Max(1, Mathf.RoundToInt(GUILayout.HorizontalSlider(heightInput, 1f, heightSliderMax)));
+                }
             }
 
-            EditorGUILayout.Space(2f);
-
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.LabelField(L("tool.height"), _subtleLabelStyle, GUILayout.Width(70f));
-                int heightInput = Mathf.Max(1, EditorGUILayout.IntField(_brushHeight, GUILayout.Width(52f)));
-                float heightSliderMax = Mathf.Max(16f, heightInput);
-                _brushHeight = Mathf.Max(1, Mathf.RoundToInt(GUILayout.HorizontalSlider(heightInput, 1f, heightSliderMax)));
-            }
             EditorGUILayout.LabelField(Lf("tool.brush_volume", _brushHorizontalSize, _brushHorizontalSize, _brushHeight), _subtleLabelStyle);
 
             if (_root == null)
@@ -261,37 +326,40 @@ namespace BlockWorldMVP.Editor
 
         private void DrawBlockListSection()
         {
-            using (new EditorGUILayout.HorizontalScope())
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
-                string newSearch = EditorGUILayout.TextField(L("library.search"), _search, _searchFieldStyle);
-                if (!string.Equals(newSearch, _search, StringComparison.Ordinal))
+                using (new EditorGUILayout.HorizontalScope())
                 {
-                    _search = newSearch;
-                    ApplyFilter();
-                }
-            }
-
-            EditorGUILayout.Space(4f);
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                if (_categories.Count > 0)
-                {
-                    DrawCategoryTabsSidebar();
-                    GUILayout.Space(6f);
+                    string newSearch = EditorGUILayout.TextField(L("library.search"), _search, _searchFieldStyle);
+                    if (!string.Equals(newSearch, _search, StringComparison.Ordinal))
+                    {
+                        _search = newSearch;
+                        ApplyFilter();
+                    }
                 }
 
-                using (new EditorGUILayout.VerticalScope())
+                EditorGUILayout.Space(6f);
+                using (new EditorGUILayout.HorizontalScope())
                 {
-                    float rightPaneWidth = Mathf.Max(220f, position.width - (_categories.Count > 0 ? 98f : 32f));
-                    int columns = CalculateColumnCount(rightPaneWidth);
-                    _scroll = GUILayout.BeginScrollView(
-                        _scroll,
-                        false,
-                        true,
-                        GUIStyle.none,
-                        GUI.skin.verticalScrollbar);
-                    DrawBlockGrid(columns, rightPaneWidth - 16f);
-                    EditorGUILayout.EndScrollView();
+                    if (_categories.Count > 0)
+                    {
+                        DrawCategoryTabsSidebar();
+                        GUILayout.Space(8f);
+                    }
+
+                    using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
+                    {
+                        float rightPaneWidth = Mathf.Max(220f, position.width - (_categories.Count > 0 ? 158f : 34f));
+                        int columns = CalculateColumnCount(rightPaneWidth);
+                        _scroll = GUILayout.BeginScrollView(
+                            _scroll,
+                            false,
+                            true,
+                            GUIStyle.none,
+                            GUI.skin.verticalScrollbar);
+                        DrawBlockGrid(columns, rightPaneWidth - 20f);
+                        EditorGUILayout.EndScrollView();
+                    }
                 }
             }
 
@@ -300,15 +368,18 @@ namespace BlockWorldMVP.Editor
 
         private void DrawBlockGrid(int columns, float availableWidth)
         {
+            const float gap = 4f;
             float safeWidth = Mathf.Max(120f, availableWidth);
-            float cellWidth = Mathf.Max(120f, safeWidth / Mathf.Max(1, columns));
+            int clampedColumns = Mathf.Max(1, columns);
+            float totalGap = (clampedColumns - 1) * gap;
+            float cellWidth = Mathf.Max(120f, (safeWidth - totalGap) / clampedColumns);
 
             int index = 0;
             while (index < _filteredBlocks.Count)
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    for (int c = 0; c < columns; c++)
+                    for (int c = 0; c < clampedColumns; c++)
                     {
                         if (index < _filteredBlocks.Count)
                         {
@@ -319,8 +390,15 @@ namespace BlockWorldMVP.Editor
                         {
                             GUILayout.Space(cellWidth);
                         }
+
+                        if (c < clampedColumns - 1)
+                        {
+                            GUILayout.Space(gap);
+                        }
                     }
                 }
+
+                GUILayout.Space(gap);
             }
         }
 
@@ -342,16 +420,16 @@ namespace BlockWorldMVP.Editor
             }
 
             string fallbackTitle = string.IsNullOrWhiteSpace(block.displayName) ? block.id : block.displayName;
-            string title = BlockWorldBuilderI18n.GetBlockDisplayName(block.id, fallbackTitle);
+            string title = Box3BlocksI18n.GetBlockDisplayName(block.id, fallbackTitle);
             string categoryLabel = LocalizeCategoryLabel(block.category);
             string subtitle = string.IsNullOrWhiteSpace(info) ? categoryLabel : $"{categoryLabel} | {info}";
-            GUIStyle cardStyle = new GUIStyle(EditorStyles.miniButton)
+            GUIStyle cardStyle = new GUIStyle("HelpBox")
             {
-                fixedHeight = Mathf.Max(132f, PreviewSize + 60f),
+                fixedHeight = Mathf.Max(136f, PreviewSize + 68f),
                 wordWrap = true,
                 alignment = TextAnchor.UpperCenter,
                 fontSize = 11,
-                padding = new RectOffset(6, 6, 8, 6)
+                padding = new RectOffset(6, 6, 8, 8)
             };
 
             Rect rect = GUILayoutUtility.GetRect(width, cardStyle.fixedHeight, GUILayout.Width(width), GUILayout.Height(cardStyle.fixedHeight));
@@ -369,19 +447,17 @@ namespace BlockWorldMVP.Editor
                 GUI.DrawTexture(previewRect, cardPreview, ScaleMode.ScaleToFit, true);
             }
 
-            Rect textRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, rect.height - (PreviewSize + 20f));
-            GUIStyle textStyle = new GUIStyle(EditorStyles.label)
-            {
-                alignment = TextAnchor.UpperCenter,
-                wordWrap = true,
-                fontSize = 11
-            };
+            Rect titleRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, 34f);
+            Rect subtitleRect = new Rect(rect.x + 6f, previewRect.yMax + 36f, rect.width - 12f, rect.height - (PreviewSize + 46f));
+            GUIStyle titleStyle = new GUIStyle(_cardTitleStyle);
+            GUIStyle subtitleStyle = new GUIStyle(_cardSubtitleStyle);
             if (_selectedIndex == index)
             {
-                textStyle.normal.textColor = new Color(0.78f, 1f, 0.8f, 1f);
-                textStyle.fontStyle = FontStyle.Bold;
+                titleStyle.normal.textColor = new Color(0.78f, 1f, 0.8f, 1f);
+                subtitleStyle.normal.textColor = new Color(0.68f, 0.95f, 0.72f, 1f);
             }
-            EditorGUI.LabelField(textRect, $"{title}\n{subtitle}", textStyle);
+            EditorGUI.LabelField(titleRect, title, titleStyle);
+            EditorGUI.LabelField(subtitleRect, subtitle, subtitleStyle);
 
             if (_selectedIndex == index)
             {
@@ -428,13 +504,13 @@ namespace BlockWorldMVP.Editor
             Rect buttonRect = new Rect(cardRect.xMax - 48f, cardRect.y + 6f, 42f, 18f);
             if (block == null)
             {
-                GUI.Box(buttonRect, "R0", EditorStyles.miniButton);
+                GUI.Box(buttonRect, "R0", _rotateBadgeStyle);
                 return buttonRect;
             }
 
             int degrees = (block.placementRotationQuarter & 3) * 90;
             string label = Lf("card.rotate_badge", degrees);
-            GUI.Box(buttonRect, label, EditorStyles.miniButton);
+            GUI.Box(buttonRect, label, _rotateBadgeStyle);
             return buttonRect;
         }
 
@@ -450,14 +526,14 @@ namespace BlockWorldMVP.Editor
             EditorGUI.DrawRect(new Rect(rect.x, rect.y, t, rect.height), border);
             EditorGUI.DrawRect(new Rect(rect.xMax - t, rect.y, t, rect.height), border);
 
-            Rect badgeRect = new Rect(rect.x + 6f, rect.y + 6f, 62f, 16f);
-            EditorGUI.DrawRect(badgeRect, new Color(0.05f, 0.18f, 0.08f, 0.95f));
-            EditorGUI.LabelField(badgeRect, L("card.selected"), new GUIStyle(EditorStyles.miniLabel)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = new Color(0.5f, 1f, 0.55f, 1f) },
-                fontStyle = FontStyle.Bold
-            });
+            // Rect badgeRect = new Rect(rect.x + 6f, rect.y + 6f, 62f, 16f);
+            // EditorGUI.DrawRect(badgeRect, new Color(0.05f, 0.18f, 0.08f, 0.95f));
+            // EditorGUI.LabelField(badgeRect, L("card.selected"), new GUIStyle(EditorStyles.miniLabel)
+            // {
+            //     alignment = TextAnchor.MiddleCenter,
+            //     normal = { textColor = new Color(0.5f, 1f, 0.55f, 1f) },
+            //     fontStyle = FontStyle.Bold
+            // });
         }
 
         private int CalculateColumnCount(float availableWidth)
@@ -468,9 +544,9 @@ namespace BlockWorldMVP.Editor
 
         private void DrawCategoryTabsSidebar()
         {
-            using (new EditorGUILayout.VerticalScope(GUILayout.Width(92f)))
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle, GUILayout.Width(90f)))
             {
-                _categoryScroll = EditorGUILayout.BeginScrollView(_categoryScroll, GUILayout.Width(92f), GUILayout.ExpandHeight(true));
+                _categoryScroll = EditorGUILayout.BeginScrollView(_categoryScroll, GUILayout.Width(80f), GUILayout.ExpandHeight(true));
                 for (int i = 0; i < _categories.Count; i++)
                 {
                     string categoryKey = _categories[i];
@@ -478,7 +554,7 @@ namespace BlockWorldMVP.Editor
 
                     bool selected = i == _selectedCategory;
                     GUIStyle style = selected ? _categoryTabSelectedStyle : _categoryTabStyle;
-                    bool clicked = GUILayout.Toggle(selected, label, style, GUILayout.Width(80f), GUILayout.Height(24f));
+                    bool clicked = GUILayout.Toggle(selected, label, style, GUILayout.Width(74f), GUILayout.Height(24f));
                     if (clicked && !selected)
                     {
                         _selectedCategory = i;
@@ -487,6 +563,23 @@ namespace BlockWorldMVP.Editor
                 }
 
                 EditorGUILayout.EndScrollView();
+            }
+        }
+
+        private void DrawToolTabs()
+        {
+            string[] labels = { L("tool.place"), L("tool.erase"), L("tool.replace"), L("tool.rotate") };
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                for (int i = 0; i < labels.Length; i++)
+                {
+                    bool selected = (int)_tool == i;
+                    GUIStyle style = selected ? _toolTabSelectedStyle : _toolTabStyle;
+                    if (GUILayout.Toggle(selected, labels[i], style, GUILayout.Height(26f)))
+                    {
+                        _tool = (EditTool)i;
+                    }
+                }
             }
         }
 
@@ -516,7 +609,7 @@ namespace BlockWorldMVP.Editor
                 HandleUtility.AddDefaultControl(GUIUtility.GetControlID(FocusType.Passive));
             }
 
-            if (!TryGetTargetPosition(e.mousePosition, out Vector3Int target, out PlacedBlock hitBlock))
+            if (!TryGetTargetPosition(e.mousePosition, out Vector3Int target, out Box3BlocksPlacedBlock hitBlock))
             {
                 return;
             }
@@ -585,7 +678,7 @@ namespace BlockWorldMVP.Editor
             e.Use();
         }
 
-        private bool TryGetTargetPosition(Vector2 mousePosition, out Vector3Int target, out PlacedBlock hitBlock)
+        private bool TryGetTargetPosition(Vector2 mousePosition, out Vector3Int target, out Box3BlocksPlacedBlock hitBlock)
         {
             target = default;
             hitBlock = null;
@@ -593,7 +686,7 @@ namespace BlockWorldMVP.Editor
             Ray ray = HandleUtility.GUIPointToWorldRay(mousePosition);
             if (Physics.Raycast(ray, out RaycastHit hit, 1000f))
             {
-                hitBlock = hit.collider.GetComponentInParent<PlacedBlock>();
+                hitBlock = hit.collider.GetComponentInParent<Box3BlocksPlacedBlock>();
                 if (hitBlock != null)
                 {
                     Vector3Int blockPos = Vector3Int.RoundToInt(hitBlock.transform.position);
@@ -616,7 +709,7 @@ namespace BlockWorldMVP.Editor
 
             if (_tool == EditTool.Erase || _tool == EditTool.Replace || _tool == EditTool.Rotate)
             {
-                if (TryFindClosestBlockFromScreen(mousePosition, out PlacedBlock closest))
+                if (TryFindClosestBlockFromScreen(mousePosition, out Box3BlocksPlacedBlock closest))
                 {
                     hitBlock = closest;
                     target = Vector3Int.RoundToInt(closest.transform.position);
@@ -638,7 +731,7 @@ namespace BlockWorldMVP.Editor
             return true;
         }
 
-        private bool TryFindClosestBlockFromScreen(Vector2 mousePosition, out PlacedBlock block)
+        private bool TryFindClosestBlockFromScreen(Vector2 mousePosition, out Box3BlocksPlacedBlock block)
         {
             block = null;
             if (_root == null)
@@ -651,7 +744,7 @@ namespace BlockWorldMVP.Editor
             for (int i = 0; i < _root.childCount; i++)
             {
                 Transform child = _root.GetChild(i);
-                PlacedBlock candidate = child.GetComponent<PlacedBlock>();
+                Box3BlocksPlacedBlock candidate = child.GetComponent<Box3BlocksPlacedBlock>();
                 if (candidate == null)
                 {
                     continue;
@@ -713,14 +806,14 @@ namespace BlockWorldMVP.Editor
                 return false;
             }
 
-            if (!BlockAssetFactory.TryGetFaceRenderData(definition.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData))
+            if (!Box3BlocksAssetFactory.TryGetFaceRenderData(definition.sideTexturePaths, out Box3BlocksAssetFactory.FaceRenderData renderData))
             {
                 return false;
             }
 
             bool hasAnimatedFaces = HasAnimatedFaces(definition);
             Mesh meshToUse = hasAnimatedFaces
-                ? BlockAssetFactory.GetOrCreateCubeMesh()
+                ? Box3BlocksAssetFactory.GetOrCreateCubeMesh()
                 : GetOrCreateStaticBlockMesh(definition, renderData);
             if (meshToUse == null || renderData == null || renderData.materials == null)
             {
@@ -757,7 +850,7 @@ namespace BlockWorldMVP.Editor
             MeshCollider meshCollider = go.AddComponent<MeshCollider>();
             meshCollider.sharedMesh = meshToUse;
 
-            PlacedBlock marker = go.AddComponent<PlacedBlock>();
+            Box3BlocksPlacedBlock marker = go.AddComponent<Box3BlocksPlacedBlock>();
             marker.BlockId = definition.id;
             marker.HasAnimation = hasAnimatedFaces;
             ApplyEmissionForDefinition(meshRenderer, definition);
@@ -768,7 +861,7 @@ namespace BlockWorldMVP.Editor
             return true;
         }
 
-        private void EraseBlockBrush(PlacedBlock hitBlock, Vector3Int fallbackPosition)
+        private void EraseBlockBrush(Box3BlocksPlacedBlock hitBlock, Vector3Int fallbackPosition)
         {
             Vector3Int origin = hitBlock != null ? Vector3Int.RoundToInt(hitBlock.transform.position) : fallbackPosition;
             List<Vector3Int> positions = BuildBrushPositions(origin);
@@ -791,7 +884,7 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private void ReplaceBlockBrush(PlacedBlock hitBlock, Vector3Int fallbackPosition)
+        private void ReplaceBlockBrush(Box3BlocksPlacedBlock hitBlock, Vector3Int fallbackPosition)
         {
             if (_selectedIndex < 0 || _selectedIndex >= _filteredBlocks.Count)
             {
@@ -812,7 +905,7 @@ namespace BlockWorldMVP.Editor
                     continue;
                 }
 
-                PlacedBlock existing = target.GetComponent<PlacedBlock>();
+                Box3BlocksPlacedBlock existing = target.GetComponent<Box3BlocksPlacedBlock>();
                 if (existing != null && string.Equals(existing.BlockId, replacement.id, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -837,7 +930,7 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private void RotateBlockBrush(PlacedBlock hitBlock, Vector3Int fallbackPosition)
+        private void RotateBlockBrush(Box3BlocksPlacedBlock hitBlock, Vector3Int fallbackPosition)
         {
             Vector3Int origin = hitBlock != null ? Vector3Int.RoundToInt(hitBlock.transform.position) : fallbackPosition;
             List<Vector3Int> positions = BuildBrushPositions(origin);
@@ -865,7 +958,7 @@ namespace BlockWorldMVP.Editor
                     Transform child = _root.GetChild(i);
                     if (Vector3Int.RoundToInt(child.position) == position)
                     {
-                        PlacedBlock marker = child.GetComponent<PlacedBlock>();
+                        Box3BlocksPlacedBlock marker = child.GetComponent<Box3BlocksPlacedBlock>();
                         if (marker != null)
                         {
                             return child.gameObject;
@@ -877,7 +970,7 @@ namespace BlockWorldMVP.Editor
             Collider[] colliders = Physics.OverlapBox(position, Vector3.one * 0.45f);
             for (int i = 0; i < colliders.Length; i++)
             {
-                PlacedBlock marker = colliders[i].GetComponentInParent<PlacedBlock>();
+                Box3BlocksPlacedBlock marker = colliders[i].GetComponentInParent<Box3BlocksPlacedBlock>();
                 if (marker != null && marker.transform.parent == _root)
                 {
                     return marker.gameObject;
@@ -946,9 +1039,9 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private List<PlacedBlock> CollectPlacedBlocksFromRoot()
+        private List<Box3BlocksPlacedBlock> CollectPlacedBlocksFromRoot()
         {
-            List<PlacedBlock> list = new List<PlacedBlock>();
+            List<Box3BlocksPlacedBlock> list = new List<Box3BlocksPlacedBlock>();
             if (_root == null)
             {
                 return list;
@@ -962,7 +1055,7 @@ namespace BlockWorldMVP.Editor
                     continue;
                 }
 
-                PlacedBlock placed = child.GetComponent<PlacedBlock>();
+                Box3BlocksPlacedBlock placed = child.GetComponent<Box3BlocksPlacedBlock>();
                 if (placed != null)
                 {
                     list.Add(placed);
@@ -1024,9 +1117,10 @@ namespace BlockWorldMVP.Editor
             Material existing = AssetDatabase.LoadAssetAtPath<Material>(VoxelImportChunkOpaqueMaterialPath);
             if (existing != null)
             {
-                if (existing.mainTexture != atlasSource.mainTexture)
+                Texture atlasMain = atlasSource.mainTexture;
+                if (atlasMain != null && existing.mainTexture != atlasMain)
                 {
-                    existing.mainTexture = atlasSource.mainTexture;
+                    existing.mainTexture = atlasMain;
                     EditorUtility.SetDirty(existing);
                 }
 
@@ -1047,7 +1141,10 @@ namespace BlockWorldMVP.Editor
             }
 
             Material material = new Material(shader) { name = "M_Block" };
-            material.mainTexture = atlasSource.mainTexture;
+            if (atlasSource.mainTexture != null)
+            {
+                material.mainTexture = atlasSource.mainTexture;
+            }
             material.SetFloat("_Mode", 0f);
             material.SetInt("_SrcBlend", (int)BlendMode.One);
             material.SetInt("_DstBlend", (int)BlendMode.Zero);
@@ -1064,7 +1161,7 @@ namespace BlockWorldMVP.Editor
 
         private static void ApplyMapsToOpaque(Material material)
         {
-            OpaqueBlockMaterialConfigurator.Apply(material);
+            Box3BlocksOpaqueMaterialConfigurator.Apply(material);
         }
 
         private static int FloorDiv(int value, int divisor)
@@ -1194,7 +1291,7 @@ namespace BlockWorldMVP.Editor
         private void ReloadBlockLibrary()
         {
             EnforceCrispImportForAllBlockTextures();
-            BlockAssetFactory.InvalidateCaches();
+            Box3BlocksAssetFactory.InvalidateCaches();
             _staticBlockMeshCache.Clear();
             ClearBlockCardPreviewCache();
             _allBlocks.Clear();
@@ -1387,7 +1484,7 @@ namespace BlockWorldMVP.Editor
             _selectedIndex = Mathf.Clamp(_selectedIndex, 0, Mathf.Max(0, _filteredBlocks.Count - 1));
         }
 
-        private static void ConfigureRendererMaterials(MeshRenderer renderer, BlockAssetFactory.FaceRenderData renderData, BlockDefinition definition)
+        private static void ConfigureRendererMaterials(MeshRenderer renderer, Box3BlocksAssetFactory.FaceRenderData renderData, BlockDefinition definition)
         {
             if (renderer == null || renderData == null || renderData.materials == null || renderData.faceMainTexSt == null)
             {
@@ -1421,7 +1518,7 @@ namespace BlockWorldMVP.Editor
             if (!definition.hasAnimation || definition.sideAnimations.Count == 0)
             {
                 ApplyFaceMainTexSt(renderer, renderData.faceMainTexSt);
-                BlockTextureAnimator existingAnimator = renderer.GetComponent<BlockTextureAnimator>();
+                Box3BlocksTextureAnimator existingAnimator = renderer.GetComponent<Box3BlocksTextureAnimator>();
                 if (existingAnimator != null)
                 {
                     if (Application.isPlaying)
@@ -1436,7 +1533,7 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
-            List<BlockTextureAnimator.FaceAnimation> runtimeAnimations = new List<BlockTextureAnimator.FaceAnimation>();
+            List<Box3BlocksTextureAnimator.FaceAnimation> runtimeAnimations = new List<Box3BlocksTextureAnimator.FaceAnimation>();
             for (int i = 0; i < SideOrder.Length && i < renderData.faceMainTexSt.Length; i++)
             {
                 string side = SideOrder[i];
@@ -1450,7 +1547,7 @@ namespace BlockWorldMVP.Editor
                     continue;
                 }
 
-                runtimeAnimations.Add(new BlockTextureAnimator.FaceAnimation
+                runtimeAnimations.Add(new Box3BlocksTextureAnimator.FaceAnimation
                 {
                     materialIndex = i,
                     frameCount = spec.frameCount,
@@ -1463,7 +1560,7 @@ namespace BlockWorldMVP.Editor
             if (runtimeAnimations.Count == 0)
             {
                 ApplyFaceMainTexSt(renderer, renderData.faceMainTexSt);
-                BlockTextureAnimator existingAnimator = renderer.GetComponent<BlockTextureAnimator>();
+                Box3BlocksTextureAnimator existingAnimator = renderer.GetComponent<Box3BlocksTextureAnimator>();
                 if (existingAnimator != null)
                 {
                     if (Application.isPlaying)
@@ -1478,10 +1575,10 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
-            BlockTextureAnimator animator = renderer.GetComponent<BlockTextureAnimator>();
+            Box3BlocksTextureAnimator animator = renderer.GetComponent<Box3BlocksTextureAnimator>();
             if (animator == null)
             {
-                animator = renderer.gameObject.AddComponent<BlockTextureAnimator>();
+                animator = renderer.gameObject.AddComponent<Box3BlocksTextureAnimator>();
             }
 
             animator.SetAnimations(runtimeAnimations.ToArray(), renderData.faceMainTexSt);
@@ -1512,7 +1609,7 @@ namespace BlockWorldMVP.Editor
             return false;
         }
 
-        private Mesh GetOrCreateStaticBlockMesh(BlockDefinition definition, BlockAssetFactory.FaceRenderData renderData)
+        private Mesh GetOrCreateStaticBlockMesh(BlockDefinition definition, Box3BlocksAssetFactory.FaceRenderData renderData)
         {
             if (definition == null || renderData == null || renderData.faceMainTexSt == null)
             {
@@ -1598,7 +1695,7 @@ namespace BlockWorldMVP.Editor
                 return cached;
             }
 
-            if (!BlockAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData)
+            if (!Box3BlocksAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out Box3BlocksAssetFactory.FaceRenderData renderData)
                 || renderData == null
                 || renderData.materials == null
                 || renderData.materials.Length == 0
@@ -1630,7 +1727,7 @@ namespace BlockWorldMVP.Editor
                 return null;
             }
 
-            if (!BlockAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData)
+            if (!Box3BlocksAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out Box3BlocksAssetFactory.FaceRenderData renderData)
                 || renderData == null
                 || renderData.materials == null
                 || renderData.materials.Length == 0
@@ -2123,6 +2220,573 @@ namespace BlockWorldMVP.Editor
 
             _recentBlockIds.RemoveAll(id => string.Equals(id, blockId, StringComparison.OrdinalIgnoreCase));
             _recentBlockIds.Insert(0, blockId);
+        }
+
+        public static bool TryPlaceBlockAtApi(Transform root, string blockId, Vector3Int position, bool replaceExisting = true, int rotationQuarter = 0)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null && window.TryPlaceBlockAtInternal(root, blockId, position, replaceExisting, rotationQuarter);
+        }
+
+        public static bool TryPlaceBlockOnTopApi(Transform root, string blockId, int x, int z, int baseY = 0, bool replaceExisting = true, int rotationQuarter = 0)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null && window.TryPlaceBlockOnTopInternal(root, blockId, x, z, baseY, replaceExisting, rotationQuarter);
+        }
+
+        public static int PlaceBlocksInBoundsApi(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting = true, int rotationQuarter = 0)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null ? window.PlaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, replaceExisting, rotationQuarter) : 0;
+        }
+
+        public static bool EraseBlockAtApi(Transform root, Vector3Int position)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null && window.EraseBlockAtInternal(root, position);
+        }
+
+        public static int EraseBlocksInBoundsApi(Transform root, Vector3Int minInclusive, Vector3Int maxInclusive)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null ? window.EraseBlocksInBoundsInternal(root, minInclusive, maxInclusive) : 0;
+        }
+
+        public static bool ReplaceBlockAtApi(Transform root, string blockId, Vector3Int position, int rotationQuarter = 0)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null && window.ReplaceBlockAtInternal(root, blockId, position, rotationQuarter);
+        }
+
+        public static int ReplaceBlocksInBoundsApi(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter = 0)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null ? window.ReplaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, rotationQuarter) : 0;
+        }
+
+        public static bool RotateBlockAtApi(Transform root, Vector3Int position, int stepQuarter = 1)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null && window.RotateBlockAtInternal(root, position, stepQuarter);
+        }
+
+        public static int RotateBlocksInBoundsApi(Transform root, Vector3Int minInclusive, Vector3Int maxInclusive, int stepQuarter = 1)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null ? window.RotateBlocksInBoundsInternal(root, minInclusive, maxInclusive, stepQuarter) : 0;
+        }
+
+        public static bool TryGetBlockIdAtApi(Transform root, Vector3Int position, out string blockId)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            if (window == null)
+            {
+                blockId = null;
+                return false;
+            }
+
+            return window.TryGetBlockIdAtInternal(root, position, out blockId);
+        }
+
+        public static bool ExistsAtApi(Transform root, Vector3Int position)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null && window.ExistsAtInternal(root, position);
+        }
+
+        public static int GetTopYApi(Transform root, int x, int z, int fallbackY = 0)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null ? window.GetTopYInternal(root, x, z, fallbackY) : fallbackY;
+        }
+
+        public static IReadOnlyList<string> GetAvailableBlockIdsApi()
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null ? window.GetAvailableBlockIdsInternal() : Array.Empty<string>();
+        }
+
+        public static void ReloadLibraryApi()
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            if (window != null)
+            {
+                window.ReloadBlockLibrary();
+            }
+        }
+
+        public static bool IsTransparentApi(string blockId)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            if (window == null)
+            {
+                return false;
+            }
+
+            window.EnsureLibraryLoadedForApi();
+            BlockDefinition def = window.FindDefinitionById(blockId);
+            return def != null && def.transparent;
+        }
+
+        private static Box3BlocksBuilderWindow GetApiWindowInstance()
+        {
+            Box3BlocksBuilderWindow[] existing = Resources.FindObjectsOfTypeAll<Box3BlocksBuilderWindow>();
+            if (existing != null && existing.Length > 0)
+            {
+                return existing[0];
+            }
+
+            Box3BlocksBuilderWindow created = CreateInstance<Box3BlocksBuilderWindow>();
+            created.hideFlags = HideFlags.HideAndDontSave;
+            created.ReloadBlockLibrary();
+            return created;
+        }
+
+        private void EnsureLibraryLoadedForApi()
+        {
+            if (_allBlocks == null || _allBlocks.Count == 0)
+            {
+                ReloadBlockLibrary();
+            }
+        }
+
+        private bool TryPlaceBlockAtInternal(Transform root, string blockId, Vector3Int position, bool replaceExisting, int rotationQuarter)
+        {
+            if (root == null || string.IsNullOrWhiteSpace(blockId))
+            {
+                return false;
+            }
+
+            EnsureLibraryLoadedForApi();
+            BlockDefinition definition = FindDefinitionById(blockId);
+            if (definition == null)
+            {
+                ReloadBlockLibrary();
+                definition = FindDefinitionById(blockId);
+                if (definition == null)
+                {
+                    return false;
+                }
+            }
+
+            Transform previousRoot = _root;
+            try
+            {
+                _root = root;
+                GameObject existing = FindBlockAt(position);
+                if (existing != null)
+                {
+                    if (!replaceExisting)
+                    {
+                        return false;
+                    }
+
+                    Undo.DestroyObjectImmediate(existing);
+                }
+
+                int previousRotation = definition.placementRotationQuarter;
+                definition.placementRotationQuarter = rotationQuarter & 3;
+                bool placed = TryPlaceSingleBlock(definition, position);
+                definition.placementRotationQuarter = previousRotation;
+                if (placed)
+                {
+                    RegisterRecentPlaced(definition.id);
+                }
+
+                return placed;
+            }
+            finally
+            {
+                _root = previousRoot;
+            }
+        }
+
+        private bool TryPlaceBlockOnTopInternal(Transform root, string blockId, int x, int z, int baseY, bool replaceExisting, int rotationQuarter)
+        {
+            if (root == null || string.IsNullOrWhiteSpace(blockId))
+            {
+                return false;
+            }
+
+            int topY = int.MinValue;
+            Box3BlocksPlacedBlock[] blocks = root.GetComponentsInChildren<Box3BlocksPlacedBlock>(true);
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                Box3BlocksPlacedBlock block = blocks[i];
+                if (block == null)
+                {
+                    continue;
+                }
+
+                Vector3Int p = Vector3Int.RoundToInt(block.transform.position);
+                if (p.x == x && p.z == z && p.y > topY)
+                {
+                    topY = p.y;
+                }
+            }
+
+            int y = topY == int.MinValue ? baseY : topY + 1;
+            return TryPlaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), replaceExisting, rotationQuarter);
+        }
+
+        private int PlaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting, int rotationQuarter)
+        {
+            if (root == null || string.IsNullOrWhiteSpace(blockId))
+            {
+                return 0;
+            }
+
+            int minX = Mathf.Min(minInclusive.x, maxInclusive.x);
+            int minY = Mathf.Min(minInclusive.y, maxInclusive.y);
+            int minZ = Mathf.Min(minInclusive.z, maxInclusive.z);
+            int maxX = Mathf.Max(minInclusive.x, maxInclusive.x);
+            int maxY = Mathf.Max(minInclusive.y, maxInclusive.y);
+            int maxZ = Mathf.Max(minInclusive.z, maxInclusive.z);
+
+            Undo.IncrementCurrentGroup();
+            int group = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("Place Blocks In Bounds");
+
+            int placed = 0;
+            for (int y = minY; y <= maxY; y++)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    for (int z = minZ; z <= maxZ; z++)
+                    {
+                        if (TryPlaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), replaceExisting, rotationQuarter))
+                        {
+                            placed++;
+                        }
+                    }
+                }
+            }
+
+            Undo.CollapseUndoOperations(group);
+            return placed;
+        }
+
+        private bool EraseBlockAtInternal(Transform root, Vector3Int position)
+        {
+            if (root == null)
+            {
+                return false;
+            }
+
+            Transform previousRoot = _root;
+            try
+            {
+                _root = root;
+                GameObject existing = FindBlockAt(position);
+                if (existing == null)
+                {
+                    return false;
+                }
+
+                Undo.DestroyObjectImmediate(existing);
+                RefreshTransparentAround(position);
+                return true;
+            }
+            finally
+            {
+                _root = previousRoot;
+            }
+        }
+
+        private int EraseBlocksInBoundsInternal(Transform root, Vector3Int minInclusive, Vector3Int maxInclusive)
+        {
+            if (root == null)
+            {
+                return 0;
+            }
+
+            int minX = Mathf.Min(minInclusive.x, maxInclusive.x);
+            int minY = Mathf.Min(minInclusive.y, maxInclusive.y);
+            int minZ = Mathf.Min(minInclusive.z, maxInclusive.z);
+            int maxX = Mathf.Max(minInclusive.x, maxInclusive.x);
+            int maxY = Mathf.Max(minInclusive.y, maxInclusive.y);
+            int maxZ = Mathf.Max(minInclusive.z, maxInclusive.z);
+
+            Undo.IncrementCurrentGroup();
+            int group = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("Erase Blocks In Bounds");
+            int removed = 0;
+            for (int y = minY; y <= maxY; y++)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    for (int z = minZ; z <= maxZ; z++)
+                    {
+                        if (EraseBlockAtInternal(root, new Vector3Int(x, y, z)))
+                        {
+                            removed++;
+                        }
+                    }
+                }
+            }
+
+            Undo.CollapseUndoOperations(group);
+            return removed;
+        }
+
+        private bool ReplaceBlockAtInternal(Transform root, string blockId, Vector3Int position, int rotationQuarter)
+        {
+            if (root == null || string.IsNullOrWhiteSpace(blockId))
+            {
+                return false;
+            }
+
+            EnsureLibraryLoadedForApi();
+            BlockDefinition definition = FindDefinitionById(blockId);
+            if (definition == null)
+            {
+                ReloadBlockLibrary();
+                definition = FindDefinitionById(blockId);
+                if (definition == null)
+                {
+                    return false;
+                }
+            }
+
+            Transform previousRoot = _root;
+            try
+            {
+                _root = root;
+                GameObject existing = FindBlockAt(position);
+                if (existing == null)
+                {
+                    return false;
+                }
+
+                Box3BlocksPlacedBlock marker = existing.GetComponent<Box3BlocksPlacedBlock>();
+                if (marker != null && string.Equals(marker.BlockId, blockId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                Undo.DestroyObjectImmediate(existing);
+                int previousRotation = definition.placementRotationQuarter;
+                definition.placementRotationQuarter = rotationQuarter & 3;
+                bool placed = TryPlaceSingleBlock(definition, position);
+                definition.placementRotationQuarter = previousRotation;
+                if (placed)
+                {
+                    RegisterRecentPlaced(definition.id);
+                }
+
+                return placed;
+            }
+            finally
+            {
+                _root = previousRoot;
+            }
+        }
+
+        private int ReplaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter)
+        {
+            if (root == null || string.IsNullOrWhiteSpace(blockId))
+            {
+                return 0;
+            }
+
+            int minX = Mathf.Min(minInclusive.x, maxInclusive.x);
+            int minY = Mathf.Min(minInclusive.y, maxInclusive.y);
+            int minZ = Mathf.Min(minInclusive.z, maxInclusive.z);
+            int maxX = Mathf.Max(minInclusive.x, maxInclusive.x);
+            int maxY = Mathf.Max(minInclusive.y, maxInclusive.y);
+            int maxZ = Mathf.Max(minInclusive.z, maxInclusive.z);
+
+            Undo.IncrementCurrentGroup();
+            int group = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("Replace Blocks In Bounds");
+            int replaced = 0;
+            for (int y = minY; y <= maxY; y++)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    for (int z = minZ; z <= maxZ; z++)
+                    {
+                        if (ReplaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), rotationQuarter))
+                        {
+                            replaced++;
+                        }
+                    }
+                }
+            }
+
+            Undo.CollapseUndoOperations(group);
+            return replaced;
+        }
+
+        private bool RotateBlockAtInternal(Transform root, Vector3Int position, int stepQuarter)
+        {
+            if (root == null)
+            {
+                return false;
+            }
+
+            int q = stepQuarter % 4;
+            if (q < 0)
+            {
+                q += 4;
+            }
+
+            if (q == 0)
+            {
+                return false;
+            }
+
+            Transform previousRoot = _root;
+            try
+            {
+                _root = root;
+                GameObject existing = FindBlockAt(position);
+                if (existing == null)
+                {
+                    return false;
+                }
+
+                Undo.RecordObject(existing.transform, "Rotate Block");
+                existing.transform.Rotate(0f, q * 90f, 0f, Space.World);
+                EditorUtility.SetDirty(existing.transform);
+                UpdateTransparentBlockMesh(existing);
+                return true;
+            }
+            finally
+            {
+                _root = previousRoot;
+            }
+        }
+
+        private int RotateBlocksInBoundsInternal(Transform root, Vector3Int minInclusive, Vector3Int maxInclusive, int stepQuarter)
+        {
+            if (root == null)
+            {
+                return 0;
+            }
+
+            int minX = Mathf.Min(minInclusive.x, maxInclusive.x);
+            int minY = Mathf.Min(minInclusive.y, maxInclusive.y);
+            int minZ = Mathf.Min(minInclusive.z, maxInclusive.z);
+            int maxX = Mathf.Max(minInclusive.x, maxInclusive.x);
+            int maxY = Mathf.Max(minInclusive.y, maxInclusive.y);
+            int maxZ = Mathf.Max(minInclusive.z, maxInclusive.z);
+
+            Undo.IncrementCurrentGroup();
+            int group = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("Rotate Blocks In Bounds");
+            int rotated = 0;
+            for (int y = minY; y <= maxY; y++)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    for (int z = minZ; z <= maxZ; z++)
+                    {
+                        if (RotateBlockAtInternal(root, new Vector3Int(x, y, z), stepQuarter))
+                        {
+                            rotated++;
+                        }
+                    }
+                }
+            }
+
+            Undo.CollapseUndoOperations(group);
+            return rotated;
+        }
+
+        private bool TryGetBlockIdAtInternal(Transform root, Vector3Int position, out string blockId)
+        {
+            blockId = null;
+            if (root == null)
+            {
+                return false;
+            }
+
+            Transform previousRoot = _root;
+            try
+            {
+                _root = root;
+                GameObject existing = FindBlockAt(position);
+                if (existing == null)
+                {
+                    return false;
+                }
+
+                Box3BlocksPlacedBlock marker = existing.GetComponent<Box3BlocksPlacedBlock>();
+                if (marker == null)
+                {
+                    return false;
+                }
+
+                blockId = marker.BlockId;
+                return !string.IsNullOrWhiteSpace(blockId);
+            }
+            finally
+            {
+                _root = previousRoot;
+            }
+        }
+
+        private bool ExistsAtInternal(Transform root, Vector3Int position)
+        {
+            if (root == null)
+            {
+                return false;
+            }
+
+            Transform previousRoot = _root;
+            try
+            {
+                _root = root;
+                return FindBlockAt(position) != null;
+            }
+            finally
+            {
+                _root = previousRoot;
+            }
+        }
+
+        private int GetTopYInternal(Transform root, int x, int z, int fallbackY)
+        {
+            if (root == null)
+            {
+                return fallbackY;
+            }
+
+            int topY = int.MinValue;
+            Box3BlocksPlacedBlock[] blocks = root.GetComponentsInChildren<Box3BlocksPlacedBlock>(true);
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                Box3BlocksPlacedBlock block = blocks[i];
+                if (block == null)
+                {
+                    continue;
+                }
+
+                Vector3Int p = Vector3Int.RoundToInt(block.transform.position);
+                if (p.x == x && p.z == z && p.y > topY)
+                {
+                    topY = p.y;
+                }
+            }
+
+            return topY == int.MinValue ? fallbackY : topY;
+        }
+
+        private IReadOnlyList<string> GetAvailableBlockIdsInternal()
+        {
+            EnsureLibraryLoadedForApi();
+            List<string> ids = new List<string>(_allBlocks.Count);
+            for (int i = 0; i < _allBlocks.Count; i++)
+            {
+                if (_allBlocks[i] != null && !string.IsNullOrWhiteSpace(_allBlocks[i].id))
+                {
+                    ids.Add(_allBlocks[i].id);
+                }
+            }
+
+            ids.Sort(StringComparer.OrdinalIgnoreCase);
+            return ids;
         }
 
     }

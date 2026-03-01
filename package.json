@@ -2,8 +2,11 @@
   "name": "com.box3lab.box3",
   "version": "0.1.0",
   "displayName": "Box3 Blocks",
-  "description": "Block-based world building tools and editors for Box3.",
+  "description": "Box3 方块编辑工具包：可视化搭建、地形导入导出、图集与材质自动生成，并提供可复用的编辑器 API。",
   "unity": "2022.3",
+  "license": "Apache-2.0",
+  "hideInEditor": false,
+  "dependencies": {},
   "keywords": [
     "box3",
     "blocks"

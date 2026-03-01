@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    public partial class BlockWorldBuilderWindow
+    public partial class Box3BlocksBuilderWindow
     {
         private static readonly Vector3Int[] NeighborDirections =
         {
@@ -98,7 +98,7 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
-            PlacedBlock marker = target.GetComponent<PlacedBlock>();
+            Box3BlocksPlacedBlock marker = target.GetComponent<Box3BlocksPlacedBlock>();
             if (marker == null)
             {
                 return;
@@ -115,7 +115,7 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
-            if (!BlockAssetFactory.TryGetFaceRenderData(definition.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData))
+            if (!Box3BlocksAssetFactory.TryGetFaceRenderData(definition.sideTexturePaths, out Box3BlocksAssetFactory.FaceRenderData renderData))
             {
                 return;
             }

@@ -8,9 +8,9 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    public sealed class VoxelGzExportWindow : EditorWindow
+    public sealed class Box3BlocksGzExportWindow : EditorWindow
     {
         private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
@@ -26,50 +26,21 @@ namespace BlockWorldMVP.Editor
             public int[] rot;
         }
 
-        private static readonly Dictionary<string, string> FallbackEn = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["voxel.export.window.title"] = "Voxel GZ Exporter",
-            ["voxel.section.export"] = "Export",
-            ["voxel.section.status"] = "Status",
-            ["voxel.export.root"] = "Export Root",
-            ["voxel.export.gz_file"] = "Export GZ",
-            ["voxel.export.browse"] = "Browse",
-            ["voxel.export.select_file"] = "Save voxel gzip file",
-            ["voxel.export.run"] = "Export GZ",
-            ["voxel.export.err.no_root"] = "Export Root is empty.",
-            ["voxel.export.err.empty"] = "No PlacedBlock found under Export Root.",
-            ["voxel.export.done"] = "Export complete. Blocks: {0}, Skipped unknown: {1}",
-            ["dialog.ok"] = "OK"
-        };
-
-        private static readonly Dictionary<string, string> FallbackZh = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["voxel.export.window.title"] = "体素 GZ 导出器",
-            ["voxel.section.export"] = "导出",
-            ["voxel.section.status"] = "状态",
-            ["voxel.export.root"] = "导出根节点",
-            ["voxel.export.gz_file"] = "导出 GZ",
-            ["voxel.export.browse"] = "浏览",
-            ["voxel.export.select_file"] = "保存体素 gzip 文件",
-            ["voxel.export.run"] = "导出 GZ",
-            ["voxel.export.err.no_root"] = "导出根节点为空。",
-            ["voxel.export.err.empty"] = "导出根节点下没有 PlacedBlock。",
-            ["voxel.export.done"] = "导出完成。方块数: {0}，跳过未知: {1}",
-            ["dialog.ok"] = "确定"
-        };
-
         private Transform _exportRoot;
         private string _exportGzPath = string.Empty;
         private string _status = string.Empty;
         private GUIStyle _sectionBoxStyle;
         private GUIStyle _sectionTitleStyle;
         private GUIStyle _primaryButtonStyle;
+        private GUIStyle _dangerButtonStyle;
         private GUIStyle _textFieldStyle;
+        private GUIStyle _subtleLabelStyle;
+        private GUIStyle _insetPanelStyle;
 
         [MenuItem("Box3/地形导出", false, 21)]
         public static void Open()
         {
-            GetWindow<VoxelGzExportWindow>(L("voxel.export.window.title"));
+            GetWindow<Box3BlocksGzExportWindow>(L("voxel.export.window.title"));
         }
 
         private void OnEnable()
@@ -89,35 +60,12 @@ namespace BlockWorldMVP.Editor
 
         private static string L(string key)
         {
-            string localized = BlockWorldBuilderI18n.Get(key);
-            if (!string.Equals(localized, key, StringComparison.Ordinal))
-            {
-                return localized;
-            }
-
-            Dictionary<string, string> fallback = IsChineseUI() ? FallbackZh : FallbackEn;
-            return fallback.TryGetValue(key, out string value) ? value : key;
+            return Box3BlocksI18n.Get(key);
         }
 
         private static string Lf(string key, params object[] args)
         {
             return string.Format(CultureInfo.InvariantCulture, L(key), args);
-        }
-
-        private static bool IsChineseUI()
-        {
-            string prefLanguage = EditorPrefs.GetString("Editor.kLanguage", string.Empty);
-            if (!string.IsNullOrWhiteSpace(prefLanguage))
-            {
-                string lower = prefLanguage.Trim().ToLowerInvariant();
-                if (lower.StartsWith("zh", StringComparison.Ordinal) || lower.Contains("chinese", StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            SystemLanguage lang = Application.systemLanguage;
-            return lang == SystemLanguage.ChineseSimplified || lang == SystemLanguage.ChineseTraditional;
         }
 
         private void EnsureStyles()
@@ -145,9 +93,36 @@ namespace BlockWorldMVP.Editor
                 };
             }
 
+            if (_dangerButtonStyle == null)
+            {
+                _dangerButtonStyle = new GUIStyle(EditorStyles.miniButton)
+                {
+                    fixedHeight = 24f
+                };
+                _dangerButtonStyle.normal.textColor = new Color(1f, 0.56f, 0.56f, 1f);
+                _dangerButtonStyle.hover.textColor = new Color(1f, 0.66f, 0.66f, 1f);
+            }
+
             if (_textFieldStyle == null)
             {
                 _textFieldStyle = new GUIStyle(EditorStyles.textField) { fixedHeight = 22f };
+            }
+
+            if (_subtleLabelStyle == null)
+            {
+                _subtleLabelStyle = new GUIStyle(EditorStyles.miniLabel)
+                {
+                    normal = { textColor = new Color(0.72f, 0.72f, 0.72f, 1f) }
+                };
+            }
+
+            if (_insetPanelStyle == null)
+            {
+                _insetPanelStyle = new GUIStyle("HelpBox")
+                {
+                    padding = new RectOffset(8, 8, 8, 8),
+                    margin = new RectOffset(0, 0, 0, 0)
+                };
             }
         }
 
@@ -163,43 +138,65 @@ namespace BlockWorldMVP.Editor
 
         private void DrawExportSection()
         {
-            _exportRoot = (Transform)EditorGUILayout.ObjectField(L("voxel.export.root"), _exportRoot, typeof(Transform), true);
-            using (new EditorGUILayout.HorizontalScope())
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
-                _exportGzPath = EditorGUILayout.TextField(L("voxel.export.gz_file"), _exportGzPath, _textFieldStyle);
-                if (GUILayout.Button(L("voxel.export.browse"), GUILayout.Width(78f)))
+                _exportRoot = (Transform)EditorGUILayout.ObjectField(L("voxel.export.root"), _exportRoot, typeof(Transform), true);
+
+                using (new EditorGUILayout.HorizontalScope())
                 {
-                    string initialDir = Application.dataPath;
-                    if (!string.IsNullOrWhiteSpace(_exportGzPath))
+                    _exportGzPath = EditorGUILayout.TextField(L("voxel.export.gz_file"), _exportGzPath, _textFieldStyle);
+                    if (GUILayout.Button(L("voxel.export.browse"), GUILayout.Width(78f)))
                     {
-                        string dir = Path.GetDirectoryName(_exportGzPath);
-                        if (!string.IsNullOrWhiteSpace(dir))
+                        string initialDir = Application.dataPath;
+                        if (!string.IsNullOrWhiteSpace(_exportGzPath))
                         {
-                            initialDir = dir;
+                            string dir = Path.GetDirectoryName(_exportGzPath);
+                            if (!string.IsNullOrWhiteSpace(dir))
+                            {
+                                initialDir = dir;
+                            }
+                        }
+
+                        string selected = EditorUtility.SaveFilePanel(
+                            L("voxel.export.select_file"),
+                            initialDir,
+                            "voxel-export",
+                            "gz");
+                        if (!string.IsNullOrWhiteSpace(selected))
+                        {
+                            _exportGzPath = selected;
                         }
                     }
+                }
 
-                    string selected = EditorUtility.SaveFilePanel(
-                        L("voxel.export.select_file"),
-                        initialDir,
-                        "voxel-export",
-                        "gz");
-                    if (!string.IsNullOrWhiteSpace(selected))
+                string previewPath = string.IsNullOrWhiteSpace(_exportGzPath) ? "-" : _exportGzPath;
+                EditorGUILayout.LabelField(previewPath, _subtleLabelStyle);
+
+                EditorGUILayout.Space(4f);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUI.BeginDisabledGroup(_exportRoot == null);
+                    if (GUILayout.Button(L("voxel.export.run"), _primaryButtonStyle))
                     {
-                        _exportGzPath = selected;
+                        ExportGz();
+                    }
+                    EditorGUI.EndDisabledGroup();
+
+                    if (GUILayout.Button(L("voxel.run.cancel"), _dangerButtonStyle))
+                    {
+                        _exportGzPath = string.Empty;
+                        _status = string.Empty;
                     }
                 }
-            }
-
-            if (GUILayout.Button(L("voxel.export.run"), _primaryButtonStyle))
-            {
-                ExportGz();
             }
         }
 
         private void DrawStatusSection()
         {
-            EditorGUILayout.HelpBox(string.IsNullOrWhiteSpace(_status) ? "-" : _status, MessageType.None);
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
+            {
+                EditorGUILayout.HelpBox(string.IsNullOrWhiteSpace(_status) ? "-" : _status, MessageType.None);
+            }
         }
 
         private void ExportGz()
@@ -234,7 +231,7 @@ namespace BlockWorldMVP.Editor
                 }
                 _exportGzPath = exportPath;
 
-                List<PlacedBlock> allBlocks = CollectPlacedBlocksForExport(_exportRoot);
+                List<Box3BlocksPlacedBlock> allBlocks = CollectPlacedBlocksForExport(_exportRoot);
                 if (allBlocks.Count == 0)
                 {
                     _status = L("voxel.export.err.empty");
@@ -250,7 +247,7 @@ namespace BlockWorldMVP.Editor
 
                 for (int i = 0; i < allBlocks.Count; i++)
                 {
-                    PlacedBlock block = allBlocks[i];
+                    Box3BlocksPlacedBlock block = allBlocks[i];
                     if (block == null || string.IsNullOrWhiteSpace(block.BlockId))
                     {
                         skippedUnknown++;
@@ -343,15 +340,15 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private static List<PlacedBlock> CollectPlacedBlocksForExport(Transform root)
+        private static List<Box3BlocksPlacedBlock> CollectPlacedBlocksForExport(Transform root)
         {
-            List<PlacedBlock> list = new List<PlacedBlock>();
+            List<Box3BlocksPlacedBlock> list = new List<Box3BlocksPlacedBlock>();
             if (root == null)
             {
                 return list;
             }
 
-            PlacedBlock[] found = root.GetComponentsInChildren<PlacedBlock>(true);
+            Box3BlocksPlacedBlock[] found = root.GetComponentsInChildren<Box3BlocksPlacedBlock>(true);
             if (found == null)
             {
                 return list;

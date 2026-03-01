@@ -1,9 +1,9 @@
 using System;
 using UnityEngine;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    internal static class BlockIdRules
+    internal static class Box3BlocksIdRules
     {
         public static bool IsEmissiveKeyword(string id)
         {

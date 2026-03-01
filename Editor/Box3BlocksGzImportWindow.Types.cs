@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using BlockWorldMVP;
+using Box3Blocks;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    public sealed partial class VoxelGzImportWindow
+    public sealed partial class Box3BlocksGzImportWindow
     {
         [Serializable]
         private sealed class VoxelPayload
@@ -67,7 +67,7 @@ namespace BlockWorldMVP.Editor
             public Material[] materials;
             public Vector4[] faceMainTexSt;
             public bool hasAnimation;
-            public BlockTextureAnimator.FaceAnimation[] animations;
+            public Box3BlocksTextureAnimator.FaceAnimation[] animations;
             public bool usesSubmeshes;
         }
 

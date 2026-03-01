@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
     internal readonly struct ParsedFaceAnimation
     {
@@ -21,7 +21,7 @@ namespace BlockWorldMVP.Editor
         }
     }
 
-    internal static class FaceAnimationParser
+    internal static class Box3BlocksFaceAnimationParser
     {
         public static bool TryParse(string textureAssetPath, Func<string, string> absolutePathResolver, out ParsedFaceAnimation parsed)
         {
@@ -47,7 +47,7 @@ namespace BlockWorldMVP.Editor
             string json = File.ReadAllText(mcmetaPath);
             string animationBody = ExtractAnimationObjectBody(json);
 
-            int frameTimeTicks = BlockJsonLite.ParseIntSafe(BlockJsonLite.ReadNumberField(animationBody, "frametime"), 1);
+            int frameTimeTicks = Box3BlocksJsonLite.ParseIntSafe(Box3BlocksJsonLite.ReadNumberField(animationBody, "frametime"), 1);
             float frameDuration = Mathf.Max(0.01f, frameTimeTicks * 0.05f);
             int[] frames = ParseFrameSequence(animationBody);
 

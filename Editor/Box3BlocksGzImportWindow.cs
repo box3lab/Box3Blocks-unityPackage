@@ -9,11 +9,11 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
-using BlockWorldMVP;
+using Box3Blocks;
 
-namespace BlockWorldMVP.Editor
+namespace Box3Blocks.Editor
 {
-    public sealed partial class VoxelGzImportWindow : EditorWindow
+    public sealed partial class Box3BlocksGzImportWindow : EditorWindow
     {
         private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
         private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
@@ -78,146 +78,6 @@ namespace BlockWorldMVP.Editor
         };
         private static readonly Regex SideRegex = new Regex(@"^(.*)_(back|bottom|front|left|right|top)\.png$", RegexOptions.Compiled);
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
-        private static readonly Dictionary<string, string> FallbackEn = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["voxel.window.title"] = "Voxel GZ Importer",
-            ["voxel.section.source"] = "Source",
-            ["voxel.section.options"] = "Import Options",
-            ["voxel.section.run"] = "Run",
-            ["voxel.section.export"] = "Export",
-            ["voxel.section.status"] = "Status",
-            ["voxel.source.mode"] = "Source Mode",
-            ["voxel.source.local"] = "Local File",
-            ["voxel.source.url"] = "URL",
-            ["voxel.source.gz_file"] = "GZ File",
-            ["voxel.source.browse"] = "Browse",
-            ["voxel.source.select_file"] = "Select voxel gzip file",
-            ["voxel.source.url_value"] = "URL",
-            ["voxel.source.parent"] = "Parent",
-            ["voxel.source.create_root"] = "Create Root",
-            ["voxel.source.origin"] = "Origin",
-            ["voxel.option.ignore_barrier"] = "Ignore Barrier blocks",
-            ["voxel.option.import_mode"] = "Import Mode",
-            ["voxel.mode.chunk"] = "Chunk (Recommended)",
-            ["voxel.mode.single_block"] = "Single Block (Editable)",
-            ["voxel.option.replace_previous"] = "Replace previous __VoxelImportGz",
-            ["voxel.option.surface_collider"] = "Add Surface Collider (Top Faces Only)",
-            ["voxel.option.mesh_collider"] = "Add Full MeshCollider",
-            ["voxel.option.chunk_size"] = "Chunk Size (1 = Whole Scene)",
-            ["voxel.option.chunks_per_tick"] = "Chunks / Tick",
-            ["voxel.option.alpha_clip"] = "Chunk: Use Alpha Clip (fix transparent artifacts)",
-            ["voxel.option.alpha_cutoff"] = "Chunk Alpha Cutoff",
-            ["voxel.option.spawn_realtime_lights"] = "Spawn Realtime Lights (Emissive Blocks)",
-            ["voxel.option.max_realtime_lights"] = "Max Realtime Lights",
-            ["voxel.option.voxels_per_tick"] = "Voxels / Tick",
-            ["voxel.option.fixed_filters"] = "Fixed filters: Air and Water are always ignored for stability.",
-            ["voxel.run.import"] = "Import",
-            ["voxel.run.cancel"] = "Cancel",
-            ["voxel.export.root"] = "Export Root",
-            ["voxel.export.gz_file"] = "Export GZ",
-            ["voxel.export.browse"] = "Browse",
-            ["voxel.export.select_file"] = "Save voxel gzip file",
-            ["voxel.export.run"] = "Export GZ",
-            ["voxel.export.err.no_root"] = "Export Root is empty.",
-            ["voxel.export.err.empty"] = "No PlacedBlock found under Export Root.",
-            ["voxel.export.done"] = "Export complete. Blocks: {0}, Skipped unknown: {1}",
-            ["voxel.status.idle"] = "Idle",
-            ["voxel.status.percent"] = "{0}%",
-            ["voxel.status.processing_start"] = "Processing voxels...",
-            ["voxel.status.processing_progress"] = "Processing voxels: {0}/{1}",
-            ["voxel.status.placing_blocks"] = "Placing blocks...",
-            ["voxel.status.placing_progress"] = "Placing blocks: {0}/{1}",
-            ["voxel.status.building_start"] = "Building chunk meshes...",
-            ["voxel.status.building_progress"] = "Building chunks: {0}/{1}",
-            ["voxel.done.title"] = "Import complete.",
-            ["voxel.done.total"] = "Total Voxels: {0}",
-            ["voxel.done.imported"] = "Imported Voxels: {0}",
-            ["voxel.done.chunks"] = "Created Chunks: {0}",
-            ["voxel.done.blocks"] = "Created Blocks: {0}",
-            ["voxel.done.surface_colliders"] = "Surface Colliders: {0}",
-            ["voxel.done.mesh_colliders"] = "Mesh Colliders: {0}",
-            ["voxel.done.skipped"] = "Skipped Air/Water/Barrier/Unknown/Invalid: {0}/{1}/{2}/{3}/{4}",
-            ["voxel.done.time"] = "Time: {0}s",
-            ["voxel.err.failed_with_reason"] = "Failed: {0}",
-            ["voxel.err.empty_json"] = "Failed: empty gzip json.",
-            ["voxel.err.json_parse"] = "json parse failed.",
-            ["voxel.err.shape_invalid"] = "shape is missing or invalid.",
-            ["voxel.err.indices_data_missing"] = "indices/data is missing.",
-            ["voxel.err.shape_values_invalid"] = "shape values must be > 0.",
-            ["voxel.err.gz_path_empty"] = "GZ file path is empty.",
-            ["voxel.err.gz_not_found"] = "GZ file not found.",
-            ["voxel.err.url_empty"] = "URL is empty."
-        };
-        private static readonly Dictionary<string, string> FallbackZh = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["voxel.window.title"] = "体素 GZ 导入器",
-            ["voxel.section.source"] = "导入来源",
-            ["voxel.section.options"] = "导入选项",
-            ["voxel.section.run"] = "执行",
-            ["voxel.section.export"] = "导出",
-            ["voxel.section.status"] = "状态",
-            ["voxel.source.mode"] = "来源模式",
-            ["voxel.source.local"] = "本地文件",
-            ["voxel.source.url"] = "网络地址",
-            ["voxel.source.gz_file"] = "GZ 文件",
-            ["voxel.source.browse"] = "浏览",
-            ["voxel.source.select_file"] = "选择体素 gzip 文件",
-            ["voxel.source.url_value"] = "URL",
-            ["voxel.source.parent"] = "父节点",
-            ["voxel.source.create_root"] = "创建根节点",
-            ["voxel.source.origin"] = "原点",
-            ["voxel.option.ignore_barrier"] = "忽略 Barrier 方块",
-            ["voxel.option.import_mode"] = "导入模式",
-            ["voxel.mode.chunk"] = "Chunk（推荐）",
-            ["voxel.mode.single_block"] = "单个方块（可编辑）",
-            ["voxel.option.replace_previous"] = "替换上一次 __VoxelImportGz",
-            ["voxel.option.surface_collider"] = "添加表面碰撞（仅顶面）",
-            ["voxel.option.mesh_collider"] = "添加完整 MeshCollider",
-            ["voxel.option.chunk_size"] = "Chunk 尺寸（1=整体）",
-            ["voxel.option.chunks_per_tick"] = "每 Tick Chunk 数",
-            ["voxel.option.alpha_clip"] = "Chunk 使用 Alpha Clip（修复透明伪影）",
-            ["voxel.option.alpha_cutoff"] = "Chunk Alpha 阈值",
-            ["voxel.option.spawn_realtime_lights"] = "生成实时点光源（发光方块）",
-            ["voxel.option.max_realtime_lights"] = "实时点光源上限",
-            ["voxel.option.voxels_per_tick"] = "每 Tick 体素数",
-            ["voxel.option.fixed_filters"] = "固定过滤：默认始终忽略 Air 和 Water。",
-            ["voxel.run.import"] = "导入",
-            ["voxel.run.cancel"] = "取消",
-            ["voxel.export.root"] = "导出根节点",
-            ["voxel.export.gz_file"] = "导出 GZ",
-            ["voxel.export.browse"] = "浏览",
-            ["voxel.export.select_file"] = "保存体素 gzip 文件",
-            ["voxel.export.run"] = "导出 GZ",
-            ["voxel.export.err.no_root"] = "导出根节点为空。",
-            ["voxel.export.err.empty"] = "导出根节点下没有 PlacedBlock。",
-            ["voxel.export.done"] = "导出完成。方块数: {0}，跳过未知: {1}",
-            ["voxel.status.idle"] = "空闲",
-            ["voxel.status.percent"] = "{0}%",
-            ["voxel.status.processing_start"] = "正在处理体素...",
-            ["voxel.status.processing_progress"] = "处理体素: {0}/{1}",
-            ["voxel.status.placing_blocks"] = "正在放置方块...",
-            ["voxel.status.placing_progress"] = "放置方块: {0}/{1}",
-            ["voxel.status.building_start"] = "正在构建 Chunk 网格...",
-            ["voxel.status.building_progress"] = "构建 Chunk: {0}/{1}",
-            ["voxel.done.title"] = "导入完成。",
-            ["voxel.done.total"] = "体素总数: {0}",
-            ["voxel.done.imported"] = "导入体素: {0}",
-            ["voxel.done.chunks"] = "生成 Chunk: {0}",
-            ["voxel.done.blocks"] = "生成方块: {0}",
-            ["voxel.done.surface_colliders"] = "表面碰撞体: {0}",
-            ["voxel.done.mesh_colliders"] = "完整 MeshCollider: {0}",
-            ["voxel.done.skipped"] = "跳过 Air/Water/Barrier/Unknown/Invalid: {0}/{1}/{2}/{3}/{4}",
-            ["voxel.done.time"] = "耗时: {0}s",
-            ["voxel.err.failed_with_reason"] = "失败: {0}",
-            ["voxel.err.empty_json"] = "失败: gzip json 为空。",
-            ["voxel.err.json_parse"] = "json 解析失败。",
-            ["voxel.err.shape_invalid"] = "shape 缺失或格式错误。",
-            ["voxel.err.indices_data_missing"] = "indices/data 缺失。",
-            ["voxel.err.shape_values_invalid"] = "shape 值必须大于 0。",
-            ["voxel.err.gz_path_empty"] = "GZ 文件路径为空。",
-            ["voxel.err.gz_not_found"] = "未找到 GZ 文件。",
-            ["voxel.err.url_empty"] = "URL 为空。"
-        };
 
         private SourceType _sourceType = SourceType.LocalFile;
         private string _localGzPath = string.Empty;
@@ -249,6 +109,8 @@ namespace BlockWorldMVP.Editor
         private GUIStyle _primaryButtonStyle;
         private GUIStyle _dangerButtonStyle;
         private GUIStyle _textFieldStyle;
+        private GUIStyle _insetPanelStyle;
+        private GUIStyle _optionsGroupTitleStyle;
 
         private VoxelPayload _payload;
         private Dictionary<int, string> _idToName;
@@ -275,7 +137,7 @@ namespace BlockWorldMVP.Editor
         [MenuItem("Box3/地形导入", false, 20)]
         public static void Open()
         {
-            GetWindow<VoxelGzImportWindow>(L("voxel.window.title"));
+            GetWindow<Box3BlocksGzImportWindow>(L("voxel.window.title"));
         }
 
         private void OnDisable()
@@ -305,32 +167,23 @@ namespace BlockWorldMVP.Editor
 
         private static string L(string key)
         {
-            string localized = BlockWorldBuilderI18n.Get(key);
-            if (!string.Equals(localized, key, StringComparison.Ordinal))
+            return Box3BlocksI18n.Get(key);
+        }
+
+        private static string LOr(string key, string fallback)
+        {
+            string value = L(key);
+            if (string.IsNullOrWhiteSpace(value) || string.Equals(value, key, StringComparison.Ordinal))
             {
-                return localized;
+                return fallback;
             }
 
-            Dictionary<string, string> fallback = IsChineseUI() ? FallbackZh : FallbackEn;
-            if (fallback.TryGetValue(key, out string value) && !string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-
-            return key;
+            return value;
         }
 
         private static string Lf(string key, params object[] args)
         {
             return string.Format(CultureInfo.InvariantCulture, L(key), args);
-        }
-
-        private static bool IsChineseUI()
-        {
-            // Keep fallback language aligned with the shared i18n resolver.
-            // "dialog.ok" is guaranteed in both en/zh resources.
-            string marker = BlockWorldBuilderI18n.Get("dialog.ok");
-            return string.Equals(marker, "确定", StringComparison.Ordinal);
         }
 
         private void EnsureStyles()
@@ -386,6 +239,24 @@ namespace BlockWorldMVP.Editor
                     fixedHeight = 22f
                 };
             }
+
+            if (_insetPanelStyle == null)
+            {
+                _insetPanelStyle = new GUIStyle("HelpBox")
+                {
+                    padding = new RectOffset(8, 8, 8, 8),
+                    margin = new RectOffset(0, 0, 0, 0)
+                };
+            }
+
+            if (_optionsGroupTitleStyle == null)
+            {
+                _optionsGroupTitleStyle = new GUIStyle(EditorStyles.miniBoldLabel)
+                {
+                    normal = { textColor = new Color(0.78f, 0.86f, 0.98f, 1f) }
+                };
+            }
+
         }
 
         private void DrawSection(string title, Action body)
@@ -400,85 +271,104 @@ namespace BlockWorldMVP.Editor
 
         private void DrawSourceSection()
         {
-            int sourceIndex = (int)_sourceType;
-            sourceIndex = EditorGUILayout.Popup(L("voxel.source.mode"), sourceIndex, new[] { L("voxel.source.local"), L("voxel.source.url") });
-            _sourceType = (SourceType)Mathf.Clamp(sourceIndex, 0, 1);
-
-            if (_sourceType == SourceType.LocalFile)
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
-                using (new EditorGUILayout.HorizontalScope())
+                int sourceIndex = (int)_sourceType;
+                sourceIndex = EditorGUILayout.Popup(L("voxel.source.mode"), sourceIndex, new[] { L("voxel.source.local"), L("voxel.source.url") });
+                _sourceType = (SourceType)Mathf.Clamp(sourceIndex, 0, 1);
+
+                if (_sourceType == SourceType.LocalFile)
                 {
-                    _localGzPath = EditorGUILayout.TextField(L("voxel.source.gz_file"), _localGzPath, _textFieldStyle);
-                    if (GUILayout.Button(L("voxel.source.browse"), GUILayout.Width(78f)))
+                    using (new EditorGUILayout.HorizontalScope())
                     {
-                        string selected = EditorUtility.OpenFilePanel(L("voxel.source.select_file"), Application.dataPath, "gz");
-                        if (!string.IsNullOrWhiteSpace(selected))
+                        _localGzPath = EditorGUILayout.TextField(L("voxel.source.gz_file"), _localGzPath, _textFieldStyle);
+                        if (GUILayout.Button(L("voxel.source.browse"), GUILayout.Width(78f)))
                         {
-                            _localGzPath = selected;
+                            string selected = EditorUtility.OpenFilePanel(L("voxel.source.select_file"), Application.dataPath, "gz");
+                            if (!string.IsNullOrWhiteSpace(selected))
+                            {
+                                _localGzPath = selected;
+                            }
                         }
                     }
                 }
-            }
-            else
-            {
-                _url = EditorGUILayout.TextField(L("voxel.source.url_value"), _url, _textFieldStyle);
-            }
-
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                _parent = (Transform)EditorGUILayout.ObjectField(L("voxel.source.parent"), _parent, typeof(Transform), true);
-                EditorGUI.BeginDisabledGroup(_phase != Phase.Idle);
-                if (GUILayout.Button(L("voxel.source.create_root"), GUILayout.Width(96f)))
+                else
                 {
-                    GameObject parentGo = new GameObject("VoxelImportRoot");
-                    Undo.RegisterCreatedObjectUndo(parentGo, "Create Voxel Import Root");
-                    _parent = parentGo.transform;
-                    Selection.activeObject = parentGo;
+                    _url = EditorGUILayout.TextField(L("voxel.source.url_value"), _url, _textFieldStyle);
                 }
-                EditorGUI.EndDisabledGroup();
+
+                EditorGUILayout.Space(2f);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    _parent = (Transform)EditorGUILayout.ObjectField(L("voxel.source.parent"), _parent, typeof(Transform), true);
+                    EditorGUI.BeginDisabledGroup(_phase != Phase.Idle);
+                    if (GUILayout.Button(L("voxel.source.create_root"), GUILayout.Width(96f)))
+                    {
+                        GameObject parentGo = new GameObject("VoxelImportRoot");
+                        Undo.RegisterCreatedObjectUndo(parentGo, "Create Voxel Import Root");
+                        _parent = parentGo.transform;
+                        Selection.activeObject = parentGo;
+                    }
+                    EditorGUI.EndDisabledGroup();
+                }
+
+                _origin = EditorGUILayout.Vector3IntField(L("voxel.source.origin"), _origin);
             }
-            _origin = EditorGUILayout.Vector3IntField(L("voxel.source.origin"), _origin);
         }
 
         private void DrawOptionsSection()
         {
-            _ignoreBarrier = EditorGUILayout.ToggleLeft(L("voxel.option.ignore_barrier"), _ignoreBarrier);
-            int modeIndex = EditorGUILayout.Popup(
-                L("voxel.option.import_mode"),
-                (int)_importMode,
-                new[] { L("voxel.mode.chunk"), L("voxel.mode.single_block") });
-            _importMode = (ImportMode)Mathf.Clamp(modeIndex, 0, 1);
-            _clearPrevious = EditorGUILayout.ToggleLeft(L("voxel.option.replace_previous"), _clearPrevious);
-            EditorGUI.BeginDisabledGroup(_importMode != ImportMode.Chunk);
-            _addSurfaceCollider = EditorGUILayout.ToggleLeft(L("voxel.option.surface_collider"), _addSurfaceCollider);
-            _addMeshCollider = EditorGUILayout.ToggleLeft(L("voxel.option.mesh_collider"), _addMeshCollider);
-            _chunkSize = Mathf.Max(1, EditorGUILayout.IntField(L("voxel.option.chunk_size"), _chunkSize));
-            _chunksPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.chunks_per_tick"), _chunksPerTick), 1, 64);
-            _chunkUseAlphaClip = EditorGUILayout.ToggleLeft(L("voxel.option.alpha_clip"), _chunkUseAlphaClip);
-            _chunkAlphaCutoff = Mathf.Clamp01(EditorGUILayout.Slider(L("voxel.option.alpha_cutoff"), _chunkAlphaCutoff, 0.01f, 0.9f));
-            EditorGUI.EndDisabledGroup();
-            _spawnRealtimeLights = EditorGUILayout.ToggleLeft(L("voxel.option.spawn_realtime_lights"), _spawnRealtimeLights);
-            _voxelsPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.voxels_per_tick"), _voxelsPerTick), 2000, 200000);
-            EditorGUILayout.LabelField(L("voxel.option.fixed_filters"), _subtleLabelStyle);
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
+            {
+                EditorGUILayout.LabelField(LOr("voxel.group.general", "通用选项"), _optionsGroupTitleStyle);
+                _ignoreBarrier = EditorGUILayout.ToggleLeft(L("voxel.option.ignore_barrier"), _ignoreBarrier);
+                int modeIndex = EditorGUILayout.Popup(
+                    L("voxel.option.import_mode"),
+                    (int)_importMode,
+                    new[] { L("voxel.mode.chunk"), L("voxel.mode.single_block") });
+                _importMode = (ImportMode)Mathf.Clamp(modeIndex, 0, 1);
+                _clearPrevious = EditorGUILayout.ToggleLeft(L("voxel.option.replace_previous"), _clearPrevious);
+                _spawnRealtimeLights = EditorGUILayout.ToggleLeft(
+                    LOr("voxel.option.spawn_realtime_lights", "生成实时点光源（发光方块）"),
+                    _spawnRealtimeLights);
+
+                EditorGUILayout.Space(6f);
+                EditorGUILayout.LabelField(LOr("voxel.group.chunk", "Chunk 选项"), _optionsGroupTitleStyle);
+                EditorGUI.BeginDisabledGroup(_importMode != ImportMode.Chunk);
+                _addSurfaceCollider = EditorGUILayout.ToggleLeft(L("voxel.option.surface_collider"), _addSurfaceCollider);
+                _addMeshCollider = EditorGUILayout.ToggleLeft(L("voxel.option.mesh_collider"), _addMeshCollider);
+                _chunkSize = Mathf.Max(1, EditorGUILayout.IntField(L("voxel.option.chunk_size"), _chunkSize));
+                _chunksPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.chunks_per_tick"), _chunksPerTick), 1, 64);
+                _chunkUseAlphaClip = EditorGUILayout.ToggleLeft(L("voxel.option.alpha_clip"), _chunkUseAlphaClip);
+                _chunkAlphaCutoff = Mathf.Clamp01(EditorGUILayout.Slider(L("voxel.option.alpha_cutoff"), _chunkAlphaCutoff, 0.01f, 0.9f));
+                EditorGUI.EndDisabledGroup();
+
+                EditorGUILayout.Space(6f);
+                EditorGUILayout.LabelField(LOr("voxel.group.performance", "性能选项"), _optionsGroupTitleStyle);
+                _voxelsPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.voxels_per_tick"), _voxelsPerTick), 2000, 200000);
+            }
         }
 
         private void DrawRunSection()
         {
-            using (new EditorGUILayout.HorizontalScope())
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
-                EditorGUI.BeginDisabledGroup(_phase != Phase.Idle);
-                if (GUILayout.Button(L("voxel.run.import"), _primaryButtonStyle))
+                using (new EditorGUILayout.HorizontalScope())
                 {
-                    StartImport();
-                }
-                EditorGUI.EndDisabledGroup();
+                    EditorGUI.BeginDisabledGroup(_phase != Phase.Idle);
+                    if (GUILayout.Button(L("voxel.run.import"), _primaryButtonStyle))
+                    {
+                        StartImport();
+                    }
+                    EditorGUI.EndDisabledGroup();
 
-                EditorGUI.BeginDisabledGroup(_phase == Phase.Idle);
-                if (GUILayout.Button(L("voxel.run.cancel"), _dangerButtonStyle))
-                {
-                    CancelImport();
+                    EditorGUI.BeginDisabledGroup(_phase == Phase.Idle);
+                    if (GUILayout.Button(L("voxel.run.cancel"), _dangerButtonStyle))
+                    {
+                        CancelImport();
+                    }
+                    EditorGUI.EndDisabledGroup();
                 }
-                EditorGUI.EndDisabledGroup();
             }
         }
 
@@ -522,9 +412,12 @@ namespace BlockWorldMVP.Editor
 
         private void DrawStatusSection()
         {
-            EditorGUILayout.HelpBox(_status, MessageType.None);
-            Rect r = GUILayoutUtility.GetRect(1f, 20f, GUILayout.ExpandWidth(true));
-            EditorGUI.ProgressBar(r, Mathf.Clamp01(_progress), Lf("voxel.status.percent", Mathf.RoundToInt(_progress * 100f)));
+            using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
+            {
+                EditorGUILayout.HelpBox(_status, MessageType.None);
+                Rect r = GUILayoutUtility.GetRect(1f, 20f, GUILayout.ExpandWidth(true));
+                EditorGUI.ProgressBar(r, Mathf.Clamp01(_progress), Lf("voxel.status.percent", Mathf.RoundToInt(_progress * 100f)));
+            }
         }
 
         private void StartImport()
@@ -966,7 +859,7 @@ namespace BlockWorldMVP.Editor
                 Lf("voxel.done.blocks", _stats.createdBlocks) + "\n" +
                 Lf("voxel.done.surface_colliders", _stats.createdSurfaceColliders) + "\n" +
                 Lf("voxel.done.mesh_colliders", _stats.createdMeshColliders) + "\n" +
-                Lf("voxel.done.skipped", _stats.skippedAir, _stats.skippedWater, _stats.skippedBarrier, _stats.skippedUnknown, _stats.skippedInvalid) + "\n" +
+                Lf("voxel.done.skipped", _stats.skippedBarrier) + "\n" +
                 Lf("voxel.done.time", sec.ToString("F2", CultureInfo.InvariantCulture));
             _status = summary.Replace("\n", " | ");
             EditorUtility.DisplayDialog(L("voxel.window.title"), summary, L("dialog.ok"));
@@ -1005,7 +898,7 @@ namespace BlockWorldMVP.Editor
                 }
                 _exportGzPath = exportPath;
 
-                List<PlacedBlock> allBlocks = CollectPlacedBlocksForExport(_exportRoot);
+                List<Box3BlocksPlacedBlock> allBlocks = CollectPlacedBlocksForExport(_exportRoot);
                 if (allBlocks.Count == 0)
                 {
                     _status = L("voxel.export.err.empty");
@@ -1021,7 +914,7 @@ namespace BlockWorldMVP.Editor
 
                 for (int i = 0; i < allBlocks.Count; i++)
                 {
-                    PlacedBlock block = allBlocks[i];
+                    Box3BlocksPlacedBlock block = allBlocks[i];
                     if (block == null || string.IsNullOrWhiteSpace(block.BlockId))
                     {
                         skippedUnknown++;
@@ -1168,16 +1061,16 @@ namespace BlockWorldMVP.Editor
             MeshCollider mc = go.AddComponent<MeshCollider>();
             mc.sharedMesh = meshToUse;
 
-            PlacedBlock marker = go.AddComponent<PlacedBlock>();
+            Box3BlocksPlacedBlock marker = go.AddComponent<Box3BlocksPlacedBlock>();
             marker.BlockId = blockName;
             marker.HasAnimation = prepared.hasAnimation;
 
             if (prepared.hasAnimation && prepared.animations != null && prepared.animations.Length > 0)
             {
-                BlockTextureAnimator animator = go.GetComponent<BlockTextureAnimator>();
+                Box3BlocksTextureAnimator animator = go.GetComponent<Box3BlocksTextureAnimator>();
                 if (animator == null)
                 {
-                    animator = go.AddComponent<BlockTextureAnimator>();
+                    animator = go.AddComponent<Box3BlocksTextureAnimator>();
                 }
 
                 animator.SetAnimations(prepared.animations, prepared.faceMainTexSt);
@@ -1204,15 +1097,15 @@ namespace BlockWorldMVP.Editor
             }
         }
 
-        private static List<PlacedBlock> CollectPlacedBlocksForExport(Transform root)
+        private static List<Box3BlocksPlacedBlock> CollectPlacedBlocksForExport(Transform root)
         {
-            List<PlacedBlock> list = new List<PlacedBlock>();
+            List<Box3BlocksPlacedBlock> list = new List<Box3BlocksPlacedBlock>();
             if (root == null)
             {
                 return list;
             }
 
-            PlacedBlock[] found = root.GetComponentsInChildren<PlacedBlock>(true);
+            Box3BlocksPlacedBlock[] found = root.GetComponentsInChildren<Box3BlocksPlacedBlock>(true);
             if (found == null)
             {
                 return list;
@@ -1318,7 +1211,7 @@ namespace BlockWorldMVP.Editor
                 return prepared;
             }
 
-            if (!BlockAssetFactory.TryGetFaceRenderData(def.sideTexturePaths, out BlockAssetFactory.FaceRenderData renderData)
+            if (!Box3BlocksAssetFactory.TryGetFaceRenderData(def.sideTexturePaths, out Box3BlocksAssetFactory.FaceRenderData renderData)
                 || renderData == null
                 || renderData.faceMainTexSt == null
                 || renderData.faceMainTexSt.Length < SideOrder.Length
@@ -1379,9 +1272,10 @@ namespace BlockWorldMVP.Editor
 
             if (_chunkOpaqueMaterialInstance != null)
             {
-                if (_chunkOpaqueMaterialInstance.mainTexture != source.mainTexture)
+                Texture sourceMain = source.mainTexture;
+                if (sourceMain != null && _chunkOpaqueMaterialInstance.mainTexture != sourceMain)
                 {
-                    _chunkOpaqueMaterialInstance.mainTexture = source.mainTexture;
+                    _chunkOpaqueMaterialInstance.mainTexture = sourceMain;
                 }
 
                 ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
@@ -1392,7 +1286,10 @@ namespace BlockWorldMVP.Editor
             if (existing != null)
             {
                 _chunkOpaqueMaterialInstance = existing;
-                _chunkOpaqueMaterialInstance.mainTexture = source.mainTexture;
+                if (source.mainTexture != null)
+                {
+                    _chunkOpaqueMaterialInstance.mainTexture = source.mainTexture;
+                }
                 ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
                 EditorUtility.SetDirty(_chunkOpaqueMaterialInstance);
                 return _chunkOpaqueMaterialInstance;
@@ -1414,7 +1311,10 @@ namespace BlockWorldMVP.Editor
             {
                 name = "M_Block"
             };
-            m.mainTexture = source.mainTexture;
+            if (source.mainTexture != null)
+            {
+                m.mainTexture = source.mainTexture;
+            }
             m.SetFloat("_Mode", 0f);
             m.SetInt("_SrcBlend", (int)BlendMode.One);
             m.SetInt("_DstBlend", (int)BlendMode.Zero);
@@ -1433,7 +1333,7 @@ namespace BlockWorldMVP.Editor
 
         private static void ApplyBumpToChunkOpaque(Material material)
         {
-            OpaqueBlockMaterialConfigurator.Apply(material);
+            Box3BlocksOpaqueMaterialConfigurator.Apply(material);
         }
 
         private static Mesh BuildTopSurfaceColliderMesh(ChunkKey key, HashSet<Vector3Int> chunkVoxels, HashSet<Vector3Int> allVoxels)
@@ -1830,15 +1730,15 @@ namespace BlockWorldMVP.Editor
             return true;
         }
 
-        private static bool TryBuildAnimations(Dictionary<string, string> sideTexturePaths, Vector4[] faceMainTexSt, out BlockTextureAnimator.FaceAnimation[] animations)
+        private static bool TryBuildAnimations(Dictionary<string, string> sideTexturePaths, Vector4[] faceMainTexSt, out Box3BlocksTextureAnimator.FaceAnimation[] animations)
         {
-            animations = Array.Empty<BlockTextureAnimator.FaceAnimation>();
+            animations = Array.Empty<Box3BlocksTextureAnimator.FaceAnimation>();
             if (sideTexturePaths == null || faceMainTexSt == null || faceMainTexSt.Length < SideOrder.Length)
             {
                 return false;
             }
 
-            List<BlockTextureAnimator.FaceAnimation> list = new List<BlockTextureAnimator.FaceAnimation>();
+            List<Box3BlocksTextureAnimator.FaceAnimation> list = new List<Box3BlocksTextureAnimator.FaceAnimation>();
             for (int i = 0; i < SideOrder.Length; i++)
             {
                 string side = SideOrder[i];
@@ -1857,7 +1757,7 @@ namespace BlockWorldMVP.Editor
                     continue;
                 }
 
-                list.Add(new BlockTextureAnimator.FaceAnimation
+                list.Add(new Box3BlocksTextureAnimator.FaceAnimation
                 {
                     materialIndex = i,
                     frameCount = spec.frameCount,
@@ -1879,7 +1779,7 @@ namespace BlockWorldMVP.Editor
         private static bool TryParseFaceAnimation(string textureAssetPath, out FaceAnimationSpec spec)
         {
             spec = null;
-            if (!FaceAnimationParser.TryParse(textureAssetPath, GetProjectAbsolutePath, out ParsedFaceAnimation parsed))
+            if (!Box3BlocksFaceAnimationParser.TryParse(textureAssetPath, GetProjectAbsolutePath, out ParsedFaceAnimation parsed))
             {
                 return false;
             }
@@ -2008,7 +1908,7 @@ namespace BlockWorldMVP.Editor
 
                 if (!map.ContainsKey(name))
                 {
-                    map[name] = BlockIdRules.IsTransparencyKeyword(name);
+                    map[name] = Box3BlocksIdRules.IsTransparencyKeyword(name);
                 }
             }
 
@@ -2070,7 +1970,7 @@ namespace BlockWorldMVP.Editor
                 return transparent;
             }
 
-            return BlockIdRules.IsTransparencyKeyword(blockName);
+            return Box3BlocksIdRules.IsTransparencyKeyword(blockName);
         }
 
         private bool IsEmissiveBlock(string blockName)
@@ -2085,7 +1985,7 @@ namespace BlockWorldMVP.Editor
                 return emits;
             }
 
-            return BlockIdRules.IsEmissiveKeyword(blockName);
+            return Box3BlocksIdRules.IsEmissiveKeyword(blockName);
         }
 
         private Color ResolveEmissiveLightColor(string blockName)
@@ -2097,7 +1997,7 @@ namespace BlockWorldMVP.Editor
                 return mapped;
             }
 
-            return BlockIdRules.InferLightColor(blockName);
+            return Box3BlocksIdRules.InferLightColor(blockName);
         }
 
         private static bool IsWaterBlock(string blockName)
@@ -2130,7 +2030,7 @@ namespace BlockWorldMVP.Editor
                     bool emits = HasMeaningfulEmission(body)
                         || ReadBoolField(body, "emissive")
                         || Regex.IsMatch(body, "\"glow\"\\s*:\\s*(true|1)", RegexOptions.IgnoreCase)
-                        || BlockIdRules.IsEmissiveKeyword(name);
+                        || Box3BlocksIdRules.IsEmissiveKeyword(name);
                     map[name] = emits;
                 }
             }
@@ -2159,7 +2059,7 @@ namespace BlockWorldMVP.Editor
 
                 if (!map.ContainsKey(name))
                 {
-                    map[name] = BlockIdRules.IsEmissiveKeyword(name);
+                    map[name] = Box3BlocksIdRules.IsEmissiveKeyword(name);
                 }
             }
 
@@ -2183,7 +2083,7 @@ namespace BlockWorldMVP.Editor
                         continue;
                     }
 
-                    Color color = ReadColorArrayField(body, "emissive", BlockIdRules.InferLightColor(name));
+                    Color color = ReadColorArrayField(body, "emissive", Box3BlocksIdRules.InferLightColor(name));
                     map[name] = color;
                 }
             }
@@ -2203,7 +2103,7 @@ namespace BlockWorldMVP.Editor
             float sum = 0f;
             for (int i = 0; i < Mathf.Min(3, parts.Length); i++)
             {
-                sum += Mathf.Abs(BlockJsonLite.ParseFloatSafe(parts[i], 0f));
+                sum += Mathf.Abs(Box3BlocksJsonLite.ParseFloatSafe(parts[i], 0f));
             }
 
             return sum > 0.001f;
@@ -2223,9 +2123,9 @@ namespace BlockWorldMVP.Editor
                 return fallback;
             }
 
-            float r = BlockJsonLite.ParseFloatSafe(parts[0], fallback.r);
-            float g = BlockJsonLite.ParseFloatSafe(parts[1], fallback.g);
-            float b = BlockJsonLite.ParseFloatSafe(parts[2], fallback.b);
+            float r = Box3BlocksJsonLite.ParseFloatSafe(parts[0], fallback.r);
+            float g = Box3BlocksJsonLite.ParseFloatSafe(parts[1], fallback.g);
+            float b = Box3BlocksJsonLite.ParseFloatSafe(parts[2], fallback.b);
 
             float max = Mathf.Max(r, Mathf.Max(g, b));
             if (max > 1f)
@@ -2260,12 +2160,12 @@ namespace BlockWorldMVP.Editor
 
         private static bool ReadBoolField(string text, string fieldName)
         {
-            return BlockJsonLite.ReadBoolField(text, fieldName);
+            return Box3BlocksJsonLite.ReadBoolField(text, fieldName);
         }
 
         private static Dictionary<string, string> ExtractTopLevelObjectValues(string json)
         {
-            return BlockJsonLite.ExtractTopLevelObjectValues(json);
+            return Box3BlocksJsonLite.ExtractTopLevelObjectValues(json);
         }
 
         private static int FloorDiv(int value, int divisor)

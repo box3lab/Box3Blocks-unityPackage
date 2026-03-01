@@ -1,48 +1,144 @@
-# Box3 BlockWorld MVP (UPM)
+# Box3 Blocks for Unity
 
-This package generates a block world from JSON data.
+一个 Unity 编辑器扩展包，用于导入、导出和编辑神岛方块世界。
 
-## Setup
+## 环境要求
 
-1. Create block prefabs (example: `grass`, `stone`).
-2. Create catalog: `Create -> Block World MVP -> Block Catalog`
-3. Create JSON template: `Assets -> Create -> Block World MVP -> Blocks JSON Template`
-4. Add `BlockWorldGenerator` to a GameObject.
-5. Assign `Catalog` and `Blocks Json`.
-6. Click `Build From JSON` in inspector.
+- Unity 2022.3 LTS
+- 在 `Editor` 模式下使用本包工具
 
-## Visual Builder (recommended)
+## 安装Package Manager
 
-1. Open `Tools -> Block World MVP -> World Builder`
-2. Assign/create `Root`
-3. Search + choose category tabs (including `Recent`)
-4. Pick block cards in a 4-column grid
-5. In Scene view:
-   - `Place` mode: left click to place
-   - `Erase` mode: left click to remove
-6. Click `Clean Materials` to remove unused generated materials
+1. 打开 `Window > Package Manager`
+2. 点击左上角 `+`
+3. 选择 `Add package from git URL...`
+4. 输入：
 
-Notes:
+```text
+https://github.com/box3lab/Box3Blocks-unityPackage.git
+```
 
-- `Recent` only updates when a block is actually placed in Scene.
-- Block textures are auto-scanned from `Packages/com.box3lab.box3/Assets/block`.
-- Block metadata is read from `Packages/com.box3lab.box3/Assets/block-spec.json` (fallback: `block-id.json`).
-- `transparent: true` uses transparent material, so PNG alpha will render correctly.
-- If texture has `.png.mcmeta`, block face animation is played (supports multi-frame strips such as 4-frame textures).
-- Glow blocks show a color strip on the card bottom.
-- Generated mesh/material assets are stored in `Assets/Box3`.
-- World Builder now uses atlas UV + one shared transparent material (`WorldBuilderAtlas_Transparent`), and animated faces use property blocks (no per-block material clone).
-- World Builder non-animated blocks now use single-submesh baked-UV mesh + single shared material (further draw-call reduction).
-- Block menu cards now render true 3D cube previews (top/side faces) instead of flat single-texture thumbnails.
-- Added `Tools -> Block World MVP -> Voxel GZ Importer` for MC-style `.gz` voxel import (`shape/dir/indices/data/rot`) into chunk-merged meshes.
+## 快速使用
 
-## JSON format
+安装完成后可在 Unity 菜单中打开：
 
-```json
+- `Box3/方块库`：方块搭建与编辑
+- `Box3/地形导入`：导入 `.gz`
+- `Box3/地形导出`：导出 `.gz`
+
+## 数据与资源说明
+
+### blockId 数据在哪里看
+
+1. `block-id.json`（方块 ID 主表）
+
+- 包内路径：`Packages/com.box3lab.box3/Assets/block-id.json`
+- 用途：方块 ID、分类、列表展示来源。
+
+2. `block-spec.json`（行为/渲染规则）
+
+- 包内路径：`Packages/com.box3lab.box3/Assets/block-spec.json`
+- 用途：透明、发光等规则。
+
+### 生成资源位置
+
+工具运行后会在项目 `Assets/Box3` 下生成资源：
+
+- `Assets/Box3/Textures`
+- `Assets/Box3/Materials`
+- `Assets/Box3/Meshes`
+
+## 二次开发 API
+
+命名空间：
+
+```csharp
+using Box3Blocks.Editor;
+using UnityEngine;
+```
+
+入口类型：
+
+- `Box3Blocks.Editor.Box3Api`
+- `Box3Blocks.Editor.Box3QuarterTurn`
+
+### 使用前准备
+
+```csharp
+[UnityEditor.MenuItem("Tools/Box3/API Example/Init")]
+private static void Init()
 {
-  "blocks": [
-    { "id": "grass", "x": 0, "y": 0, "z": 0 },
-    { "id": "stone", "x": 1, "y": 0, "z": 0 }
-  ]
+    var rootGo = GameObject.Find("Box3Root") ?? new GameObject("Box3Root");
+    Box3Api.PrepareGeneratedAssets();
+    Debug.Log($"Block count: {Box3Api.GetAvailableBlockIds().Count}");
 }
+```
+
+### 放置 API
+
+- `TryPlaceBlockAt(root, blockId, position, replaceExisting = true, rotationQuarter = Box3QuarterTurn.R0)`
+- `TryPlaceBlockOnTop(root, blockId, x, z, baseY = 0, replaceExisting = true, rotationQuarter = Box3QuarterTurn.R0)`
+- `PlaceBlocksInBounds(root, blockId, minInclusive, maxInclusive, replaceExisting = true, rotationQuarter = Box3QuarterTurn.R0)`
+
+示例：
+
+```csharp
+var root = GameObject.Find("Box3Root")?.transform;
+if (root == null) return;
+
+Box3Api.PrepareGeneratedAssets();
+
+Box3Api.TryPlaceBlockAt(root, "stone", new Vector3Int(10, 5, 10), true, Box3QuarterTurn.R90);
+Box3Api.TryPlaceBlockOnTop(root, "blue_decorative_light", 12, 12, 0, true, Box3QuarterTurn.R0);
+
+int placed = Box3Api.PlaceBlocksInBounds(
+    root,
+    "grass",
+    new Vector3Int(0, 0, 0),
+    new Vector3Int(4, 2, 4),
+    true,
+    Box3QuarterTurn.R0);
+
+Debug.Log($"Placed: {placed}");
+```
+
+### 删除 / 替换 / 旋转 API
+
+- `EraseBlockAt(root, position)`
+- `EraseBlocksInBounds(root, minInclusive, maxInclusive)`
+- `ReplaceBlockAt(root, blockId, position, rotationQuarter = Box3QuarterTurn.R0)`
+- `ReplaceBlocksInBounds(root, blockId, minInclusive, maxInclusive, rotationQuarter = Box3QuarterTurn.R0)`
+- `RotateBlockAt(root, position, stepQuarter = Box3QuarterTurn.R90)`
+- `RotateBlocksInBounds(root, minInclusive, maxInclusive, stepQuarter = Box3QuarterTurn.R90)`
+
+旋转参数说明（`Box3QuarterTurn`）：
+
+- `R0 = 0°`
+- `R90 = 90°`
+- `R180 = 180°`
+- `R270 = 270°`
+
+### 查询 API
+
+- `TryGetBlockIdAt(root, position, out blockId)`
+- `ExistsAt(root, position)`
+- `GetTopY(root, x, z, fallbackY = 0)`
+- `GetAvailableBlockIds()`
+- `IsTransparent(blockId)`
+- `PrepareGeneratedAssets()`：主动生成 `Assets/Box3` 下的网格/图集/材质
+
+示例：
+
+```csharp
+var root = GameObject.Find("Box3Root")?.transform;
+if (root == null) return;
+
+var p = new Vector3Int(5, 2, 5);
+if (Box3Api.TryGetBlockIdAt(root, p, out var id))
+{
+    Debug.Log($"Block at {p}: {id}, transparent={Box3Api.IsTransparent(id)}");
+}
+
+int topY = Box3Api.GetTopY(root, 5, 5, 0);
+Debug.Log($"TopY(5,5) = {topY}");
 ```

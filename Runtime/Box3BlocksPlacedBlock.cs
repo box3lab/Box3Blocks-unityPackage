@@ -1,8 +1,8 @@
 using UnityEngine;
 
-namespace BlockWorldMVP
+namespace Box3Blocks
 {
-    public class PlacedBlock : MonoBehaviour
+    public class Box3BlocksPlacedBlock : MonoBehaviour
     {
         [SerializeField]
         private string blockId;
