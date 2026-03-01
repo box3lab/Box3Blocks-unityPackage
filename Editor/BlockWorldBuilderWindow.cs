@@ -930,28 +930,7 @@ namespace BlockWorldMVP.Editor
             GameObject go = new GameObject("BlockWorldRoot");
             Undo.RegisterCreatedObjectUndo(go, "Create Block Root");
             _root = go.transform;
-            EnsureRuntimeCuller(_root);
             Selection.activeObject = go;
-        }
-
-        private static void EnsureRuntimeCuller(Transform root)
-        {
-            if (root == null)
-            {
-                return;
-            }
-
-            global::BlockWorldMVP.BlockWorldOcclusionCuller culler = root.GetComponent<global::BlockWorldMVP.BlockWorldOcclusionCuller>();
-            if (culler == null)
-            {
-                culler = Undo.AddComponent<global::BlockWorldMVP.BlockWorldOcclusionCuller>(root.gameObject);
-            }
-
-            if (culler != null)
-            {
-                culler.Rebuild();
-                EditorUtility.SetDirty(culler);
-            }
         }
 
         private void ClearRoot()

@@ -951,23 +951,6 @@ namespace BlockWorldMVP.Editor
 
             if (_importRoot != null)
             {
-                global::BlockWorldMVP.BlockWorldOcclusionCuller culler = _importRoot.GetComponent<global::BlockWorldMVP.BlockWorldOcclusionCuller>();
-                if (culler == null)
-                {
-                    culler = _importRoot.gameObject.AddComponent<global::BlockWorldMVP.BlockWorldOcclusionCuller>();
-                }
-
-                if (_importMode == ImportMode.Chunk)
-                {
-                    culler.Configure(300f, 340f, 2);
-                }
-
-                culler.Rebuild();
-                EditorUtility.SetDirty(culler);
-            }
-
-            if (_importRoot != null)
-            {
                 Selection.activeObject = _importRoot.gameObject;
             }
 

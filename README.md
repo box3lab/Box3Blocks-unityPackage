@@ -35,7 +35,6 @@ Notes:
 - World Builder non-animated blocks now use single-submesh baked-UV mesh + single shared material (further draw-call reduction).
 - Block menu cards now render true 3D cube previews (top/side faces) instead of flat single-texture thumbnails.
 - Added `Tools -> Block World MVP -> Voxel GZ Importer` for MC-style `.gz` voxel import (`shape/dir/indices/data/rot`) into chunk-merged meshes.
-- `BlockWorldOcclusionCuller` can cull chunked renderers by distance + frustum + runtime occlusion (for large scenes with many hidden blocks).
 
 ## JSON format
 
