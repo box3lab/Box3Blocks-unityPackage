@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 using UnityEditor;
@@ -16,6 +17,7 @@ namespace BlockWorldMVP.Editor
         }
 
         private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
+        private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
         private const string BumpTextureFolder = "Packages/com.box3lab.box3/Assets/bump";
         private const string MaterialTextureFolder = "Packages/com.box3lab.box3/Assets/material";
         private static readonly string GeneratedRoot = "Assets/Box3";
@@ -38,6 +40,7 @@ namespace BlockWorldMVP.Editor
         private static Texture2D _atlasEmissionTexture;
         private static Material _atlasTransparentMaterial;
         private static bool _atlasReady;
+        private static HashSet<string> _emissiveBlockIds;
 
         public static void InvalidateCaches()
         {
@@ -47,6 +50,7 @@ namespace BlockWorldMVP.Editor
             _atlasMaterialTexture = null;
             _atlasEmissionTexture = null;
             _atlasTransparentMaterial = null;
+            _emissiveBlockIds = null;
             AtlasUvByTexturePath.Clear();
         }
 
@@ -789,12 +793,309 @@ namespace BlockWorldMVP.Editor
 
             int split = fileName.LastIndexOf('_');
             string id = split > 0 ? fileName.Substring(0, split) : fileName;
+            EnsureEmissiveBlockIdCache();
+            if (_emissiveBlockIds != null && _emissiveBlockIds.Contains(id))
+            {
+                return true;
+            }
+
             return id.IndexOf("light", StringComparison.OrdinalIgnoreCase) >= 0
                 || id.IndexOf("lamp", StringComparison.OrdinalIgnoreCase) >= 0
                 || id.IndexOf("lantern", StringComparison.OrdinalIgnoreCase) >= 0
                 || id.IndexOf("glow", StringComparison.OrdinalIgnoreCase) >= 0
                 || id.IndexOf("lava", StringComparison.OrdinalIgnoreCase) >= 0
                 || id.IndexOf("led", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static void EnsureEmissiveBlockIdCache()
+        {
+            if (_emissiveBlockIds != null)
+            {
+                return;
+            }
+
+            _emissiveBlockIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string absPath = GetProjectAbsolutePath(BlockSpecPath);
+            if (!File.Exists(absPath))
+            {
+                return;
+            }
+
+            string json = File.ReadAllText(absPath);
+            Dictionary<string, string> objects = ExtractTopLevelObjectValues(json);
+            foreach (KeyValuePair<string, string> pair in objects)
+            {
+                string name = pair.Key;
+                string body = pair.Value;
+                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(body))
+                {
+                    continue;
+                }
+
+                bool emits = HasMeaningfulEmission(body)
+                    || ReadBoolField(body, "emissive")
+                    || Regex.IsMatch(body, "\"glow\"\\s*:\\s*(true|1)", RegexOptions.IgnoreCase)
+                    || name.IndexOf("light", StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("lamp", StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("lantern", StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("glow", StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("lava", StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("led", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (emits)
+                {
+                    _emissiveBlockIds.Add(name);
+                }
+            }
+        }
+
+        private static bool HasMeaningfulEmission(string body)
+        {
+            Match m = Regex.Match(body, "\"emissive\"\\s*:\\s*\\[(?<value>[^\\]]+)\\]", RegexOptions.IgnoreCase);
+            if (!m.Success)
+            {
+                return false;
+            }
+
+            string[] parts = m.Groups["value"].Value.Split(',');
+            float sum = 0f;
+            for (int i = 0; i < Mathf.Min(3, parts.Length); i++)
+            {
+                sum += Mathf.Abs(ParseFloatSafe(parts[i], 0f));
+            }
+
+            return sum > 0.001f;
+        }
+
+        private static bool ReadBoolField(string text, string fieldName)
+        {
+            Match match = Regex.Match(text, $"\"{Regex.Escape(fieldName)}\"\\s*:\\s*(?<value>true|false|1|0)", RegexOptions.IgnoreCase);
+            if (!match.Success)
+            {
+                return false;
+            }
+
+            string raw = match.Groups["value"].Value;
+            return string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase) || raw == "1";
+        }
+
+        private static float ParseFloatSafe(string text, float fallback)
+        {
+            return float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out float value) ? value : fallback;
+        }
+
+        private static Dictionary<string, string> ExtractTopLevelObjectValues(string json)
+        {
+            Dictionary<string, string> result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            int i = 0;
+            SkipWhitespace(json, ref i);
+            if (i >= json.Length || json[i] != '{')
+            {
+                return result;
+            }
+
+            i++;
+            while (i < json.Length)
+            {
+                SkipWhitespace(json, ref i);
+                if (i < json.Length && json[i] == '}')
+                {
+                    break;
+                }
+
+                string key = ReadJsonString(json, ref i);
+                if (key == null)
+                {
+                    break;
+                }
+
+                SkipWhitespace(json, ref i);
+                if (i >= json.Length || json[i] != ':')
+                {
+                    break;
+                }
+
+                i++;
+                SkipWhitespace(json, ref i);
+                if (i >= json.Length || json[i] != '{')
+                {
+                    SkipJsonValue(json, ref i);
+                }
+                else
+                {
+                    int start = i;
+                    SkipJsonObject(json, ref i);
+                    result[key] = json.Substring(start, i - start);
+                }
+
+                SkipWhitespace(json, ref i);
+                if (i < json.Length && json[i] == ',')
+                {
+                    i++;
+                }
+            }
+
+            return result;
+        }
+
+        private static void SkipWhitespace(string text, ref int i)
+        {
+            while (i < text.Length && char.IsWhiteSpace(text[i]))
+            {
+                i++;
+            }
+        }
+
+        private static string ReadJsonString(string text, ref int i)
+        {
+            SkipWhitespace(text, ref i);
+            if (i >= text.Length || text[i] != '"')
+            {
+                return null;
+            }
+
+            i++;
+            int start = i;
+            bool escape = false;
+            System.Text.StringBuilder sb = null;
+            while (i < text.Length)
+            {
+                char c = text[i++];
+                if (!escape && c == '"')
+                {
+                    if (sb == null)
+                    {
+                        return text.Substring(start, i - start - 1);
+                    }
+
+                    return sb.ToString();
+                }
+
+                if (!escape && c == '\\')
+                {
+                    escape = true;
+                    if (sb == null)
+                    {
+                        sb = new System.Text.StringBuilder();
+                        sb.Append(text, start, (i - 1) - start);
+                    }
+                    continue;
+                }
+
+                if (sb != null)
+                {
+                    sb.Append(c);
+                }
+
+                escape = false;
+            }
+
+            return null;
+        }
+
+        private static void SkipJsonValue(string text, ref int i)
+        {
+            SkipWhitespace(text, ref i);
+            if (i >= text.Length)
+            {
+                return;
+            }
+
+            if (text[i] == '{')
+            {
+                SkipJsonObject(text, ref i);
+                return;
+            }
+
+            if (text[i] == '[')
+            {
+                int depth = 0;
+                bool inString = false;
+                bool escape = false;
+                while (i < text.Length)
+                {
+                    char c = text[i++];
+                    if (inString)
+                    {
+                        if (!escape && c == '"')
+                        {
+                            inString = false;
+                        }
+                        escape = !escape && c == '\\';
+                        continue;
+                    }
+
+                    if (c == '"')
+                    {
+                        inString = true;
+                        continue;
+                    }
+
+                    if (c == '[')
+                    {
+                        depth++;
+                    }
+                    else if (c == ']')
+                    {
+                        depth--;
+                        if (depth <= 0)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                return;
+            }
+
+            while (i < text.Length)
+            {
+                char c = text[i];
+                if (c == ',' || c == '}' || c == ']')
+                {
+                    break;
+                }
+                i++;
+            }
+        }
+
+        private static void SkipJsonObject(string text, ref int i)
+        {
+            int depth = 0;
+            bool inString = false;
+            bool escape = false;
+            while (i < text.Length)
+            {
+                char c = text[i++];
+                if (inString)
+                {
+                    if (!escape && c == '"')
+                    {
+                        inString = false;
+                    }
+                    escape = !escape && c == '\\';
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inString = true;
+                    continue;
+                }
+
+                if (c == '{')
+                {
+                    depth++;
+                }
+                else if (c == '}')
+                {
+                    depth--;
+                    if (depth <= 0)
+                    {
+                        break;
+                    }
+                }
+            }
         }
 
         private static Texture2D LoadReadableTextureFromAsset(string assetPath)

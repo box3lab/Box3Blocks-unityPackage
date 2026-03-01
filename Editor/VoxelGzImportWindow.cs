@@ -1459,7 +1459,7 @@ namespace BlockWorldMVP.Editor
                 if (material.HasProperty("_EmissionMap"))
                 {
                     Texture2D emissionAtlas = BlockAssetFactory.GetAtlasEmissionTexture();
-                    material.SetTexture("_EmissionMap", emissionAtlas != null ? emissionAtlas : material.mainTexture);
+                    material.SetTexture("_EmissionMap", emissionAtlas);
                 }
             }
 
