@@ -1091,6 +1091,7 @@ namespace BlockWorldMVP.Editor
             {
                 material.EnableKeyword("_EMISSION");
                 material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                material.SetColor("_EmissionColor", Color.white);
                 if (material.HasProperty("_EmissionMap") && material.mainTexture != null)
                 {
                     material.SetTexture("_EmissionMap", material.mainTexture);
@@ -2024,9 +2025,11 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
-            Color emissionColor = (definition != null && definition.emitsLight)
-                ? new Color(definition.lightColor.r * 1.6f, definition.lightColor.g * 1.6f, definition.lightColor.b * 1.6f, 1f)
-                : Color.black;
+            Color emissionColor =  Color.white;
+            if (definition != null && definition.emitsLight)
+            {
+                emissionColor = Color.white;
+            }
 
             MaterialPropertyBlock block = new MaterialPropertyBlock();
             for (int i = 0; i < shared.Length; i++)

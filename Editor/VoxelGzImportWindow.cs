@@ -1179,6 +1179,8 @@ namespace BlockWorldMVP.Editor
 
                 animator.SetAnimations(prepared.animations, prepared.faceMainTexSt);
             }
+
+            ApplyEmissionForBlockName(mr, blockName);
         }
 
         private void CancelImport(bool clearStatus = true)
@@ -1427,6 +1429,17 @@ namespace BlockWorldMVP.Editor
                 return;
             }
 
+            if (material.HasProperty("_EmissionColor"))
+            {
+                material.EnableKeyword("_EMISSION");
+                material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                material.SetColor("_EmissionColor", Color.white);
+                if (material.HasProperty("_EmissionMap") && material.mainTexture != null)
+                {
+                    material.SetTexture("_EmissionMap", material.mainTexture);
+                }
+            }
+
             Texture2D bump = BlockAssetFactory.GetAtlasBumpTexture();
             if (bump == null)
             {
@@ -1635,6 +1648,38 @@ namespace BlockWorldMVP.Editor
                 Mathf.RoundToInt(dir.x),
                 Mathf.RoundToInt(dir.y),
                 Mathf.RoundToInt(dir.z));
+        }
+
+        private static void ApplyEmissionForBlockName(Renderer renderer, string blockName)
+        {
+            if (renderer == null)
+            {
+                return;
+            }
+
+      
+
+            Material[] mats = renderer.sharedMaterials;
+            if (mats == null || mats.Length == 0)
+            {
+                return;
+            }
+
+            Color emissionColor =  Color.white;
+            MaterialPropertyBlock mpb = new MaterialPropertyBlock();
+            for (int i = 0; i < mats.Length; i++)
+            {
+                Material mat = mats[i];
+                if (mat == null || !mat.HasProperty("_EmissionColor"))
+                {
+                    continue;
+                }
+
+                mpb.Clear();
+                renderer.GetPropertyBlock(mpb, i);
+                mpb.SetColor("_EmissionColor", emissionColor);
+                renderer.SetPropertyBlock(mpb, i);
+            }
         }
 
         private static Mesh BuildStaticBlockMesh(string blockName, Vector4[] faceMainTexSt)
