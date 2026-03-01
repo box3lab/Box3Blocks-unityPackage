@@ -26,6 +26,15 @@ namespace Box3Blocks.Editor
         private static readonly int MainTexStShaderId = Shader.PropertyToID("_MainTex_ST");
         private static readonly int EmissionColorShaderId = Shader.PropertyToID("_EmissionColor");
         private const string RealtimeLightChildName = "__BlockLight";
+        private static readonly Vector3Int[] OcclusionNeighborOffsets =
+        {
+            Vector3Int.left,
+            Vector3Int.right,
+            Vector3Int.up,
+            Vector3Int.down,
+            new Vector3Int(0, 0, 1),
+            new Vector3Int(0, 0, -1),
+        };
 
         private Transform _root;
         private List<BlockDefinition> _allBlocks = new List<BlockDefinition>();
@@ -53,9 +62,17 @@ namespace Box3Blocks.Editor
         private GUIStyle _toolTabStyle;
         private GUIStyle _toolTabSelectedStyle;
         private GUIStyle _insetPanelStyle;
+        private GUIStyle _cardBoxStyle;
         private GUIStyle _cardTitleStyle;
         private GUIStyle _cardSubtitleStyle;
+        private GUIStyle _cardTitleSelectedStyle;
+        private GUIStyle _cardSubtitleSelectedStyle;
         private GUIStyle _rotateBadgeStyle;
+        private bool _filteredHasAnimatedBlocks;
+        private double _lastBlockListScrollTime;
+        private const double AnimatedCardPreviewFps = 4.0;
+        private float _blockListViewportHeight = 420f;
+        private const float CardVisiblePadding = 120f;
         private readonly Dictionary<string, Mesh> _staticBlockMeshCache = new Dictionary<string, Mesh>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Texture2D> _blockCardPreviewCache = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, AnimatedPreviewCacheEntry> _animatedBlockCardPreviewCache = new Dictionary<string, AnimatedPreviewCacheEntry>(StringComparer.OrdinalIgnoreCase);
@@ -229,6 +246,18 @@ namespace Box3Blocks.Editor
                 };
             }
 
+            if (_cardBoxStyle == null)
+            {
+                _cardBoxStyle = new GUIStyle("HelpBox")
+                {
+                    fixedHeight = Mathf.Max(136f, PreviewSize + 68f),
+                    wordWrap = true,
+                    alignment = TextAnchor.UpperCenter,
+                    fontSize = 11,
+                    padding = new RectOffset(6, 6, 8, 8)
+                };
+            }
+
             if (_cardTitleStyle == null)
             {
                 _cardTitleStyle = new GUIStyle(EditorStyles.label)
@@ -240,6 +269,12 @@ namespace Box3Blocks.Editor
                 };
             }
 
+            if (_cardTitleSelectedStyle == null)
+            {
+                _cardTitleSelectedStyle = new GUIStyle(_cardTitleStyle);
+                _cardTitleSelectedStyle.normal.textColor = new Color(0.78f, 1f, 0.8f, 1f);
+            }
+
             if (_cardSubtitleStyle == null)
             {
                 _cardSubtitleStyle = new GUIStyle(EditorStyles.miniLabel)
@@ -248,6 +283,12 @@ namespace Box3Blocks.Editor
                     wordWrap = true
                 };
                 _cardSubtitleStyle.normal.textColor = new Color(0.78f, 0.78f, 0.78f, 1f);
+            }
+
+            if (_cardSubtitleSelectedStyle == null)
+            {
+                _cardSubtitleSelectedStyle = new GUIStyle(_cardSubtitleStyle);
+                _cardSubtitleSelectedStyle.normal.textColor = new Color(0.68f, 0.95f, 0.72f, 1f);
             }
 
             if (_rotateBadgeStyle == null)
@@ -351,6 +392,7 @@ namespace Box3Blocks.Editor
                     {
                         float rightPaneWidth = Mathf.Max(220f, position.width - (_categories.Count > 0 ? 158f : 34f));
                         int columns = CalculateColumnCount(rightPaneWidth);
+                        Vector2 prevScroll = _scroll;
                         _scroll = GUILayout.BeginScrollView(
                             _scroll,
                             false,
@@ -359,6 +401,15 @@ namespace Box3Blocks.Editor
                             GUI.skin.verticalScrollbar);
                         DrawBlockGrid(columns, rightPaneWidth - 20f);
                         EditorGUILayout.EndScrollView();
+                        Rect viewportRect = GUILayoutUtility.GetLastRect();
+                        if (viewportRect.height > 1f)
+                        {
+                            _blockListViewportHeight = viewportRect.height;
+                        }
+                        if ((prevScroll - _scroll).sqrMagnitude > 0.0001f)
+                        {
+                            _lastBlockListScrollTime = EditorApplication.timeSinceStartup;
+                        }
                     }
                 }
             }
@@ -423,18 +474,15 @@ namespace Box3Blocks.Editor
             string title = Box3BlocksI18n.GetBlockDisplayName(block.id, fallbackTitle);
             string categoryLabel = LocalizeCategoryLabel(block.category);
             string subtitle = string.IsNullOrWhiteSpace(info) ? categoryLabel : $"{categoryLabel} | {info}";
-            GUIStyle cardStyle = new GUIStyle("HelpBox")
-            {
-                fixedHeight = Mathf.Max(136f, PreviewSize + 68f),
-                wordWrap = true,
-                alignment = TextAnchor.UpperCenter,
-                fontSize = 11,
-                padding = new RectOffset(6, 6, 8, 8)
-            };
-
-            Rect rect = GUILayoutUtility.GetRect(width, cardStyle.fixedHeight, GUILayout.Width(width), GUILayout.Height(cardStyle.fixedHeight));
-            GUI.Box(rect, GUIContent.none, cardStyle);
+            Rect rect = GUILayoutUtility.GetRect(width, _cardBoxStyle.fixedHeight, GUILayout.Width(width), GUILayout.Height(_cardBoxStyle.fixedHeight));
+            GUI.Box(rect, GUIContent.none, _cardBoxStyle);
             Rect rotateRect = DrawCardRotateButton(rect, block);
+            bool isVisible = IsCardRectVisible(rect);
+
+            if (!isVisible)
+            {
+                return;
+            }
 
             Rect previewRect = new Rect(
                 rect.x + (rect.width - PreviewSize) * 0.5f,
@@ -449,13 +497,8 @@ namespace Box3Blocks.Editor
 
             Rect titleRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, 34f);
             Rect subtitleRect = new Rect(rect.x + 6f, previewRect.yMax + 36f, rect.width - 12f, rect.height - (PreviewSize + 46f));
-            GUIStyle titleStyle = new GUIStyle(_cardTitleStyle);
-            GUIStyle subtitleStyle = new GUIStyle(_cardSubtitleStyle);
-            if (_selectedIndex == index)
-            {
-                titleStyle.normal.textColor = new Color(0.78f, 1f, 0.8f, 1f);
-                subtitleStyle.normal.textColor = new Color(0.68f, 0.95f, 0.72f, 1f);
-            }
+            GUIStyle titleStyle = _selectedIndex == index ? _cardTitleSelectedStyle : _cardTitleStyle;
+            GUIStyle subtitleStyle = _selectedIndex == index ? _cardSubtitleSelectedStyle : _cardSubtitleStyle;
             EditorGUI.LabelField(titleRect, title, titleStyle);
             EditorGUI.LabelField(subtitleRect, subtitle, subtitleStyle);
 
@@ -857,6 +900,7 @@ namespace Box3Blocks.Editor
             ConfigureRealtimeLight(go.transform, definition, _spawnPointLightForEmissive);
 
             RefreshTransparentAround(position);
+            RefreshOcclusionAround(position);
             EditorUtility.SetDirty(go);
             return true;
         }
@@ -881,6 +925,7 @@ namespace Box3Blocks.Editor
             foreach (Vector3Int pos in refresh)
             {
                 RefreshTransparentAround(pos);
+                RefreshOcclusionAround(pos);
             }
         }
 
@@ -927,6 +972,7 @@ namespace Box3Blocks.Editor
             foreach (Vector3Int pos in refresh)
             {
                 RefreshTransparentAround(pos);
+                RefreshOcclusionAround(pos);
             }
         }
 
@@ -978,6 +1024,51 @@ namespace Box3Blocks.Editor
             }
 
             return null;
+        }
+
+        private void RefreshOcclusionAround(Vector3Int center)
+        {
+            UpdateOcclusionAt(center);
+            for (int i = 0; i < OcclusionNeighborOffsets.Length; i++)
+            {
+                UpdateOcclusionAt(center + OcclusionNeighborOffsets[i]);
+            }
+        }
+
+        private void UpdateOcclusionAt(Vector3Int position)
+        {
+            GameObject go = FindBlockAt(position);
+            if (go == null)
+            {
+                return;
+            }
+
+            MeshRenderer renderer = go.GetComponent<MeshRenderer>();
+            if (renderer == null)
+            {
+                return;
+            }
+
+            bool shouldRender = !IsBlockFullyOccluded(position);
+            if (renderer.enabled != shouldRender)
+            {
+                renderer.enabled = shouldRender;
+                EditorUtility.SetDirty(renderer);
+            }
+        }
+
+        private bool IsBlockFullyOccluded(Vector3Int position)
+        {
+            for (int i = 0; i < OcclusionNeighborOffsets.Length; i++)
+            {
+                Vector3Int neighborPos = position + OcclusionNeighborOffsets[i];
+                if (FindBlockAt(neighborPos) == null)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private List<Vector3Int> BuildBrushPositions(Vector3Int origin)
@@ -1462,6 +1553,7 @@ namespace Box3Blocks.Editor
         private void ApplyFilter()
         {
             _filteredBlocks.Clear();
+            _filteredHasAnimatedBlocks = false;
             string selectedCategory = _categories[Mathf.Clamp(_selectedCategory, 0, _categories.Count - 1)];
             IEnumerable<BlockDefinition> source = string.Equals(selectedCategory, CategoryRecent, StringComparison.OrdinalIgnoreCase)
                 ? EnumerateRecentBlocks()
@@ -1478,6 +1570,10 @@ namespace Box3Blocks.Editor
                 if (matchSearch && matchCategory)
                 {
                     _filteredBlocks.Add(block);
+                    if (!_filteredHasAnimatedBlocks && HasAnimatedFaces(block))
+                    {
+                        _filteredHasAnimatedBlocks = true;
+                    }
                 }
             }
 
@@ -1738,7 +1834,19 @@ namespace Box3Blocks.Editor
                 return block.previewTexture;
             }
 
-            float now = Time.realtimeSinceStartup;
+            if (IsBlockListScrolling())
+            {
+                if (_animatedBlockCardPreviewCache.TryGetValue(block.id, out AnimatedPreviewCacheEntry cachedEntry)
+                    && cachedEntry != null
+                    && cachedEntry.texture != null)
+                {
+                    return cachedEntry.texture;
+                }
+
+                return block.previewTexture;
+            }
+
+            float now = GetQuantizedAnimatedPreviewTime();
             int signature = ComputeAnimatedPreviewSignature(block, now);
             if (_animatedBlockCardPreviewCache.TryGetValue(block.id, out AnimatedPreviewCacheEntry entry)
                 && entry != null
@@ -2012,17 +2120,7 @@ namespace Box3Blocks.Editor
 
         private void RequestAnimatedCardPreviewRepaint()
         {
-            bool hasAnimatedVisible = false;
-            for (int i = 0; i < _filteredBlocks.Count; i++)
-            {
-                if (HasAnimatedFaces(_filteredBlocks[i]))
-                {
-                    hasAnimatedVisible = true;
-                    break;
-                }
-            }
-
-            if (!hasAnimatedVisible)
+            if (!_filteredHasAnimatedBlocks || IsBlockListScrolling() || !hasFocus)
             {
                 return;
             }
@@ -2033,8 +2131,28 @@ namespace Box3Blocks.Editor
                 return;
             }
 
-            _nextAnimatedPreviewRepaintTime = now + (1.0 / 12.0);
+            _nextAnimatedPreviewRepaintTime = now + (1.0 / AnimatedCardPreviewFps);
             Repaint();
+        }
+
+        private bool IsBlockListScrolling()
+        {
+            return EditorApplication.timeSinceStartup - _lastBlockListScrollTime < 0.16;
+        }
+
+        private bool IsCardRectVisible(Rect rect)
+        {
+            float minY = _scroll.y - CardVisiblePadding;
+            float maxY = _scroll.y + Mathf.Max(120f, _blockListViewportHeight) + CardVisiblePadding;
+            return rect.yMax >= minY && rect.yMin <= maxY;
+        }
+
+        private static float GetQuantizedAnimatedPreviewTime()
+        {
+            double now = EditorApplication.timeSinceStartup;
+            double step = 1.0 / AnimatedCardPreviewFps;
+            double quantized = Math.Floor(now / step) * step;
+            return (float)quantized;
         }
 
         private static void ApplyFaceMainTexSt(Renderer renderer, Vector4[] faceMainTexSt)
@@ -2485,6 +2603,7 @@ namespace Box3Blocks.Editor
 
                 Undo.DestroyObjectImmediate(existing);
                 RefreshTransparentAround(position);
+                RefreshOcclusionAround(position);
                 return true;
             }
             finally
