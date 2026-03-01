@@ -35,6 +35,12 @@ namespace Box3Blocks.Editor
             public Texture2D texture;
         }
 
+        private sealed class CardRotateAnimState
+        {
+            public double startTime;
+            public float duration;
+        }
+
         private class BlockMetadata
         {
             public int numericId = -1;

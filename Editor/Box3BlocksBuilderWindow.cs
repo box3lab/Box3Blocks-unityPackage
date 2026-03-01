@@ -76,6 +76,7 @@ namespace Box3Blocks.Editor
         private readonly Dictionary<string, Mesh> _staticBlockMeshCache = new Dictionary<string, Mesh>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Texture2D> _blockCardPreviewCache = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, AnimatedPreviewCacheEntry> _animatedBlockCardPreviewCache = new Dictionary<string, AnimatedPreviewCacheEntry>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, CardRotateAnimState> _cardRotateAnimations = new Dictionary<string, CardRotateAnimState>(StringComparer.OrdinalIgnoreCase);
         private PreviewRenderUtility _blockCardPreviewUtility;
         private double _nextAnimatedPreviewRepaintTime;
 
@@ -415,6 +416,7 @@ namespace Box3Blocks.Editor
             }
 
             RequestAnimatedCardPreviewRepaint();
+            RequestCardRotateAnimationRepaint();
         }
 
         private void DrawBlockGrid(int columns, float availableWidth)
@@ -489,10 +491,19 @@ namespace Box3Blocks.Editor
                 rect.y + 10f,
                 PreviewSize,
                 PreviewSize);
-            Texture2D cardPreview = GetOrBuildBlockCardPreview(block);
+            float extraYaw = GetCardPreviewExtraAngle(block);
+            bool disposePreviewAfterDraw = false;
+            Texture2D cardPreview = Mathf.Abs(extraYaw) > 0.01f
+                ? BuildTransientCardPreview(block, extraYaw, out disposePreviewAfterDraw)
+                : GetOrBuildBlockCardPreview(block);
             if (cardPreview != null)
             {
                 GUI.DrawTexture(previewRect, cardPreview, ScaleMode.ScaleToFit, true);
+            }
+
+            if (disposePreviewAfterDraw && cardPreview != null)
+            {
+                DestroyImmediate(cardPreview);
             }
 
             Rect titleRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, 34f);
@@ -528,6 +539,7 @@ namespace Box3Blocks.Editor
                 if (block != null)
                 {
                     block.placementRotationQuarter = (block.placementRotationQuarter + 1) & 3;
+                    StartCardRotateAnimation(block);
                     Repaint();
                 }
                 e.Use();
@@ -1816,6 +1828,61 @@ namespace Box3Blocks.Editor
             return block.previewTexture;
         }
 
+        private Texture2D BuildTransientCardPreview(BlockDefinition block, float extraYawDeg, out bool createdTemporaryTexture)
+        {
+            createdTemporaryTexture = false;
+            if (block == null || string.IsNullOrWhiteSpace(block.id))
+            {
+                return null;
+            }
+
+            if (!Box3BlocksAssetFactory.TryGetFaceRenderData(block.sideTexturePaths, out Box3BlocksAssetFactory.FaceRenderData renderData)
+                || renderData == null
+                || renderData.materials == null
+                || renderData.materials.Length == 0
+                || renderData.materials[0] == null)
+            {
+                return block.previewTexture;
+            }
+
+            Mesh mesh = null;
+            bool destroyMesh = false;
+            if (HasAnimatedFaces(block))
+            {
+                if (renderData.faceMainTexSt == null || renderData.faceMainTexSt.Length < SideOrder.Length)
+                {
+                    return block.previewTexture;
+                }
+
+                float now = GetQuantizedAnimatedPreviewTime();
+                mesh = BuildAnimatedPreviewMesh(block.id, renderData.faceMainTexSt, block.sideAnimations, now);
+                destroyMesh = mesh != null;
+            }
+            else
+            {
+                mesh = GetOrCreateStaticBlockMesh(block, renderData);
+            }
+
+            if (mesh == null)
+            {
+                return block.previewTexture;
+            }
+
+            Texture2D preview = RenderBlockCardPreview(mesh, renderData.materials[0], block.placementRotationQuarter, extraYawDeg);
+            if (destroyMesh)
+            {
+                DestroyImmediate(mesh);
+            }
+
+            if (preview == null)
+            {
+                return block.previewTexture;
+            }
+
+            createdTemporaryTexture = true;
+            return preview;
+        }
+
         private Texture2D GetOrBuildAnimatedBlockCardPreview(BlockDefinition block)
         {
             if (block == null || string.IsNullOrWhiteSpace(block.id))
@@ -1974,7 +2041,7 @@ namespace Box3Blocks.Editor
             return BuildStaticBlockMesh(id + "_animPreview", animatedFaceSt);
         }
 
-        private Texture2D RenderBlockCardPreview(Mesh mesh, Material material, int rotationQuarter)
+        private Texture2D RenderBlockCardPreview(Mesh mesh, Material material, int rotationQuarter, float extraYawDeg = 0f)
         {
             if (mesh == null || material == null)
             {
@@ -1987,8 +2054,8 @@ namespace Box3Blocks.Editor
                 _blockCardPreviewUtility.cameraFieldOfView = 22f;
             }
 
-            Texture2D onBlack = RenderPreviewWithBackground(mesh, material, new Color(0f, 0f, 0f, 1f), rotationQuarter);
-            Texture2D onWhite = RenderPreviewWithBackground(mesh, material, new Color(1f, 1f, 1f, 1f), rotationQuarter);
+            Texture2D onBlack = RenderPreviewWithBackground(mesh, material, new Color(0f, 0f, 0f, 1f), rotationQuarter, extraYawDeg);
+            Texture2D onWhite = RenderPreviewWithBackground(mesh, material, new Color(1f, 1f, 1f, 1f), rotationQuarter, extraYawDeg);
             if (onBlack == null || onWhite == null)
             {
                 if (onBlack != null)
@@ -2010,7 +2077,7 @@ namespace Box3Blocks.Editor
             return composed;
         }
 
-        private Texture2D RenderPreviewWithBackground(Mesh mesh, Material material, Color backgroundColor, int rotationQuarter)
+        private Texture2D RenderPreviewWithBackground(Mesh mesh, Material material, Color backgroundColor, int rotationQuarter, float extraYawDeg = 0f)
         {
             const int size = 128;
             Rect r = new Rect(0f, 0f, size, size);
@@ -2037,7 +2104,7 @@ namespace Box3Blocks.Editor
             cam.transform.rotation = viewRot;
             cam.transform.LookAt(target);
 
-            Quaternion modelRot = Quaternion.Euler(0f, (rotationQuarter & 3) * 90f, 0f);
+            Quaternion modelRot = Quaternion.Euler(0f, ((rotationQuarter & 3) * 90f) + extraYawDeg, 0f);
             _blockCardPreviewUtility.DrawMesh(mesh, Matrix4x4.TRS(Vector3.zero, modelRot, Vector3.one), material, 0);
             cam.Render();
             return _blockCardPreviewUtility.EndStaticPreview();
@@ -2145,6 +2212,80 @@ namespace Box3Blocks.Editor
             float minY = _scroll.y - CardVisiblePadding;
             float maxY = _scroll.y + Mathf.Max(120f, _blockListViewportHeight) + CardVisiblePadding;
             return rect.yMax >= minY && rect.yMin <= maxY;
+        }
+
+        private float GetCardPreviewExtraAngle(BlockDefinition block)
+        {
+            if (block == null || string.IsNullOrWhiteSpace(block.id))
+            {
+                return 0f;
+            }
+
+            if (!_cardRotateAnimations.TryGetValue(block.id, out CardRotateAnimState state) || state == null)
+            {
+                return 0f;
+            }
+
+            float elapsed = (float)(EditorApplication.timeSinceStartup - state.startTime);
+            if (elapsed >= state.duration)
+            {
+                _cardRotateAnimations.Remove(block.id);
+                return 0f;
+            }
+
+            float t = Mathf.Clamp01(elapsed / Mathf.Max(0.01f, state.duration));
+            return Mathf.Lerp(-90f, 0f, Mathf.SmoothStep(0f, 1f, t));
+        }
+
+        private void StartCardRotateAnimation(BlockDefinition block)
+        {
+            if (block == null || string.IsNullOrWhiteSpace(block.id))
+            {
+                return;
+            }
+
+            _cardRotateAnimations[block.id] = new CardRotateAnimState
+            {
+                startTime = EditorApplication.timeSinceStartup,
+                duration = 0.16f
+            };
+        }
+
+        private void RequestCardRotateAnimationRepaint()
+        {
+            if (_cardRotateAnimations.Count == 0 || IsBlockListScrolling())
+            {
+                return;
+            }
+
+            List<string> completed = null;
+            double now = EditorApplication.timeSinceStartup;
+            foreach (KeyValuePair<string, CardRotateAnimState> kv in _cardRotateAnimations)
+            {
+                CardRotateAnimState state = kv.Value;
+                if (state == null || now - state.startTime >= state.duration)
+                {
+                    if (completed == null)
+                    {
+                        completed = new List<string>();
+                    }
+
+                    completed.Add(kv.Key);
+                }
+            }
+
+            if (completed != null)
+            {
+                for (int i = 0; i < completed.Count; i++)
+                {
+                    _cardRotateAnimations.Remove(completed[i]);
+                }
+            }
+
+            if (_cardRotateAnimations.Count > 0)
+            {
+                Repaint();
+            }
         }
 
         private static float GetQuantizedAnimatedPreviewTime()
