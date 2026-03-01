@@ -281,8 +281,6 @@ namespace BlockWorldMVP.Editor
                 {
                     float rightPaneWidth = Mathf.Max(220f, position.width - (_categories.Count > 0 ? 98f : 32f));
                     int columns = CalculateColumnCount(rightPaneWidth);
-                    EditorGUILayout.LabelField(Lf("library.blocks_layout", _filteredBlocks.Count, columns), _subtleLabelStyle);
-                    EditorGUILayout.Space(2f);
                     _scroll = GUILayout.BeginScrollView(
                         _scroll,
                         false,
