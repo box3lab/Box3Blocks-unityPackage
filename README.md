@@ -1,110 +1,144 @@
-# Box3 使用说明
+# Box3 Blocks for Unity
 
-这是一个给关卡编辑者使用的 Unity 方块世界工具。  
-它的目标是：**在编辑器里快速搭建、导入、编辑、导出方块地形**。
+一个 Unity 编辑器扩展包，用于导入、导出和编辑神岛方块世界。
 
-## 这个工具能做什么
+## 环境要求
 
-- 在 Scene 视图中像“笔刷”一样搭建方块世界
-- 支持 `Place / Erase / Replace / Rotate` 四种编辑模式
-- 支持批量尺寸编辑（水平与高度）
-- 支持按分类/搜索选择方块，支持最近使用
-- 识别透明方块、发光方块、动画方块
-- 支持从 `.gz` 体素数据导入地形（含旋转）
-- 支持把场景方块导出为 `.gz`
-- 自动生成/复用图集与材质，减少手工处理
+- Unity 2022.3 LTS
+- 在 `Editor` 模式下使用本包工具
 
-## 适用场景
+## 安装Package Manager
 
-- 快速原型：白盒地图、玩法验证
-- 内容制作：体素地形、建筑拼装
-- 数据互通：与外部 voxel/gz 流程互导
+1. 打开 `Window > Package Manager`
+2. 点击左上角 `+`
+3. 选择 `Add package from git URL...`
+4. 输入：
 
-## 快速开始
-
-1. 安装包（UPM）
-```json
-{
-  "dependencies": {
-    "com.box3lab.box3": "https://github.com/box3lab/Box3Blocks-unityPackage.git"
-  }
-}
+```text
+https://github.com/box3lab/Box3Blocks-unityPackage.git
 ```
 
-2. 打开工具菜单
-- `Box3/方块库`：可视化搭建
+## 快速使用
+
+安装完成后可在 Unity 菜单中打开：
+
+- `Box3/方块库`：方块搭建与编辑
 - `Box3/地形导入`：导入 `.gz`
 - `Box3/地形导出`：导出 `.gz`
 
-3. 在 `方块库` 中创建或指定 Root，然后直接在 Scene 里开始搭建
+## 数据与资源说明
 
-## 方块编辑功能
+### blockId 数据在哪里看
 
-- `Place`：放置方块
-- `Erase`：删除方块
-- `Replace`：把命中的方块替换为当前选中方块
-- `Rotate`：按 90° 旋转方块
-- 尺寸控制：
-- `Horizontal (X/Z)` 控制水平范围
-- `Height (Y)` 控制垂直范围
+1. `block-id.json`（方块 ID 主表）
 
-## 导入 / 导出功能
+- 包内路径：`Packages/com.box3lab.box3/Assets/block-id.json`
+- 用途：方块 ID、分类、列表展示来源。
 
-### 导入（`Box3/地形导入`）
-- 读取 `.gz` 体素数据
-- 支持 `Chunk` 模式（性能优先）与 `Single Block` 模式（编辑优先）
-- 可选择碰撞体策略（表面/完整）
+2. `block-spec.json`（行为/渲染规则）
 
-### 导出（`Box3/地形导出`）
-- 从 Root 下已放置方块导出 `.gz`
-- 保留 block id、位置与旋转信息
+- 包内路径：`Packages/com.box3lab.box3/Assets/block-spec.json`
+- 用途：透明、发光等规则。
 
-## 资源与规则
+### 生成资源位置
 
-包内默认资源目录：
+工具运行后会在项目 `Assets/Box3` 下生成资源：
 
-- `Packages/com.box3lab.box3/Assets/block`
-- `Packages/com.box3lab.box3/Assets/block-spec.json`
-- `Packages/com.box3lab.box3/Assets/block-id.json`
-
-方块贴图命名（六面）：
-
-- `{id}_back.png`
-- `{id}_bottom.png`
-- `{id}_front.png`
-- `{id}_left.png`
-- `{id}_right.png`
-- `{id}_top.png`
-
-可选：
-
-- `spec_{id}_block.png`：兜底贴图
-- `*.png.mcmeta`：动画配置
-
-## 特性说明
-
-- `transparent: true`：按透明方块渲染
-- `emissive/glow`：启用发光表现
-- `fluid: true`：作为流体方块处理（如水流动）
-
-## 生成内容位置
-
-工具自动生成的资源在：
-
-- `Assets/Box3/Textures/Atlases`
+- `Assets/Box3/Textures`
 - `Assets/Box3/Materials`
 - `Assets/Box3/Meshes`
 
-## 多语言（i18n）
+## 二次开发 API
 
-UI 文案：
+命名空间：
 
-- `Packages/com.box3lab.box3/Editor/I18n/blockworld-ui.zh-CN.json`
-- `Packages/com.box3lab.box3/Editor/I18n/blockworld-ui.en.json`
+```csharp
+using Box3Blocks.Editor;
+using UnityEngine;
+```
 
-方块名：
+入口类型：
 
-- `Packages/com.box3lab.box3/Editor/I18n/block-names.zh-CN.json`
-- `Packages/com.box3lab.box3/Editor/I18n/block-names.en.json`
+- `Box3Blocks.Editor.Box3Api`
+- `Box3Blocks.Editor.Box3QuarterTurn`
 
-说明：窗口已不再使用硬编码 fallback 文案，新增文案请同步维护到 i18n JSON。
+### 使用前准备
+
+```csharp
+[UnityEditor.MenuItem("Tools/Box3/API Example/Init")]
+private static void Init()
+{
+    var rootGo = GameObject.Find("Box3Root") ?? new GameObject("Box3Root");
+    Box3Api.PrepareGeneratedAssets();
+    Debug.Log($"Block count: {Box3Api.GetAvailableBlockIds().Count}");
+}
+```
+
+### 放置 API
+
+- `TryPlaceBlockAt(root, blockId, position, replaceExisting = true, rotationQuarter = Box3QuarterTurn.R0)`
+- `TryPlaceBlockOnTop(root, blockId, x, z, baseY = 0, replaceExisting = true, rotationQuarter = Box3QuarterTurn.R0)`
+- `PlaceBlocksInBounds(root, blockId, minInclusive, maxInclusive, replaceExisting = true, rotationQuarter = Box3QuarterTurn.R0)`
+
+示例：
+
+```csharp
+var root = GameObject.Find("Box3Root")?.transform;
+if (root == null) return;
+
+Box3Api.PrepareGeneratedAssets();
+
+Box3Api.TryPlaceBlockAt(root, "stone", new Vector3Int(10, 5, 10), true, Box3QuarterTurn.R90);
+Box3Api.TryPlaceBlockOnTop(root, "blue_decorative_light", 12, 12, 0, true, Box3QuarterTurn.R0);
+
+int placed = Box3Api.PlaceBlocksInBounds(
+    root,
+    "grass",
+    new Vector3Int(0, 0, 0),
+    new Vector3Int(4, 2, 4),
+    true,
+    Box3QuarterTurn.R0);
+
+Debug.Log($"Placed: {placed}");
+```
+
+### 删除 / 替换 / 旋转 API
+
+- `EraseBlockAt(root, position)`
+- `EraseBlocksInBounds(root, minInclusive, maxInclusive)`
+- `ReplaceBlockAt(root, blockId, position, rotationQuarter = Box3QuarterTurn.R0)`
+- `ReplaceBlocksInBounds(root, blockId, minInclusive, maxInclusive, rotationQuarter = Box3QuarterTurn.R0)`
+- `RotateBlockAt(root, position, stepQuarter = Box3QuarterTurn.R90)`
+- `RotateBlocksInBounds(root, minInclusive, maxInclusive, stepQuarter = Box3QuarterTurn.R90)`
+
+旋转参数说明（`Box3QuarterTurn`）：
+
+- `R0 = 0°`
+- `R90 = 90°`
+- `R180 = 180°`
+- `R270 = 270°`
+
+### 查询 API
+
+- `TryGetBlockIdAt(root, position, out blockId)`
+- `ExistsAt(root, position)`
+- `GetTopY(root, x, z, fallbackY = 0)`
+- `GetAvailableBlockIds()`
+- `IsTransparent(blockId)`
+- `PrepareGeneratedAssets()`：主动生成 `Assets/Box3` 下的网格/图集/材质
+
+示例：
+
+```csharp
+var root = GameObject.Find("Box3Root")?.transform;
+if (root == null) return;
+
+var p = new Vector3Int(5, 2, 5);
+if (Box3Api.TryGetBlockIdAt(root, p, out var id))
+{
+    Debug.Log($"Block at {p}: {id}, transparent={Box3Api.IsTransparent(id)}");
+}
+
+int topY = Box3Api.GetTopY(root, 5, 5, 0);
+Debug.Log($"TopY(5,5) = {topY}");
+```
