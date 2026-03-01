@@ -75,6 +75,7 @@ namespace BlockWorldMVP.Editor
         {
             public readonly List<CombineInstance> opaqueCombines = new List<CombineInstance>(2048);
             public readonly List<TransparentVoxel> transparentVoxels = new List<TransparentVoxel>(512);
+            public readonly List<Vector3Int> emissivePositions = new List<Vector3Int>(64);
         }
 
         private sealed class ImportStats

@@ -107,6 +107,8 @@ namespace BlockWorldMVP.Editor
             ["voxel.option.chunks_per_tick"] = "Chunks / Tick",
             ["voxel.option.alpha_clip"] = "Chunk: Use Alpha Clip (fix transparent artifacts)",
             ["voxel.option.alpha_cutoff"] = "Chunk Alpha Cutoff",
+            ["voxel.option.spawn_realtime_lights"] = "Spawn Realtime Lights (Emissive Blocks)",
+            ["voxel.option.max_realtime_lights"] = "Max Realtime Lights",
             ["voxel.option.voxels_per_tick"] = "Voxels / Tick",
             ["voxel.option.fixed_filters"] = "Fixed filters: Air and Water are always ignored for stability.",
             ["voxel.run.import"] = "Import",
@@ -175,6 +177,8 @@ namespace BlockWorldMVP.Editor
             ["voxel.option.chunks_per_tick"] = "每 Tick Chunk 数",
             ["voxel.option.alpha_clip"] = "Chunk 使用 Alpha Clip（修复透明伪影）",
             ["voxel.option.alpha_cutoff"] = "Chunk Alpha 阈值",
+            ["voxel.option.spawn_realtime_lights"] = "生成实时点光源（发光方块）",
+            ["voxel.option.max_realtime_lights"] = "实时点光源上限",
             ["voxel.option.voxels_per_tick"] = "每 Tick 体素数",
             ["voxel.option.fixed_filters"] = "固定过滤：默认始终忽略 Air 和 Water。",
             ["voxel.run.import"] = "导入",
@@ -234,6 +238,7 @@ namespace BlockWorldMVP.Editor
         private bool _clearPrevious = true;
         private bool _addSurfaceCollider;
         private bool _addMeshCollider;
+        private bool _spawnRealtimeLights = true;
 
         private Phase _phase = Phase.Idle;
         private string _status = string.Empty;
@@ -263,6 +268,7 @@ namespace BlockWorldMVP.Editor
         private HashSet<Vector3Int> _occupiedVoxels;
         private HashSet<Vector3Int> _allVoxels;
         private List<PendingBlock> _pendingBlocks;
+        private int _createdRealtimeLights;
 
         [MenuItem("Box3/地形导入", false, 20)]
         public static void Open()
@@ -319,18 +325,10 @@ namespace BlockWorldMVP.Editor
 
         private static bool IsChineseUI()
         {
-            string prefLanguage = EditorPrefs.GetString("Editor.kLanguage", string.Empty);
-            if (!string.IsNullOrWhiteSpace(prefLanguage))
-            {
-                string lower = prefLanguage.Trim().ToLowerInvariant();
-                if (lower.StartsWith("zh", StringComparison.Ordinal) || lower.Contains("chinese", StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            SystemLanguage lang = Application.systemLanguage;
-            return lang == SystemLanguage.ChineseSimplified || lang == SystemLanguage.ChineseTraditional;
+            // Keep fallback language aligned with the shared i18n resolver.
+            // "dialog.ok" is guaranteed in both en/zh resources.
+            string marker = BlockWorldBuilderI18n.Get("dialog.ok");
+            return string.Equals(marker, "确定", StringComparison.Ordinal);
         }
 
         private void EnsureStyles()
@@ -457,6 +455,7 @@ namespace BlockWorldMVP.Editor
             _chunkUseAlphaClip = EditorGUILayout.ToggleLeft(L("voxel.option.alpha_clip"), _chunkUseAlphaClip);
             _chunkAlphaCutoff = Mathf.Clamp01(EditorGUILayout.Slider(L("voxel.option.alpha_cutoff"), _chunkAlphaCutoff, 0.01f, 0.9f));
             EditorGUI.EndDisabledGroup();
+            _spawnRealtimeLights = EditorGUILayout.ToggleLeft(L("voxel.option.spawn_realtime_lights"), _spawnRealtimeLights);
             _voxelsPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.voxels_per_tick"), _voxelsPerTick), 2000, 200000);
             EditorGUILayout.LabelField(L("voxel.option.fixed_filters"), _subtleLabelStyle);
         }
@@ -576,6 +575,7 @@ namespace BlockWorldMVP.Editor
                     Quaternion.Euler(0f, 270f, 0f)
                 };
                 _pendingBlocks = _importMode == ImportMode.SingleBlock ? new List<PendingBlock>(_stats.total) : null;
+                _createdRealtimeLights = 0;
 
                 PrepareRoot();
                 _phase = Phase.ProcessVoxels;
@@ -708,6 +708,7 @@ namespace BlockWorldMVP.Editor
                 else
                 {
                     bool isTransparent = IsTransparentBlock(blockName);
+                    bool isEmissive = IsEmissiveKeyword(blockName);
                     Vector3Int gridPos = new Vector3Int(wx, wy, wz);
                     if (_allVoxels != null)
                     {
@@ -732,6 +733,11 @@ namespace BlockWorldMVP.Editor
                             subMeshIndex = 0,
                             transform = Matrix4x4.TRS(worldPos, worldRot, Vector3.one)
                         });
+                    }
+
+                    if (_spawnRealtimeLights && isEmissive)
+                    {
+                        bucket.emissivePositions.Add(gridPos);
                     }
 
                     if (_addSurfaceCollider && _occupiedVoxels != null && _chunkVoxelPositions != null)
@@ -839,7 +845,7 @@ namespace BlockWorldMVP.Editor
             {
                 ChunkKey key = _chunkKeys[i];
                 if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket)
-                    || (bucket.opaqueCombines.Count == 0 && bucket.transparentVoxels.Count == 0))
+                    || (bucket.opaqueCombines.Count == 0 && bucket.transparentVoxels.Count == 0 && bucket.emissivePositions.Count == 0))
                 {
                     continue;
                 }
@@ -905,6 +911,16 @@ namespace BlockWorldMVP.Editor
                         MeshCollider surfaceCollider = surfaceGo.AddComponent<MeshCollider>();
                         surfaceCollider.sharedMesh = surface;
                         _stats.createdSurfaceColliders++;
+                    }
+                }
+
+                if (_spawnRealtimeLights && bucket.emissivePositions.Count > 0)
+                {
+                    for (int l = 0; l < bucket.emissivePositions.Count; l++)
+                    {
+                        Vector3Int p = bucket.emissivePositions[l];
+                        CreateRealtimeLight(go.transform, p, Color.white);
+                        _createdRealtimeLights++;
                     }
                 }
 
@@ -1181,6 +1197,12 @@ namespace BlockWorldMVP.Editor
             }
 
             ApplyEmissionForBlockName(mr, blockName);
+
+            if (_spawnRealtimeLights && IsEmissiveKeyword(blockName))
+            {
+                CreateRealtimeLight(go.transform, Vector3.zero, Color.white);
+                _createdRealtimeLights++;
+            }
         }
 
         private void CancelImport(bool clearStatus = true)
@@ -2200,6 +2222,41 @@ namespace BlockWorldMVP.Editor
         private static bool IsBarrierBlock(string blockName)
         {
             return blockName.IndexOf("barrier", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsEmissiveKeyword(string blockName)
+        {
+            if (string.IsNullOrWhiteSpace(blockName))
+            {
+                return false;
+            }
+
+            return blockName.IndexOf("light", StringComparison.OrdinalIgnoreCase) >= 0
+                || blockName.IndexOf("lamp", StringComparison.OrdinalIgnoreCase) >= 0
+                || blockName.IndexOf("lantern", StringComparison.OrdinalIgnoreCase) >= 0
+                || blockName.IndexOf("glow", StringComparison.OrdinalIgnoreCase) >= 0
+                || blockName.IndexOf("lava", StringComparison.OrdinalIgnoreCase) >= 0
+                || blockName.IndexOf("led", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static void CreateRealtimeLight(Transform parent, Vector3 localPosition, Color color)
+        {
+            if (parent == null)
+            {
+                return;
+            }
+
+            GameObject lightGo = new GameObject("__VoxelLight");
+            lightGo.transform.SetParent(parent, false);
+            lightGo.transform.localPosition = localPosition;
+            Light light = lightGo.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = color;
+            light.intensity = 1.05f;
+            light.range = 6f;
+            light.bounceIntensity = 0f;
+            light.shadows = LightShadows.None;
+            light.renderMode = LightRenderMode.Auto;
         }
 
         private static bool ReadBoolField(string text, string fieldName)

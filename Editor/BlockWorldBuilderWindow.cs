@@ -25,6 +25,7 @@ namespace BlockWorldMVP.Editor
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
         private static readonly int MainTexStShaderId = Shader.PropertyToID("_MainTex_ST");
         private static readonly int EmissionColorShaderId = Shader.PropertyToID("_EmissionColor");
+        private const string RealtimeLightChildName = "__BlockLight";
 
         private Transform _root;
         private List<BlockDefinition> _allBlocks = new List<BlockDefinition>();
@@ -39,6 +40,7 @@ namespace BlockWorldMVP.Editor
         private EditTool _tool = EditTool.Place;
         private int _brushHorizontalSize = 1;
         private int _brushHeight = 1;
+        private bool _spawnPointLightForEmissive = true;
         private const float PreviewSize = 75f;
         private GUIStyle _sectionBoxStyle;
         private GUIStyle _sectionTitleStyle;
@@ -759,6 +761,7 @@ namespace BlockWorldMVP.Editor
             marker.BlockId = definition.id;
             marker.HasAnimation = hasAnimatedFaces;
             ApplyEmissionForDefinition(meshRenderer, definition);
+            ConfigureRealtimeLight(go.transform, definition, _spawnPointLightForEmissive);
 
             RefreshTransparentAround(position);
             EditorUtility.SetDirty(go);
@@ -2046,6 +2049,51 @@ namespace BlockWorldMVP.Editor
                 block.SetColor(EmissionColorShaderId, emissionColor);
                 renderer.SetPropertyBlock(block, i);
             }
+        }
+
+        private static void ConfigureRealtimeLight(Transform blockTransform, BlockDefinition definition, bool enablePointLight)
+        {
+            if (blockTransform == null)
+            {
+                return;
+            }
+
+            bool shouldEmit = enablePointLight && definition != null && definition.emitsLight;
+            Transform child = blockTransform.Find(RealtimeLightChildName);
+            if (!shouldEmit)
+            {
+                if (child != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(child.gameObject);
+                }
+
+                return;
+            }
+
+            if (child == null)
+            {
+                GameObject lightGo = new GameObject(RealtimeLightChildName);
+                lightGo.transform.SetParent(blockTransform, false);
+                lightGo.transform.localPosition = Vector3.zero;
+                child = lightGo.transform;
+            }
+
+            Light light = child.GetComponent<Light>();
+            if (light == null)
+            {
+                light = child.gameObject.AddComponent<Light>();
+            }
+
+            Color c = definition.lightColor.maxColorComponent > 0.001f
+                ? definition.lightColor
+                : Color.white;
+            light.type = LightType.Point;
+            light.color = c;
+            light.intensity = 1.1f;
+            light.range = 6f;
+            light.bounceIntensity = 0f;
+            light.shadows = LightShadows.None;
+            light.renderMode = LightRenderMode.Auto;
         }
 
         private static Texture2D ResolvePreviewTexture(BlockDefinition definition)
