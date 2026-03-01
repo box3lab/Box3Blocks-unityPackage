@@ -889,7 +889,7 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private bool TryPlaceSingleBlock(BlockDefinition definition, Vector3Int position)
+        private bool TryPlaceSingleBlock(BlockDefinition definition, Vector3Int position, bool? spawnRealtimeLightOverride = null)
         {
             if (FindBlockAt(position) != null)
             {
@@ -945,7 +945,8 @@ namespace Box3Blocks.Editor
             marker.HasAnimation = hasAnimatedFaces;
             RegisterBlockInLookup(position, go);
             ApplyEmissionForDefinition(meshRenderer, definition);
-            ConfigureRealtimeLight(go.transform, definition, _spawnPointLightForEmissive);
+            bool shouldSpawnRealtimeLight = spawnRealtimeLightOverride ?? _spawnPointLightForEmissive;
+            ConfigureRealtimeLight(go.transform, definition, shouldSpawnRealtimeLight);
 
             RefreshTransparentAround(position);
             RefreshOcclusionAround(position);
@@ -2563,22 +2564,22 @@ namespace Box3Blocks.Editor
             _recentBlockIds.Insert(0, blockId);
         }
 
-        public static bool TryPlaceBlockAtApi(Transform root, string blockId, Vector3Int position, bool replaceExisting = true, int rotationQuarter = 0)
+        public static bool TryPlaceBlockAtApi(Transform root, string blockId, Vector3Int position, bool replaceExisting = true, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null && window.TryPlaceBlockAtInternal(root, blockId, position, replaceExisting, rotationQuarter);
+            return window != null && window.TryPlaceBlockAtInternal(root, blockId, position, replaceExisting, rotationQuarter, spawnRealtimeLight);
         }
 
-        public static bool TryPlaceBlockOnTopApi(Transform root, string blockId, int x, int z, int baseY = 0, bool replaceExisting = true, int rotationQuarter = 0)
+        public static bool TryPlaceBlockOnTopApi(Transform root, string blockId, int x, int z, int baseY = 0, bool replaceExisting = true, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null && window.TryPlaceBlockOnTopInternal(root, blockId, x, z, baseY, replaceExisting, rotationQuarter);
+            return window != null && window.TryPlaceBlockOnTopInternal(root, blockId, x, z, baseY, replaceExisting, rotationQuarter, spawnRealtimeLight);
         }
 
-        public static int PlaceBlocksInBoundsApi(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting = true, int rotationQuarter = 0)
+        public static int PlaceBlocksInBoundsApi(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting = true, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null ? window.PlaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, replaceExisting, rotationQuarter) : 0;
+            return window != null ? window.PlaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, replaceExisting, rotationQuarter, spawnRealtimeLight) : 0;
         }
 
         public static bool EraseBlockAtApi(Transform root, Vector3Int position)
@@ -2593,16 +2594,16 @@ namespace Box3Blocks.Editor
             return window != null ? window.EraseBlocksInBoundsInternal(root, minInclusive, maxInclusive) : 0;
         }
 
-        public static bool ReplaceBlockAtApi(Transform root, string blockId, Vector3Int position, int rotationQuarter = 0)
+        public static bool ReplaceBlockAtApi(Transform root, string blockId, Vector3Int position, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null && window.ReplaceBlockAtInternal(root, blockId, position, rotationQuarter);
+            return window != null && window.ReplaceBlockAtInternal(root, blockId, position, rotationQuarter, spawnRealtimeLight);
         }
 
-        public static int ReplaceBlocksInBoundsApi(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter = 0)
+        public static int ReplaceBlocksInBoundsApi(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null ? window.ReplaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, rotationQuarter) : 0;
+            return window != null ? window.ReplaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, rotationQuarter, spawnRealtimeLight) : 0;
         }
 
         public static bool RotateBlockAtApi(Transform root, Vector3Int position, int stepQuarter = 1)
@@ -2669,6 +2670,21 @@ namespace Box3Blocks.Editor
             return def != null && def.transparent;
         }
 
+        public static void SetSpawnRealtimeLightForEmissiveApi(bool enabled)
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            if (window != null)
+            {
+                window._spawnPointLightForEmissive = enabled;
+            }
+        }
+
+        public static bool GetSpawnRealtimeLightForEmissiveApi()
+        {
+            Box3BlocksBuilderWindow window = GetApiWindowInstance();
+            return window != null && window._spawnPointLightForEmissive;
+        }
+
         private static Box3BlocksBuilderWindow GetApiWindowInstance()
         {
             Box3BlocksBuilderWindow[] existing = Resources.FindObjectsOfTypeAll<Box3BlocksBuilderWindow>();
@@ -2691,7 +2707,7 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private bool TryPlaceBlockAtInternal(Transform root, string blockId, Vector3Int position, bool replaceExisting, int rotationQuarter)
+        private bool TryPlaceBlockAtInternal(Transform root, string blockId, Vector3Int position, bool replaceExisting, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
             if (root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -2727,7 +2743,7 @@ namespace Box3Blocks.Editor
 
                 int previousRotation = definition.placementRotationQuarter;
                 definition.placementRotationQuarter = rotationQuarter & 3;
-                bool placed = TryPlaceSingleBlock(definition, position);
+                bool placed = TryPlaceSingleBlock(definition, position, spawnRealtimeLightOverride);
                 definition.placementRotationQuarter = previousRotation;
                 if (placed)
                 {
@@ -2742,7 +2758,7 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private bool TryPlaceBlockOnTopInternal(Transform root, string blockId, int x, int z, int baseY, bool replaceExisting, int rotationQuarter)
+        private bool TryPlaceBlockOnTopInternal(Transform root, string blockId, int x, int z, int baseY, bool replaceExisting, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
             if (root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -2767,10 +2783,10 @@ namespace Box3Blocks.Editor
             }
 
             int y = topY == int.MinValue ? baseY : topY + 1;
-            return TryPlaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), replaceExisting, rotationQuarter);
+            return TryPlaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), replaceExisting, rotationQuarter, spawnRealtimeLightOverride);
         }
 
-        private int PlaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting, int rotationQuarter)
+        private int PlaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
             if (root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -2795,7 +2811,7 @@ namespace Box3Blocks.Editor
                 {
                     for (int z = minZ; z <= maxZ; z++)
                     {
-                        if (TryPlaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), replaceExisting, rotationQuarter))
+                        if (TryPlaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), replaceExisting, rotationQuarter, spawnRealtimeLightOverride))
                         {
                             placed++;
                         }
@@ -2872,7 +2888,7 @@ namespace Box3Blocks.Editor
             return removed;
         }
 
-        private bool ReplaceBlockAtInternal(Transform root, string blockId, Vector3Int position, int rotationQuarter)
+        private bool ReplaceBlockAtInternal(Transform root, string blockId, Vector3Int position, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
             if (root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -2911,7 +2927,7 @@ namespace Box3Blocks.Editor
                 Undo.DestroyObjectImmediate(existing);
                 int previousRotation = definition.placementRotationQuarter;
                 definition.placementRotationQuarter = rotationQuarter & 3;
-                bool placed = TryPlaceSingleBlock(definition, position);
+                bool placed = TryPlaceSingleBlock(definition, position, spawnRealtimeLightOverride);
                 definition.placementRotationQuarter = previousRotation;
                 if (placed)
                 {
@@ -2926,7 +2942,7 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private int ReplaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter)
+        private int ReplaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
             if (root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -2950,7 +2966,7 @@ namespace Box3Blocks.Editor
                 {
                     for (int z = minZ; z <= maxZ; z++)
                     {
-                        if (ReplaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), rotationQuarter))
+                        if (ReplaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), rotationQuarter, spawnRealtimeLightOverride))
                         {
                             replaced++;
                         }

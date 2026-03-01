@@ -34,15 +34,20 @@ namespace Box3Blocks.Editor
         /// <param name="position">目标世界格子坐标（整数网格坐标）。</param>
         /// <param name="replaceExisting">若目标位置已有方块，是否允许直接替换。</param>
         /// <param name="rotationQuarter">新放置方块的旋转（90 度步进）。</param>
+        /// <param name="spawnRealtimeLight">
+        /// 是否为发光方块生成点光源。传 <c>null</c> 表示使用当前工具全局设置；
+        /// 传 <c>true</c>/<c>false</c> 表示强制本次放置行为。
+        /// </param>
         /// <returns>放置成功返回 <c>true</c>；失败（如参数无效、blockId 不存在）返回 <c>false</c>。</returns>
         public static bool TryPlaceBlockAt(
             Transform root,
             string blockId,
             Vector3Int position,
             bool replaceExisting = true,
-            Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0)
+            Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0,
+            bool? spawnRealtimeLight = null)
         {
-            return Box3BlocksBuilderWindow.TryPlaceBlockAtApi(root, blockId, position, replaceExisting, (int)rotationQuarter);
+            return Box3BlocksBuilderWindow.TryPlaceBlockAtApi(root, blockId, position, replaceExisting, (int)rotationQuarter, spawnRealtimeLight);
         }
 
         /// <summary>
@@ -55,6 +60,10 @@ namespace Box3Blocks.Editor
         /// <param name="baseY">当该列没有方块时使用的起始 Y。</param>
         /// <param name="replaceExisting">若最终落点已有方块，是否允许替换。</param>
         /// <param name="rotationQuarter">新放置方块的旋转（90 度步进）。</param>
+        /// <param name="spawnRealtimeLight">
+        /// 是否为发光方块生成点光源。传 <c>null</c> 表示使用当前工具全局设置；
+        /// 传 <c>true</c>/<c>false</c> 表示强制本次放置行为。
+        /// </param>
         /// <returns>放置成功返回 <c>true</c>。</returns>
         public static bool TryPlaceBlockOnTop(
             Transform root,
@@ -63,9 +72,10 @@ namespace Box3Blocks.Editor
             int z,
             int baseY = 0,
             bool replaceExisting = true,
-            Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0)
+            Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0,
+            bool? spawnRealtimeLight = null)
         {
-            return Box3BlocksBuilderWindow.TryPlaceBlockOnTopApi(root, blockId, x, z, baseY, replaceExisting, (int)rotationQuarter);
+            return Box3BlocksBuilderWindow.TryPlaceBlockOnTopApi(root, blockId, x, z, baseY, replaceExisting, (int)rotationQuarter, spawnRealtimeLight);
         }
 
         /// <summary>
@@ -77,6 +87,10 @@ namespace Box3Blocks.Editor
         /// <param name="maxInclusive">最大角点（包含）。</param>
         /// <param name="replaceExisting">范围内已有方块时，是否允许替换。</param>
         /// <param name="rotationQuarter">批量放置时统一使用的旋转（90 度步进）。</param>
+        /// <param name="spawnRealtimeLight">
+        /// 是否为发光方块生成点光源。传 <c>null</c> 表示使用当前工具全局设置；
+        /// 传 <c>true</c>/<c>false</c> 表示强制本次放置行为。
+        /// </param>
         /// <returns>成功放置的方块数量。</returns>
         public static int PlaceBlocksInBounds(
             Transform root,
@@ -84,9 +98,10 @@ namespace Box3Blocks.Editor
             Vector3Int minInclusive,
             Vector3Int maxInclusive,
             bool replaceExisting = true,
-            Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0)
+            Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0,
+            bool? spawnRealtimeLight = null)
         {
-            return Box3BlocksBuilderWindow.PlaceBlocksInBoundsApi(root, blockId, minInclusive, maxInclusive, replaceExisting, (int)rotationQuarter);
+            return Box3BlocksBuilderWindow.PlaceBlocksInBoundsApi(root, blockId, minInclusive, maxInclusive, replaceExisting, (int)rotationQuarter, spawnRealtimeLight);
         }
 
         /// <summary>
@@ -119,14 +134,19 @@ namespace Box3Blocks.Editor
         /// <param name="blockId">替换后的方块 ID。</param>
         /// <param name="position">目标格子坐标。</param>
         /// <param name="rotationQuarter">替换后方块旋转（90 度步进）。</param>
+        /// <param name="spawnRealtimeLight">
+        /// 是否为发光方块生成点光源。传 <c>null</c> 表示使用当前工具全局设置；
+        /// 传 <c>true</c>/<c>false</c> 表示强制本次替换行为。
+        /// </param>
         /// <returns>替换成功返回 <c>true</c>；目标位置无方块返回 <c>false</c>。</returns>
         public static bool ReplaceBlockAt(
             Transform root,
             string blockId,
             Vector3Int position,
-            Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0)
+            Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0,
+            bool? spawnRealtimeLight = null)
         {
-            return Box3BlocksBuilderWindow.ReplaceBlockAtApi(root, blockId, position, (int)rotationQuarter);
+            return Box3BlocksBuilderWindow.ReplaceBlockAtApi(root, blockId, position, (int)rotationQuarter, spawnRealtimeLight);
         }
 
         /// <summary>
@@ -137,15 +157,20 @@ namespace Box3Blocks.Editor
         /// <param name="minInclusive">最小角点（包含）。</param>
         /// <param name="maxInclusive">最大角点（包含）。</param>
         /// <param name="rotationQuarter">替换后方块旋转（90 度步进）。</param>
+        /// <param name="spawnRealtimeLight">
+        /// 是否为发光方块生成点光源。传 <c>null</c> 表示使用当前工具全局设置；
+        /// 传 <c>true</c>/<c>false</c> 表示强制本次替换行为。
+        /// </param>
         /// <returns>成功替换的方块数量。</returns>
         public static int ReplaceBlocksInBounds(
             Transform root,
             string blockId,
             Vector3Int minInclusive,
             Vector3Int maxInclusive,
-            Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0)
+            Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0,
+            bool? spawnRealtimeLight = null)
         {
-            return Box3BlocksBuilderWindow.ReplaceBlocksInBoundsApi(root, blockId, minInclusive, maxInclusive, (int)rotationQuarter);
+            return Box3BlocksBuilderWindow.ReplaceBlocksInBoundsApi(root, blockId, minInclusive, maxInclusive, (int)rotationQuarter, spawnRealtimeLight);
         }
 
         /// <summary>
@@ -252,6 +277,27 @@ namespace Box3Blocks.Editor
             Texture2D emission = Box3BlocksAssetFactory.GetAtlasEmissionTexture();
 
             return mesh != null && atlasMaterial != null && bump != null && metallic != null && emission != null;
+        }
+
+        /// <summary>
+        /// 设置“发光方块默认是否生成点光源”的全局开关。
+        /// </summary>
+        /// <param name="enabled">
+        /// <c>true</c> 表示默认生成；<c>false</c> 表示默认不生成。
+        /// 注意：若调用放置 API 时显式传了 <c>spawnRealtimeLight</c>，则单次参数优先生效。
+        /// </param>
+        public static void SetSpawnRealtimeLightForEmissive(bool enabled)
+        {
+            Box3BlocksBuilderWindow.SetSpawnRealtimeLightForEmissiveApi(enabled);
+        }
+
+        /// <summary>
+        /// 获取“发光方块默认是否生成点光源”的全局开关状态。
+        /// </summary>
+        /// <returns>当前默认状态。</returns>
+        public static bool GetSpawnRealtimeLightForEmissive()
+        {
+            return Box3BlocksBuilderWindow.GetSpawnRealtimeLightForEmissiveApi();
         }
     }
 }
