@@ -272,8 +272,25 @@ namespace Box3Blocks.Editor
             Texture2D bump = Box3BlocksAssetFactory.GetAtlasBumpTexture();
             Texture2D metallic = Box3BlocksAssetFactory.GetAtlasMaterialTexture();
             Texture2D emission = Box3BlocksAssetFactory.GetAtlasEmissionTexture();
+            bool coreReady = mesh != null && atlasMaterial != null;
+            if (!coreReady)
+            {
+                Debug.LogError(
+                    $"[Box3] PrepareGeneratedAssets failed. " +
+                    $"mesh={(mesh != null)}, atlasMaterial={(atlasMaterial != null)}, " +
+                    $"bump={(bump != null)}, metallic={(metallic != null)}, emission={(emission != null)}");
+                return false;
+            }
 
-            return mesh != null && atlasMaterial != null && bump != null && metallic != null && emission != null;
+            if (bump == null || metallic == null || emission == null)
+            {
+                Debug.LogWarning(
+                    $"[Box3] PrepareGeneratedAssets: optional atlas textures missing. " +
+                    $"bump={(bump != null)}, metallic={(metallic != null)}, emission={(emission != null)}. " +
+                    $"Core placement resources are ready.");
+            }
+
+            return true;
         }
 
         /// <summary>

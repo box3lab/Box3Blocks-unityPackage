@@ -9,8 +9,13 @@
   "dependencies": {},
   "samples": [
     {
-      "displayName": "Runtime API Demo",
-      "description": "Runtime block placement demo using Box3Api and Box3BlocksCore.",
+      "displayName": "Editor Noise Terrain Demo",
+      "description": "Editor sample for noise-based terrain generation with Box3Api.",
+      "path": "Samples~/EditorApiDemo"
+    },
+    {
+      "displayName": "Runtime Place/Erase Demo",
+      "description": "Runtime sample for block placement and erase testing with Box3Api.",
       "path": "Samples~/RuntimeApiDemo"
     }
   ],
