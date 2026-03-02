@@ -50,6 +50,8 @@ namespace Box3Blocks.Editor
         private EditTool _tool = EditTool.Place;
         private int _brushHorizontalSize = 1;
         private int _brushHeight = 1;
+        private bool _generateCollider = true;
+        private Box3ColliderMode _toolColliderMode = Box3ColliderMode.Full;
         private bool _spawnPointLightForEmissive = true;
         private const float PreviewSize = 75f;
         private GUIStyle _sectionBoxStyle;
@@ -378,6 +380,17 @@ namespace Box3Blocks.Editor
             }
 
       
+            _generateCollider = EditorGUILayout.ToggleLeft(L("tool.generate_collider"), _generateCollider);
+            if (_generateCollider)
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField(L("tool.collider_mode"), _subtleLabelStyle, GUILayout.Width(104f));
+                    int selected = _toolColliderMode == Box3ColliderMode.TopOnly ? 1 : 0;
+                    int next = EditorGUILayout.Popup(selected, new[] { L("tool.collider_mode_full"), L("tool.collider_mode_top") });
+                    _toolColliderMode = next == 1 ? Box3ColliderMode.TopOnly : Box3ColliderMode.Full;
+                }
+            }
             _spawnPointLightForEmissive = EditorGUILayout.ToggleLeft(L("tool.spawn_point_light_for_emissive"), _spawnPointLightForEmissive);
 
             if (_root == null)
@@ -882,9 +895,10 @@ namespace Box3Blocks.Editor
             BlockDefinition definition = _filteredBlocks[_selectedIndex];
             bool placedAny = false;
             List<Vector3Int> positions = BuildBrushPositions(origin);
+            Box3ColliderMode colliderMode = _generateCollider ? _toolColliderMode : Box3ColliderMode.None;
             for (int i = 0; i < positions.Count; i++)
             {
-                if (TryPlaceSingleBlock(definition, positions[i]))
+                if (TryPlaceSingleBlock(definition, positions[i], null, colliderMode))
                 {
                     placedAny = true;
                 }
@@ -1018,6 +1032,7 @@ namespace Box3Blocks.Editor
             BlockDefinition replacement = _filteredBlocks[_selectedIndex];
             Vector3Int origin = hitBlock != null ? Vector3Int.RoundToInt(hitBlock.transform.position) : fallbackPosition;
             List<Vector3Int> positions = BuildBrushPositions(origin);
+            Box3ColliderMode colliderMode = _generateCollider ? _toolColliderMode : Box3ColliderMode.None;
             bool replacedAny = false;
             HashSet<Vector3Int> refresh = new HashSet<Vector3Int>();
             for (int i = 0; i < positions.Count; i++)
@@ -1037,7 +1052,7 @@ namespace Box3Blocks.Editor
 
                 UnregisterBlockInLookup(pos, target);
                 Undo.DestroyObjectImmediate(target);
-                if (TryPlaceSingleBlock(replacement, pos))
+                if (TryPlaceSingleBlock(replacement, pos, null, colliderMode))
                 {
                     replacedAny = true;
                     refresh.Add(pos);

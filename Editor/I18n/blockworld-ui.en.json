@@ -76,6 +76,22 @@
       "key": "tool.height",
       "value": "Height (Y)"
     },
+    {
+      "key": "tool.generate_collider",
+      "value": "Generate Collider"
+    },
+    {
+      "key": "tool.collider_mode",
+      "value": "Collider Mode"
+    },
+    {
+      "key": "tool.collider_mode_full",
+      "value": "Full"
+    },
+    {
+      "key": "tool.collider_mode_top",
+      "value": "Top Only"
+    },
 
     {
       "key": "tool.spawn_point_light_for_emissive",
@@ -264,6 +280,22 @@
     {
       "key": "voxel.option.mesh_collider",
       "value": "Add Full MeshCollider"
+    },
+    {
+      "key": "voxel.option.collider_mode",
+      "value": "Collider Mode"
+    },
+    {
+      "key": "voxel.collider_mode.none",
+      "value": "None"
+    },
+    {
+      "key": "voxel.collider_mode.top",
+      "value": "Top Faces Only"
+    },
+    {
+      "key": "voxel.collider_mode.full",
+      "value": "Full MeshCollider"
     },
     {
       "key": "voxel.option.chunk_size",

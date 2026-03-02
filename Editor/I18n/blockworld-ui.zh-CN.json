@@ -26,6 +26,10 @@
     { "key": "tool.rotate", "value": "旋转" },
     { "key": "tool.horizontal", "value": "水平 (X/Z)" },
     { "key": "tool.height", "value": "高度 (Y)" },
+    { "key": "tool.generate_collider", "value": "生成碰撞体" },
+    { "key": "tool.collider_mode", "value": "碰撞模式" },
+    { "key": "tool.collider_mode_full", "value": "整体（Full）" },
+    { "key": "tool.collider_mode_top", "value": "顶面（TopOnly）" },
 
     {
       "key": "tool.spawn_point_light_for_emissive",
@@ -95,6 +99,10 @@
       "value": "添加表面碰撞（仅顶面）"
     },
     { "key": "voxel.option.mesh_collider", "value": "添加完整 MeshCollider" },
+    { "key": "voxel.option.collider_mode", "value": "碰撞模式" },
+    { "key": "voxel.collider_mode.none", "value": "不生成" },
+    { "key": "voxel.collider_mode.top", "value": "仅顶面" },
+    { "key": "voxel.collider_mode.full", "value": "完整 MeshCollider" },
     { "key": "voxel.option.chunk_size", "value": "Chunk 尺寸" },
     { "key": "voxel.option.chunks_per_tick", "value": "每 Tick Chunk 数" },
     {
