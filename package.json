@@ -7,6 +7,18 @@
   "license": "Apache-2.0",
   "hideInEditor": false,
   "dependencies": {},
+  "samples": [
+    {
+      "displayName": "Editor Noise Terrain Demo",
+      "description": "Editor sample for noise-based terrain generation with Box3Api.",
+      "path": "Samples~/EditorApiDemo"
+    },
+    {
+      "displayName": "Runtime Place/Erase Demo",
+      "description": "Runtime sample for block placement and erase testing with Box3Api.",
+      "path": "Samples~/RuntimeApiDemo"
+    }
+  ],
   "keywords": [
     "box3",
     "blocks"

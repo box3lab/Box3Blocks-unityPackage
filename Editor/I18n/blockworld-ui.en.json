@@ -41,6 +41,18 @@
       "value": "OK"
     },
     {
+      "key": "runtime.catalog.dialog.title",
+      "value": "Box3 Runtime"
+    },
+    {
+      "key": "runtime.catalog.err.missing_assets",
+      "value": "Failed to build runtime catalog: missing mesh or materials under Assets/Box3. Please generate block assets first."
+    },
+    {
+      "key": "runtime.catalog.done",
+      "value": "[Box3] Runtime UV Catalog built: {0} blocks -> {1}"
+    },
+    {
       "key": "tool.place",
       "value": "Place"
     },

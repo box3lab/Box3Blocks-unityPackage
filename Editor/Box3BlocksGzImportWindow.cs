@@ -15,9 +15,9 @@ namespace Box3Blocks.Editor
 {
     public sealed partial class Box3BlocksGzImportWindow : EditorWindow
     {
-        private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
-        private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
-        private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
+        private const string BlockTextureFolder = "Packages/com.box3lab.box3/Editor/SourceAssets/block";
+        private const string BlockIdPath = "Packages/com.box3lab.box3/Editor/SourceAssets/block-id.json";
+        private const string BlockSpecPath = "Packages/com.box3lab.box3/Editor/SourceAssets/block-spec.json";
         private const string GeneratedMeshFolder = "Assets/Box3/Meshes/Import";
         private const string GeneratedMaterialFolder = "Assets/Box3/Materials";
         private const string ChunkOpaqueMaterialPath = "Assets/Box3/Materials/M_Block.mat";
