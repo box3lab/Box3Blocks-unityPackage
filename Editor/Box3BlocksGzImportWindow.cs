@@ -107,6 +107,7 @@ namespace Box3Blocks.Editor
         private int _chunksPerTick = 6;
         private bool _chunkUseAlphaClip = true;
         private float _chunkAlphaCutoff = 0.33f;
+        private bool _chunkMergeAnimatedAsStatic = true;
         private bool _clearPrevious = true;
         private Box3ColliderMode _chunkColliderMode = Box3ColliderMode.None;
         private RealtimeLightMode _realtimeLightMode = RealtimeLightMode.AllEmissive;
@@ -370,6 +371,7 @@ namespace Box3Blocks.Editor
                 _chunksPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.chunks_per_tick"), _chunksPerTick), 1, 64);
                 _chunkUseAlphaClip = EditorGUILayout.ToggleLeft(L("voxel.option.alpha_clip"), _chunkUseAlphaClip);
                 _chunkAlphaCutoff = Mathf.Clamp01(EditorGUILayout.Slider(L("voxel.option.alpha_cutoff"), _chunkAlphaCutoff, 0.01f, 0.9f));
+                _chunkMergeAnimatedAsStatic = EditorGUILayout.ToggleLeft(L("voxel.option.chunk_merge_animated_static"), _chunkMergeAnimatedAsStatic);
                 EditorGUI.EndDisabledGroup();
 
                 EditorGUILayout.Space(6f);
@@ -617,7 +619,8 @@ namespace Box3Blocks.Editor
                 Quaternion worldRot = _rotLookup[rot];
                 bool isEmissive = IsEmissiveBlock(blockName);
                 bool hasLightData = TryGetPayloadLightData(i, idx, out Color payloadLightColor, out float payloadLightIntensity, out float payloadLightRange, out Vector3 payloadLightOffset);
-                if (_importMode == ImportMode.SingleBlock || prepared.hasAnimation)
+                bool forceSingleForAnimation = prepared.hasAnimation && (_importMode != ImportMode.Chunk || !_chunkMergeAnimatedAsStatic);
+                if (_importMode == ImportMode.SingleBlock || forceSingleForAnimation)
                 {
                     bool isTransparent = IsTransparentBlock(blockName);
                     Vector3Int gridPos = new Vector3Int(wx, wy, wz);
@@ -1892,12 +1895,48 @@ namespace Box3Blocks.Editor
                 Vector3Int dir = ToVector3Int(q * FaceNormals[i]);
                 if (dir == worldDir)
                 {
-                    st = prepared.faceMainTexSt[i];
+                    st = ResolveStaticFaceSt(prepared, i);
                     return true;
                 }
             }
 
             return false;
+        }
+
+        private static Vector4 ResolveStaticFaceSt(PreparedBlock prepared, int faceIndex)
+        {
+            if (prepared == null || prepared.faceMainTexSt == null || faceIndex < 0 || faceIndex >= prepared.faceMainTexSt.Length)
+            {
+                return new Vector4(1f, 1f, 0f, 0f);
+            }
+
+            Vector4 baseSt = prepared.faceMainTexSt[faceIndex];
+            if (prepared.animations == null || prepared.animations.Length == 0)
+            {
+                return baseSt;
+            }
+
+            for (int i = 0; i < prepared.animations.Length; i++)
+            {
+                Box3BlocksTextureAnimator.FaceAnimation anim = prepared.animations[i];
+                if (anim == null || anim.materialIndex != faceIndex || anim.frameCount <= 1)
+                {
+                    continue;
+                }
+
+                int frameCount = Mathf.Max(1, anim.frameCount);
+                int firstFrame = 0;
+                if (anim.frames != null && anim.frames.Length > 0)
+                {
+                    firstFrame = Mathf.Clamp(anim.frames[0], 0, frameCount - 1);
+                }
+
+                float frameScaleY = baseSt.y / frameCount;
+                float frameOffsetY = baseSt.w + baseSt.y - ((firstFrame + 1f) * frameScaleY);
+                return new Vector4(baseSt.x, frameScaleY, baseSt.z, frameOffsetY);
+            }
+
+            return baseSt;
         }
 
         private static void MapFaceToMaskCoordinates(int dirIndex, int lx, int ly, int lz, out int layer, out int u, out int v)

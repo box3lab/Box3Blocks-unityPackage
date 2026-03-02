@@ -318,6 +318,10 @@
       "value": "Chunk Alpha Cutoff"
     },
     {
+      "key": "voxel.option.chunk_merge_animated_static",
+      "value": "Chunk: merge animated blocks as static"
+    },
+    {
       "key": "voxel.option.spawn_realtime_lights",
       "value": "Spawn Realtime Point Lights (Emissive Blocks)"
     },
