@@ -721,18 +721,18 @@ namespace Box3Blocks.Editor
                 HandleUtility.AddDefaultControl(GUIUtility.GetControlID(FocusType.Passive));
             }
 
-            if (!TryGetTargetPosition(e.mousePosition, out Vector3Int target, out Box3BlocksPlacedBlock hitBlock))
+            if (!TryGetTargetPosition(e.mousePosition, out Vector3Int target, out Box3BlocksPlacedBlock hitBlock, out Vector3Int placeNormal))
             {
                 return;
             }
 
-            DrawScenePreview(target);
+            DrawScenePreview(target, placeNormal);
 
             if (e.type == EventType.MouseDown && e.button == 0 && !e.alt)
             {
                 if (_tool == EditTool.Place)
                 {
-                    PlaceBlockBrush(target);
+                    PlaceBlockBrush(target, placeNormal);
                 }
                 else if (_tool == EditTool.Replace)
                 {
@@ -744,7 +744,7 @@ namespace Box3Blocks.Editor
                 }
                 else
                 {
-                    EraseBlockBrush(hitBlock, target);
+                    EraseBlockBrush(hitBlock, target, placeNormal);
                 }
 
                 e.Use();
@@ -790,10 +790,11 @@ namespace Box3Blocks.Editor
             e.Use();
         }
 
-        private bool TryGetTargetPosition(Vector2 mousePosition, out Vector3Int target, out Box3BlocksPlacedBlock hitBlock)
+        private bool TryGetTargetPosition(Vector2 mousePosition, out Vector3Int target, out Box3BlocksPlacedBlock hitBlock, out Vector3Int placeNormal)
         {
             target = default;
             hitBlock = null;
+            placeNormal = Vector3Int.up;
 
             Ray ray = HandleUtility.GUIPointToWorldRay(mousePosition);
             if (Physics.Raycast(ray, out RaycastHit hit, 1000f))
@@ -802,18 +803,19 @@ namespace Box3Blocks.Editor
                 if (hitBlock != null)
                 {
                     Vector3Int blockPos = Vector3Int.RoundToInt(hitBlock.transform.position);
-                    if (_tool == EditTool.Erase || _tool == EditTool.Replace || _tool == EditTool.Rotate)
-                    {
-                        target = blockPos;
-                        return true;
-                    }
-
                     Vector3Int normal = Vector3Int.RoundToInt(hit.normal);
                     if (normal == Vector3Int.zero)
                     {
                         normal = Vector3Int.up;
                     }
+                    if (_tool == EditTool.Erase || _tool == EditTool.Replace || _tool == EditTool.Rotate)
+                    {
+                        placeNormal = normal;
+                        target = blockPos;
+                        return true;
+                    }
 
+                    placeNormal = normal;
                     target = blockPos + normal;
                     return true;
                 }
@@ -826,6 +828,7 @@ namespace Box3Blocks.Editor
                 Vector3Int blockPos = Vector3Int.RoundToInt(pickedBlock.transform.position);
                 if (_tool == EditTool.Erase || _tool == EditTool.Replace || _tool == EditTool.Rotate)
                 {
+                    placeNormal = pickedNormal == Vector3Int.zero ? Vector3Int.up : pickedNormal;
                     target = blockPos;
                     return true;
                 }
@@ -835,6 +838,7 @@ namespace Box3Blocks.Editor
                     pickedNormal = Vector3Int.up;
                 }
 
+                placeNormal = pickedNormal;
                 target = blockPos + pickedNormal;
                 return true;
             }
@@ -857,6 +861,7 @@ namespace Box3Blocks.Editor
                 hitBlock = nearestForPlace;
                 Vector3Int blockPos = Vector3Int.RoundToInt(nearestForPlace.transform.position);
                 Vector3Int normal = GetFallbackPlaceNormal(ray.direction);
+                placeNormal = normal;
                 target = blockPos + normal;
                 return true;
             }
@@ -870,6 +875,7 @@ namespace Box3Blocks.Editor
 
             Vector3 point = ray.GetPoint(distance);
             target = new Vector3Int(Mathf.RoundToInt(point.x), fallbackPlaneY, Mathf.RoundToInt(point.z));
+            placeNormal = Vector3Int.up;
             return true;
         }
 
@@ -1040,19 +1046,19 @@ namespace Box3Blocks.Editor
             return block != null;
         }
 
-        private void DrawScenePreview(Vector3Int target)
+        private void DrawScenePreview(Vector3Int target, Vector3Int placeNormal)
         {
             Handles.color = _tool == EditTool.Place
                 ? Color.green
                 : (_tool == EditTool.Replace ? Color.yellow : (_tool == EditTool.Rotate ? Color.cyan : Color.red));
-            List<Vector3Int> positions = BuildBrushPositions(target);
+            List<Vector3Int> positions = BuildPlaceBrushPositions(target, placeNormal);
             for (int i = 0; i < positions.Count; i++)
             {
                 Handles.DrawWireCube(positions[i], Vector3.one);
             }
         }
 
-        private void PlaceBlockBrush(Vector3Int origin)
+        private void PlaceBlockBrush(Vector3Int origin, Vector3Int placeNormal)
         {
             if (_selectedIndex < 0 || _selectedIndex >= _filteredBlocks.Count)
             {
@@ -1061,7 +1067,7 @@ namespace Box3Blocks.Editor
 
             BlockDefinition definition = _filteredBlocks[_selectedIndex];
             bool placedAny = false;
-            List<Vector3Int> positions = BuildBrushPositions(origin);
+            List<Vector3Int> positions = BuildPlaceBrushPositions(origin, placeNormal);
             Box3ColliderMode colliderMode = _generateCollider ? _toolColliderMode : Box3ColliderMode.None;
             for (int i = 0; i < positions.Count; i++)
             {
@@ -1164,10 +1170,10 @@ namespace Box3Blocks.Editor
             meshCollider.sharedMesh = mesh;
         }
 
-        private void EraseBlockBrush(Box3BlocksPlacedBlock hitBlock, Vector3Int fallbackPosition)
+        private void EraseBlockBrush(Box3BlocksPlacedBlock hitBlock, Vector3Int fallbackPosition, Vector3Int brushNormal)
         {
             Vector3Int origin = hitBlock != null ? Vector3Int.RoundToInt(hitBlock.transform.position) : fallbackPosition;
-            List<Vector3Int> positions = BuildBrushPositions(origin);
+            List<Vector3Int> positions = BuildPlaceBrushPositions(origin, brushNormal);
             HashSet<Vector3Int> refresh = new HashSet<Vector3Int>();
             for (int i = 0; i < positions.Count; i++)
             {
@@ -1336,6 +1342,67 @@ namespace Box3Blocks.Editor
                         }
 
                         positions.Add(new Vector3Int(origin.x + x, origin.y + y, origin.z + z));
+                    }
+                }
+            }
+
+            return positions;
+        }
+
+        private List<Vector3Int> BuildPlaceBrushPositions(Vector3Int origin, Vector3Int placeNormal)
+        {
+            int size = Mathf.Max(1, _brushHorizontalSize);
+            int height = Mathf.Max(1, _brushHeight);
+
+            // Top/bottom hit: keep horizontal footprint (X/Z) + height (Y).
+            if (placeNormal.y != 0)
+            {
+                return BuildBrushPositions(origin);
+            }
+
+            // Side hit: rotate the whole brush volume onto wall.
+            // X/Z becomes wall width & wall height; Y becomes thickness along wall normal.
+            int lateralCount = size;
+            int verticalCount = size;
+            int depthCount = height;
+            List<Vector3Int> positions = new List<Vector3Int>(lateralCount * verticalCount * depthCount);
+
+            Vector3Int lateralAxis;
+            Vector3Int verticalAxis = Vector3Int.up;
+            Vector3Int depthAxis;
+            if (Mathf.Abs(placeNormal.x) > 0)
+            {
+                lateralAxis = new Vector3Int(0, 0, 1);
+                depthAxis = new Vector3Int(placeNormal.x, 0, 0);
+            }
+            else
+            {
+                lateralAxis = new Vector3Int(1, 0, 0);
+                depthAxis = new Vector3Int(0, 0, placeNormal.z);
+            }
+
+            for (int d = 0; d < depthCount; d++)
+            {
+                for (int v = 0; v < verticalCount; v++)
+                {
+                    for (int l = 0; l < lateralCount; l++)
+                    {
+                        if (_hollowBrush)
+                        {
+                            bool isSurface = l == 0 || l == lateralCount - 1
+                                || v == 0 || v == verticalCount - 1
+                                || d == 0 || d == depthCount - 1;
+                            if (!isSurface)
+                            {
+                                continue;
+                            }
+                        }
+
+                        Vector3Int p = origin
+                            + (lateralAxis * l)
+                            + (verticalAxis * v)
+                            + (depthAxis * d);
+                        positions.Add(p);
                     }
                 }
             }
