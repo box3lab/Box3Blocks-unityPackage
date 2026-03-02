@@ -112,6 +112,10 @@
     },
     { "key": "voxel.option.alpha_cutoff", "value": "Chunk Alpha 阈值" },
     {
+      "key": "voxel.option.chunk_merge_animated_static",
+      "value": "Chunk 合并动画方块为静态"
+    },
+    {
       "key": "voxel.option.spawn_realtime_lights",
       "value": "生成实时点光源（发光方块）"
     },
@@ -163,8 +167,14 @@
     { "key": "atlas.quality_option", "value": "{0}" },
     { "key": "atlas.apply_rebuild", "value": "应用设置并重建图集" },
     { "key": "atlas.status.ready", "value": "就绪：可选择分辨率后点击应用。" },
-    { "key": "atlas.status.rebuild_failed", "value": "重建失败：无法获取图集材质。" },
-    { "key": "atlas.status.applied", "value": "已应用图集质量: {0}，图集已重建。" }
+    {
+      "key": "atlas.status.rebuild_failed",
+      "value": "重建失败：无法获取图集材质。"
+    },
+    {
+      "key": "atlas.status.applied",
+      "value": "已应用图集质量: {0}，图集已重建。"
+    }
   ],
   "categories": [
     { "key": "color", "value": "颜色" },
