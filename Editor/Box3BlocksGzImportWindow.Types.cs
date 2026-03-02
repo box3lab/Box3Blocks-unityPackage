@@ -79,9 +79,23 @@ namespace Box3Blocks.Editor
 
         private sealed class ChunkBucket
         {
-            public readonly List<CombineInstance> opaqueCombines = new List<CombineInstance>(2048);
+            public readonly List<OpaqueVoxel> opaqueVoxels = new List<OpaqueVoxel>(2048);
             public readonly List<TransparentVoxel> transparentVoxels = new List<TransparentVoxel>(512);
             public readonly List<EmissiveLightVoxel> emissiveVoxels = new List<EmissiveLightVoxel>(64);
+        }
+
+        private readonly struct OpaqueVoxel
+        {
+            public readonly Vector3Int pos;
+            public readonly int rot;
+            public readonly PreparedBlock prepared;
+
+            public OpaqueVoxel(Vector3Int pos, int rot, PreparedBlock prepared)
+            {
+                this.pos = pos;
+                this.rot = rot;
+                this.prepared = prepared;
+            }
         }
 
         private sealed class ImportStats
