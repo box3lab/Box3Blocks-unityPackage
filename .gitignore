@@ -1,0 +1,3 @@
+# Exception for Samples~ folder (override global *~ rule)
+!Samples~/
+!Samples~/*
