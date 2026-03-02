@@ -1,12 +1,23 @@
-# Box3 Blocks for Unity
+# Box3Blocks（神岛材质包）-- Unity Package
 
-一个 Unity 方块工具包，用于导入、导出和编辑神岛方块世界。
-还提供可复用 API，支持在编辑器扩展脚本或运行时脚本中调用，统一进行方块放置、删除、替换、旋转与查询。
+[![Unity](https://img.shields.io/badge/Unity-2022.3%20LTS-black?logo=unity)](https://unity.com/releases/editor/whats-new/2022.3.0)
+[![License](https://img.shields.io/badge/License-Apache--2.0-green.svg)](LICENSE.md)
+[![Samples](https://img.shields.io/badge/Samples-Editor%20%26%20Runtime-orange)](Samples~)
+
+[简体中文](README.md) | [English](README_en.md)
+
+一个 Unity 编辑器扩展包，用于导入、导出和编辑神岛方块世界。  
+本包同时提供二次开发 API，可在**编辑器扩展**与**运行时脚本**中调用，统一执行方块放置、删除、替换、旋转与查询。
+
+1. 让美术/关卡在 Unity / Minecraft 内编辑方块世界。
+2. 让程序可以通过统一 API 在编辑期和运行期操作方块。
+3. 将纹理图集、网格、材质等生成流程标准化，减少人工维护。
 
 ## 环境要求
 
-- Unity 2022.3 LTS
-- 在 `Editor` 模式下使用本包工具
+- Unity 版本：`2022.3`（LTS）
+- 目标平台：Editor + Runtime
+- 依赖：无额外外部包硬依赖（使用 Unity 内置能力）
 
 ## 安装Package Manager
 
@@ -117,3 +128,15 @@ using UnityEngine;
 - `R90 = 90°`
 - `R180 = 180°`
 - `R270 = 270°`
+
+## 📄 许可证
+
+本项目采用 [Apache License 2.0](LICENSE.md) 许可证。
+
+## 🙏 致谢
+
+- 神奇代码岛提供的方块，神岛实验室移植
+
+## 星历史
+
+[![Star History Chart](https://api.star-history.com/svg?repos=box3lab/Box3Blocks-unityPackage&type=date&legend=top-left)](https://www.star-history.com/#box3lab/Box3Blocks-unityPackage&type=date&legend=top-left)

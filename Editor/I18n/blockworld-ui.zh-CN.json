@@ -143,7 +143,19 @@
     },
     { "key": "voxel.err.gz_path_empty", "value": "GZ 文件路径为空。" },
     { "key": "voxel.err.gz_not_found", "value": "未找到 GZ 文件。" },
-    { "key": "voxel.err.url_empty", "value": "URL 为空。" }
+    { "key": "voxel.err.url_empty", "value": "URL 为空。" },
+    { "key": "atlas.window.title", "value": "图集质量设置" },
+    {
+      "key": "atlas.window.help",
+      "value": "用于切换方块图集分辨率。分辨率越高越清晰，但占用显存和包体更大。"
+    },
+    { "key": "atlas.quality", "value": "图集质量" },
+    { "key": "atlas.current_size", "value": "当前尺寸上限: {0}" },
+    { "key": "atlas.quality_option", "value": "{0}" },
+    { "key": "atlas.apply_rebuild", "value": "应用设置并重建图集" },
+    { "key": "atlas.status.ready", "value": "就绪：可选择分辨率后点击应用。" },
+    { "key": "atlas.status.rebuild_failed", "value": "重建失败：无法获取图集材质。" },
+    { "key": "atlas.status.applied", "value": "已应用图集质量: {0}，图集已重建。" }
   ],
   "categories": [
     { "key": "color", "value": "颜色" },
