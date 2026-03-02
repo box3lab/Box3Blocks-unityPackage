@@ -2,11 +2,12 @@
   "name": "com.box3lab.box3",
   "version": "0.1.0",
   "displayName": "Box3Blocks（神岛材质包）",
-  "description": "Box3 方块编辑工具包 / Box3 Blocks Toolkit\n\u25AA 可视化搭建与编辑\n\u25AA 地形导入/导出\n\u25AA 图集与材质自动生成\n\u25AA 支持编辑器与运行时 API 二次开发\n\u25AA Visual block world building and editing\n\u25AA Import/export terrain data\n\u25AA Automatic atlas and material generation\n\u25AA Reusable APIs for both Editor and Runtime",
+  "description": "Box3 方块编辑工具包 / Box3 Blocks Toolkit\n▪ 可视化搭建与编辑\n▪ 地形导入/导出\n▪ 图集与材质自动生成\n▪ 支持编辑器与运行时 API 二次开发\n▪ Visual block world building and editing\n▪ Import/export terrain data\n▪ Automatic atlas and material generation\n▪ Reusable APIs for both Editor and Runtime",
   "unity": "2022.3",
   "license": "Apache-2.0",
   "hideInEditor": false,
   "dependencies": {},
+  "documentationUrl": "https://docs.box3lab.com/unity-package",
   "samples": [
     {
       "displayName": "Editor Noise Terrain Demo",

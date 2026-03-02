@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/License-Apache--2.0-green.svg)](LICENSE.md)
 [![Samples](https://img.shields.io/badge/Samples-Editor%20%26%20Runtime-orange)](Samples~)
 
-[简体中文](README.md) | [English](README_en.md)
+[简体中文](README.md) | [English](README_EN.md)
 
 一个 Unity 编辑器扩展包，用于导入、导出和编辑神岛方块世界。  
 本包同时提供二次开发 API，可在**编辑器扩展**与**运行时脚本**中调用，统一执行方块放置、删除、替换、旋转与查询。
