@@ -7,6 +7,13 @@
   "license": "Apache-2.0",
   "hideInEditor": false,
   "dependencies": {},
+  "samples": [
+    {
+      "displayName": "Runtime API Demo",
+      "description": "Runtime block placement demo using Box3Api and Box3BlocksCore.",
+      "path": "Samples~/RuntimeApiDemo"
+    }
+  ],
   "keywords": [
     "box3",
     "blocks"

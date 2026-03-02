@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Box3Blocks;
 
 namespace Box3Blocks.Editor
 {
@@ -82,6 +83,12 @@ namespace Box3Blocks.Editor
         private readonly Dictionary<string, CardRotateAnimState> _cardRotateAnimations = new Dictionary<string, CardRotateAnimState>(StringComparer.OrdinalIgnoreCase);
         private PreviewRenderUtility _blockCardPreviewUtility;
         private double _nextAnimatedPreviewRepaintTime;
+        private readonly EditorCoreBackend _apiCoreBackend;
+
+        public Box3BlocksBuilderWindow()
+        {
+            _apiCoreBackend = new EditorCoreBackend(this);
+        }
 
         [MenuItem("Box3/方块库", false, 0)]
         public static void Open()
@@ -2709,81 +2716,12 @@ namespace Box3Blocks.Editor
 
         private bool TryPlaceBlockAtInternal(Transform root, string blockId, Vector3Int position, bool replaceExisting, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
-            if (root == null || string.IsNullOrWhiteSpace(blockId))
-            {
-                return false;
-            }
-
-            EnsureLibraryLoadedForApi();
-            BlockDefinition definition = FindDefinitionById(blockId);
-            if (definition == null)
-            {
-                ReloadBlockLibrary();
-                definition = FindDefinitionById(blockId);
-                if (definition == null)
-                {
-                    return false;
-                }
-            }
-
-            Transform previousRoot = _root;
-            try
-            {
-                _root = root;
-                GameObject existing = FindBlockAt(position);
-                if (existing != null)
-                {
-                    if (!replaceExisting)
-                    {
-                        return false;
-                    }
-
-                    Undo.DestroyObjectImmediate(existing);
-                }
-
-                int previousRotation = definition.placementRotationQuarter;
-                definition.placementRotationQuarter = rotationQuarter & 3;
-                bool placed = TryPlaceSingleBlock(definition, position, spawnRealtimeLightOverride);
-                definition.placementRotationQuarter = previousRotation;
-                if (placed)
-                {
-                    RegisterRecentPlaced(definition.id);
-                }
-
-                return placed;
-            }
-            finally
-            {
-                _root = previousRoot;
-            }
+            return Box3BlocksCore.TryPlaceBlockAt(_apiCoreBackend, root, blockId, position, replaceExisting, rotationQuarter, spawnRealtimeLightOverride);
         }
 
         private bool TryPlaceBlockOnTopInternal(Transform root, string blockId, int x, int z, int baseY, bool replaceExisting, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
-            if (root == null || string.IsNullOrWhiteSpace(blockId))
-            {
-                return false;
-            }
-
-            int topY = int.MinValue;
-            Box3BlocksPlacedBlock[] blocks = root.GetComponentsInChildren<Box3BlocksPlacedBlock>(true);
-            for (int i = 0; i < blocks.Length; i++)
-            {
-                Box3BlocksPlacedBlock block = blocks[i];
-                if (block == null)
-                {
-                    continue;
-                }
-
-                Vector3Int p = Vector3Int.RoundToInt(block.transform.position);
-                if (p.x == x && p.z == z && p.y > topY)
-                {
-                    topY = p.y;
-                }
-            }
-
-            int y = topY == int.MinValue ? baseY : topY + 1;
-            return TryPlaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), replaceExisting, rotationQuarter, spawnRealtimeLightOverride);
+            return Box3BlocksCore.TryPlaceBlockOnTop(_apiCoreBackend, root, blockId, x, z, baseY, replaceExisting, rotationQuarter, spawnRealtimeLightOverride);
         }
 
         private int PlaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
@@ -2793,31 +2731,19 @@ namespace Box3Blocks.Editor
                 return 0;
             }
 
-            int minX = Mathf.Min(minInclusive.x, maxInclusive.x);
-            int minY = Mathf.Min(minInclusive.y, maxInclusive.y);
-            int minZ = Mathf.Min(minInclusive.z, maxInclusive.z);
-            int maxX = Mathf.Max(minInclusive.x, maxInclusive.x);
-            int maxY = Mathf.Max(minInclusive.y, maxInclusive.y);
-            int maxZ = Mathf.Max(minInclusive.z, maxInclusive.z);
-
             Undo.IncrementCurrentGroup();
             int group = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName("Place Blocks In Bounds");
 
-            int placed = 0;
-            for (int y = minY; y <= maxY; y++)
-            {
-                for (int x = minX; x <= maxX; x++)
-                {
-                    for (int z = minZ; z <= maxZ; z++)
-                    {
-                        if (TryPlaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), replaceExisting, rotationQuarter, spawnRealtimeLightOverride))
-                        {
-                            placed++;
-                        }
-                    }
-                }
-            }
+            int placed = Box3BlocksCore.PlaceBlocksInBounds(
+                _apiCoreBackend,
+                root,
+                blockId,
+                minInclusive,
+                maxInclusive,
+                replaceExisting,
+                rotationQuarter,
+                spawnRealtimeLightOverride);
 
             Undo.CollapseUndoOperations(group);
             return placed;
@@ -2825,31 +2751,7 @@ namespace Box3Blocks.Editor
 
         private bool EraseBlockAtInternal(Transform root, Vector3Int position)
         {
-            if (root == null)
-            {
-                return false;
-            }
-
-            Transform previousRoot = _root;
-            try
-            {
-                _root = root;
-                GameObject existing = FindBlockAt(position);
-                if (existing == null)
-                {
-                    return false;
-                }
-
-                UnregisterBlockInLookup(position, existing);
-                Undo.DestroyObjectImmediate(existing);
-                RefreshTransparentAround(position);
-                RefreshOcclusionAround(position);
-                return true;
-            }
-            finally
-            {
-                _root = previousRoot;
-            }
+            return Box3BlocksCore.EraseBlockAt(_apiCoreBackend, root, position);
         }
 
         private int EraseBlocksInBoundsInternal(Transform root, Vector3Int minInclusive, Vector3Int maxInclusive)
@@ -2859,30 +2761,10 @@ namespace Box3Blocks.Editor
                 return 0;
             }
 
-            int minX = Mathf.Min(minInclusive.x, maxInclusive.x);
-            int minY = Mathf.Min(minInclusive.y, maxInclusive.y);
-            int minZ = Mathf.Min(minInclusive.z, maxInclusive.z);
-            int maxX = Mathf.Max(minInclusive.x, maxInclusive.x);
-            int maxY = Mathf.Max(minInclusive.y, maxInclusive.y);
-            int maxZ = Mathf.Max(minInclusive.z, maxInclusive.z);
-
             Undo.IncrementCurrentGroup();
             int group = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName("Erase Blocks In Bounds");
-            int removed = 0;
-            for (int y = minY; y <= maxY; y++)
-            {
-                for (int x = minX; x <= maxX; x++)
-                {
-                    for (int z = minZ; z <= maxZ; z++)
-                    {
-                        if (EraseBlockAtInternal(root, new Vector3Int(x, y, z)))
-                        {
-                            removed++;
-                        }
-                    }
-                }
-            }
+            int removed = Box3BlocksCore.EraseBlocksInBounds(_apiCoreBackend, root, minInclusive, maxInclusive);
 
             Undo.CollapseUndoOperations(group);
             return removed;
@@ -2890,56 +2772,7 @@ namespace Box3Blocks.Editor
 
         private bool ReplaceBlockAtInternal(Transform root, string blockId, Vector3Int position, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
         {
-            if (root == null || string.IsNullOrWhiteSpace(blockId))
-            {
-                return false;
-            }
-
-            EnsureLibraryLoadedForApi();
-            BlockDefinition definition = FindDefinitionById(blockId);
-            if (definition == null)
-            {
-                ReloadBlockLibrary();
-                definition = FindDefinitionById(blockId);
-                if (definition == null)
-                {
-                    return false;
-                }
-            }
-
-            Transform previousRoot = _root;
-            try
-            {
-                _root = root;
-                GameObject existing = FindBlockAt(position);
-                if (existing == null)
-                {
-                    return false;
-                }
-
-                Box3BlocksPlacedBlock marker = existing.GetComponent<Box3BlocksPlacedBlock>();
-                if (marker != null && string.Equals(marker.BlockId, blockId, StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-
-                UnregisterBlockInLookup(position, existing);
-                Undo.DestroyObjectImmediate(existing);
-                int previousRotation = definition.placementRotationQuarter;
-                definition.placementRotationQuarter = rotationQuarter & 3;
-                bool placed = TryPlaceSingleBlock(definition, position, spawnRealtimeLightOverride);
-                definition.placementRotationQuarter = previousRotation;
-                if (placed)
-                {
-                    RegisterRecentPlaced(definition.id);
-                }
-
-                return placed;
-            }
-            finally
-            {
-                _root = previousRoot;
-            }
+            return Box3BlocksCore.ReplaceBlockAt(_apiCoreBackend, root, blockId, position, rotationQuarter, spawnRealtimeLightOverride);
         }
 
         private int ReplaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
@@ -2949,30 +2782,17 @@ namespace Box3Blocks.Editor
                 return 0;
             }
 
-            int minX = Mathf.Min(minInclusive.x, maxInclusive.x);
-            int minY = Mathf.Min(minInclusive.y, maxInclusive.y);
-            int minZ = Mathf.Min(minInclusive.z, maxInclusive.z);
-            int maxX = Mathf.Max(minInclusive.x, maxInclusive.x);
-            int maxY = Mathf.Max(minInclusive.y, maxInclusive.y);
-            int maxZ = Mathf.Max(minInclusive.z, maxInclusive.z);
-
             Undo.IncrementCurrentGroup();
             int group = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName("Replace Blocks In Bounds");
-            int replaced = 0;
-            for (int y = minY; y <= maxY; y++)
-            {
-                for (int x = minX; x <= maxX; x++)
-                {
-                    for (int z = minZ; z <= maxZ; z++)
-                    {
-                        if (ReplaceBlockAtInternal(root, blockId, new Vector3Int(x, y, z), rotationQuarter, spawnRealtimeLightOverride))
-                        {
-                            replaced++;
-                        }
-                    }
-                }
-            }
+            int replaced = Box3BlocksCore.ReplaceBlocksInBounds(
+                _apiCoreBackend,
+                root,
+                blockId,
+                minInclusive,
+                maxInclusive,
+                rotationQuarter,
+                spawnRealtimeLightOverride);
 
             Undo.CollapseUndoOperations(group);
             return replaced;
@@ -2980,42 +2800,7 @@ namespace Box3Blocks.Editor
 
         private bool RotateBlockAtInternal(Transform root, Vector3Int position, int stepQuarter)
         {
-            if (root == null)
-            {
-                return false;
-            }
-
-            int q = stepQuarter % 4;
-            if (q < 0)
-            {
-                q += 4;
-            }
-
-            if (q == 0)
-            {
-                return false;
-            }
-
-            Transform previousRoot = _root;
-            try
-            {
-                _root = root;
-                GameObject existing = FindBlockAt(position);
-                if (existing == null)
-                {
-                    return false;
-                }
-
-                Undo.RecordObject(existing.transform, "Rotate Block");
-                existing.transform.Rotate(0f, q * 90f, 0f, Space.World);
-                EditorUtility.SetDirty(existing.transform);
-                UpdateTransparentBlockMesh(existing);
-                return true;
-            }
-            finally
-            {
-                _root = previousRoot;
-            }
+            return Box3BlocksCore.RotateBlockAt(_apiCoreBackend, root, position, stepQuarter);
         }
 
         private int RotateBlocksInBoundsInternal(Transform root, Vector3Int minInclusive, Vector3Int maxInclusive, int stepQuarter)
@@ -3025,30 +2810,10 @@ namespace Box3Blocks.Editor
                 return 0;
             }
 
-            int minX = Mathf.Min(minInclusive.x, maxInclusive.x);
-            int minY = Mathf.Min(minInclusive.y, maxInclusive.y);
-            int minZ = Mathf.Min(minInclusive.z, maxInclusive.z);
-            int maxX = Mathf.Max(minInclusive.x, maxInclusive.x);
-            int maxY = Mathf.Max(minInclusive.y, maxInclusive.y);
-            int maxZ = Mathf.Max(minInclusive.z, maxInclusive.z);
-
             Undo.IncrementCurrentGroup();
             int group = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName("Rotate Blocks In Bounds");
-            int rotated = 0;
-            for (int y = minY; y <= maxY; y++)
-            {
-                for (int x = minX; x <= maxX; x++)
-                {
-                    for (int z = minZ; z <= maxZ; z++)
-                    {
-                        if (RotateBlockAtInternal(root, new Vector3Int(x, y, z), stepQuarter))
-                        {
-                            rotated++;
-                        }
-                    }
-                }
-            }
+            int rotated = Box3BlocksCore.RotateBlocksInBounds(_apiCoreBackend, root, minInclusive, maxInclusive, stepQuarter);
 
             Undo.CollapseUndoOperations(group);
             return rotated;
@@ -3056,81 +2821,170 @@ namespace Box3Blocks.Editor
 
         private bool TryGetBlockIdAtInternal(Transform root, Vector3Int position, out string blockId)
         {
-            blockId = null;
-            if (root == null)
+            return Box3BlocksCore.TryGetBlockIdAt(_apiCoreBackend, root, position, out blockId);
+        }
+
+        private bool ExistsAtInternal(Transform root, Vector3Int position)
+        {
+            return Box3BlocksCore.ExistsAt(_apiCoreBackend, root, position);
+        }
+
+        private int GetTopYInternal(Transform root, int x, int z, int fallbackY)
+        {
+            return Box3BlocksCore.GetTopY(_apiCoreBackend, root, x, z, fallbackY);
+        }
+
+        private sealed class EditorCoreBackend : IBox3BlocksCoreBackend
+        {
+            private readonly Box3BlocksBuilderWindow _owner;
+
+            public EditorCoreBackend(Box3BlocksBuilderWindow owner)
             {
-                return false;
+                _owner = owner;
             }
 
-            Transform previousRoot = _root;
-            try
+            public GameObject FindBlockAt(Transform root, Vector3Int position)
             {
-                _root = root;
-                GameObject existing = FindBlockAt(position);
-                if (existing == null)
+                if (_owner == null || root == null)
+                {
+                    return null;
+                }
+
+                Transform previousRoot = _owner._root;
+                try
+                {
+                    _owner._root = root;
+                    return _owner.FindBlockAt(position);
+                }
+                finally
+                {
+                    _owner._root = previousRoot;
+                }
+            }
+
+            public bool TryPlaceBlock(Transform root, string blockId, Vector3Int position, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
+            {
+                if (_owner == null || root == null || string.IsNullOrWhiteSpace(blockId))
                 {
                     return false;
                 }
 
-                Box3BlocksPlacedBlock marker = existing.GetComponent<Box3BlocksPlacedBlock>();
-                if (marker == null)
+                _owner.EnsureLibraryLoadedForApi();
+                BlockDefinition definition = _owner.FindDefinitionById(blockId);
+                if (definition == null)
+                {
+                    _owner.ReloadBlockLibrary();
+                    definition = _owner.FindDefinitionById(blockId);
+                    if (definition == null)
+                    {
+                        return false;
+                    }
+                }
+
+                Transform previousRoot = _owner._root;
+                int previousRotation = definition.placementRotationQuarter;
+                try
+                {
+                    _owner._root = root;
+                    definition.placementRotationQuarter = rotationQuarter & 3;
+                    bool placed = _owner.TryPlaceSingleBlock(definition, position, spawnRealtimeLightOverride);
+                    if (placed)
+                    {
+                        _owner.RegisterRecentPlaced(definition.id);
+                    }
+
+                    return placed;
+                }
+                finally
+                {
+                    definition.placementRotationQuarter = previousRotation;
+                    _owner._root = previousRoot;
+                }
+            }
+
+            public bool EraseBlock(Transform root, Vector3Int position, GameObject existing)
+            {
+                if (_owner == null || root == null || existing == null)
+                {
+                    return false;
+                }
+
+                Transform previousRoot = _owner._root;
+                try
+                {
+                    _owner._root = root;
+                    _owner.UnregisterBlockInLookup(position, existing);
+                    Undo.DestroyObjectImmediate(existing);
+                    _owner.RefreshTransparentAround(position);
+                    _owner.RefreshOcclusionAround(position);
+                    return true;
+                }
+                finally
+                {
+                    _owner._root = previousRoot;
+                }
+            }
+
+            public bool RotateBlock(Transform root, Vector3Int position, GameObject existing, int stepQuarter)
+            {
+                if (_owner == null || root == null || existing == null || stepQuarter == 0)
+                {
+                    return false;
+                }
+
+                Transform previousRoot = _owner._root;
+                try
+                {
+                    _owner._root = root;
+                    Undo.RecordObject(existing.transform, "Rotate Block");
+                    existing.transform.Rotate(0f, stepQuarter * 90f, 0f, Space.World);
+                    EditorUtility.SetDirty(existing.transform);
+                    _owner.UpdateTransparentBlockMesh(existing);
+                    return true;
+                }
+                finally
+                {
+                    _owner._root = previousRoot;
+                }
+            }
+
+            public bool TryGetBlockId(GameObject blockObject, out string blockId)
+            {
+                blockId = null;
+                if (blockObject == null)
+                {
+                    return false;
+                }
+
+                Box3BlocksPlacedBlock marker = blockObject.GetComponent<Box3BlocksPlacedBlock>();
+                if (marker == null || string.IsNullOrWhiteSpace(marker.BlockId))
                 {
                     return false;
                 }
 
                 blockId = marker.BlockId;
-                return !string.IsNullOrWhiteSpace(blockId);
-            }
-            finally
-            {
-                _root = previousRoot;
-            }
-        }
-
-        private bool ExistsAtInternal(Transform root, Vector3Int position)
-        {
-            if (root == null)
-            {
-                return false;
+                return true;
             }
 
-            Transform previousRoot = _root;
-            try
+            public IEnumerable<Vector3Int> EnumerateOccupiedPositions(Transform root)
             {
-                _root = root;
-                return FindBlockAt(position) != null;
-            }
-            finally
-            {
-                _root = previousRoot;
-            }
-        }
-
-        private int GetTopYInternal(Transform root, int x, int z, int fallbackY)
-        {
-            if (root == null)
-            {
-                return fallbackY;
-            }
-
-            int topY = int.MinValue;
-            Box3BlocksPlacedBlock[] blocks = root.GetComponentsInChildren<Box3BlocksPlacedBlock>(true);
-            for (int i = 0; i < blocks.Length; i++)
-            {
-                Box3BlocksPlacedBlock block = blocks[i];
-                if (block == null)
+                if (root == null)
                 {
-                    continue;
+                    yield break;
                 }
 
-                Vector3Int p = Vector3Int.RoundToInt(block.transform.position);
-                if (p.x == x && p.z == z && p.y > topY)
+                Box3BlocksPlacedBlock[] blocks = root.GetComponentsInChildren<Box3BlocksPlacedBlock>(true);
+                for (int i = 0; i < blocks.Length; i++)
                 {
-                    topY = p.y;
+                    Box3BlocksPlacedBlock block = blocks[i];
+                    if (block == null)
+                    {
+                        continue;
+                    }
+
+                    yield return Vector3Int.RoundToInt(block.transform.position);
                 }
             }
-
-            return topY == int.MinValue ? fallbackY : topY;
         }
 
         private IReadOnlyList<string> GetAvailableBlockIdsInternal()

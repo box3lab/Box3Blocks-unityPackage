@@ -10,6 +10,15 @@
     { "key": "root.clean_materials", "value": "清理材质" },
     { "key": "root.chunk_size", "value": "Chunk 尺寸" },
     { "key": "dialog.ok", "value": "确定" },
+    { "key": "runtime.catalog.dialog.title", "value": "Box3 运行时" },
+    {
+      "key": "runtime.catalog.err.missing_assets",
+      "value": "生成运行时目录失败：缺少 Assets/Box3 的网格或材质，请先执行方块资源生成。"
+    },
+    {
+      "key": "runtime.catalog.done",
+      "value": "[Box3] 运行时 UV 目录已生成：{0} 个方块 -> {1}"
+    },
 
     { "key": "tool.place", "value": "放置" },
     { "key": "tool.erase", "value": "删除" },
