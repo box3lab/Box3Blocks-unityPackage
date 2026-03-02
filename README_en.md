@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/License-Apache--2.0-green.svg)](LICENSE.md)
 [![Samples](https://img.shields.io/badge/Samples-Editor%20%26%20Runtime-orange)](Samples~)
 
-[简体中文](README.md) | [English](README_en.md)
+[简体中文](README.md) | [English](README_EN.md)
 
 A Unity editor extension package for importing, exporting, and editing Box3 block worlds.  
 It also provides reusable APIs for both **Editor extensions** and **Runtime scripts**, with a unified workflow for placing, erasing, replacing, rotating, and querying blocks.
