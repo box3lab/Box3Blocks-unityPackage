@@ -77,6 +77,10 @@
       "value": "Height (Y)"
     },
     {
+      "key": "tool.hollow_brush",
+      "value": "Hollow Build (Shell Only)"
+    },
+    {
       "key": "tool.generate_collider",
       "value": "Generate Collider"
     },
