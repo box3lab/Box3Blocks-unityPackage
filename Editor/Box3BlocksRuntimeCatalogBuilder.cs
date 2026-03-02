@@ -10,8 +10,8 @@ namespace Box3Blocks.Editor
 {
     internal static class Box3BlocksRuntimeCatalogBuilder
     {
-        private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
-        private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
+        private const string BlockTextureFolder = "Packages/com.box3lab.box3/Editor/SourceAssets/block";
+        private const string BlockSpecPath = "Packages/com.box3lab.box3/Editor/SourceAssets/block-spec.json";
         private const string RuntimeFolder = "Assets/Box3/Runtime";
         private const string RuntimeCatalogPath = "Assets/Box3/Runtime/Box3BlocksCatalog.asset";
         private const string OpaqueMaterialPath = "Assets/Box3/Materials/M_Block.mat";

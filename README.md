@@ -33,12 +33,12 @@ https://github.com/box3lab/Box3Blocks-unityPackage.git
 
 1. `block-id.json`（方块 ID 主表）
 
-- 包内路径：`Packages/com.box3lab.box3/Assets/block-id.json`
+- 包内路径：`Packages/com.box3lab.box3/Editor/SourceAssets/block-id.json`
 - 用途：方块 ID、分类、列表展示来源。
 
 2. `block-spec.json`（行为/渲染规则）
 
-- 包内路径：`Packages/com.box3lab.box3/Assets/block-spec.json`
+- 包内路径：`Packages/com.box3lab.box3/Editor/SourceAssets/block-spec.json`
 - 用途：透明、发光等规则。
 
 ### 生成资源位置

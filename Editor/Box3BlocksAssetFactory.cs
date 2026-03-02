@@ -15,10 +15,10 @@ namespace Box3Blocks.Editor
             public Vector4[] faceMainTexSt;
         }
 
-        private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
-        private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
-        private const string BumpTextureFolder = "Packages/com.box3lab.box3/Assets/bump";
-        private const string MaterialTextureFolder = "Packages/com.box3lab.box3/Assets/material";
+        private const string BlockTextureFolder = "Packages/com.box3lab.box3/Editor/SourceAssets/block";
+        private const string BlockSpecPath = "Packages/com.box3lab.box3/Editor/SourceAssets/block-spec.json";
+        private const string BumpTextureFolder = "Packages/com.box3lab.box3/Editor/SourceAssets/bump";
+        private const string MaterialTextureFolder = "Packages/com.box3lab.box3/Editor/SourceAssets/material";
         private static readonly string GeneratedRoot = "Assets/Box3";
         private static readonly string MeshFolder = "Assets/Box3/Meshes";
         private static readonly string MaterialFolder = "Assets/Box3/Materials";

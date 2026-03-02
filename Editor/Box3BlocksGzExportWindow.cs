@@ -12,7 +12,7 @@ namespace Box3Blocks.Editor
 {
     public sealed class Box3BlocksGzExportWindow : EditorWindow
     {
-        private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
+        private const string BlockIdPath = "Packages/com.box3lab.box3/Editor/SourceAssets/block-id.json";
         private static readonly Regex FlatMapRegex = new Regex("\"(?<id>\\d+)\"\\s*:\\s*\"(?<name>[^\"]+)\"", RegexOptions.Compiled);
 
         [Serializable]

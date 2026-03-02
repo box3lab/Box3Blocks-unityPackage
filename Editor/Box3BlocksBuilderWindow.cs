@@ -12,9 +12,9 @@ namespace Box3Blocks.Editor
 {
     public partial class Box3BlocksBuilderWindow : EditorWindow
     {
-        private const string BlockTextureFolder = "Packages/com.box3lab.box3/Assets/block";
-        private const string BlockSpecPath = "Packages/com.box3lab.box3/Assets/block-spec.json";
-        private const string BlockIdPath = "Packages/com.box3lab.box3/Assets/block-id.json";
+        private const string BlockTextureFolder = "Packages/com.box3lab.box3/Editor/SourceAssets/block";
+        private const string BlockSpecPath = "Packages/com.box3lab.box3/Editor/SourceAssets/block-spec.json";
+        private const string BlockIdPath = "Packages/com.box3lab.box3/Editor/SourceAssets/block-id.json";
         private const string GeneratedMaterialFolder = "Assets/Box3/Materials";
         private const string GeneratedMeshFolder = "Assets/Box3/Meshes";
         private const string VoxelImportChunkOpaqueMaterialPath = "Assets/Box3/Materials/M_Block.mat";
