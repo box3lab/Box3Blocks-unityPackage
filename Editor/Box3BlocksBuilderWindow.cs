@@ -818,6 +818,26 @@ namespace Box3Blocks.Editor
                 }
             }
 
+            // Fallback picking path for blocks without colliders.
+            if (TryPickBlockByRay(ray, out Box3BlocksPlacedBlock pickedBlock, out Vector3Int pickedNormal))
+            {
+                hitBlock = pickedBlock;
+                Vector3Int blockPos = Vector3Int.RoundToInt(pickedBlock.transform.position);
+                if (_tool == EditTool.Erase || _tool == EditTool.Replace || _tool == EditTool.Rotate)
+                {
+                    target = blockPos;
+                    return true;
+                }
+
+                if (pickedNormal == Vector3Int.zero)
+                {
+                    pickedNormal = Vector3Int.up;
+                }
+
+                target = blockPos + pickedNormal;
+                return true;
+            }
+
             if (_tool == EditTool.Erase || _tool == EditTool.Replace || _tool == EditTool.Rotate)
             {
                 if (TryFindClosestBlockFromScreen(mousePosition, out Box3BlocksPlacedBlock closest))
@@ -830,6 +850,16 @@ namespace Box3Blocks.Editor
                 return false;
             }
 
+            // Place-mode fallback: if collider-free picking misses, still place adjacent to the nearest block.
+            if (TryFindClosestBlockFromScreen(mousePosition, out Box3BlocksPlacedBlock nearestForPlace))
+            {
+                hitBlock = nearestForPlace;
+                Vector3Int blockPos = Vector3Int.RoundToInt(nearestForPlace.transform.position);
+                Vector3Int normal = GetFallbackPlaceNormal(ray.direction);
+                target = blockPos + normal;
+                return true;
+            }
+
             const int fallbackPlaneY = 0;
             Plane plane = new Plane(Vector3.up, new Vector3(0f, fallbackPlaneY, 0f));
             if (!plane.Raycast(ray, out float distance))
@@ -840,6 +870,142 @@ namespace Box3Blocks.Editor
             Vector3 point = ray.GetPoint(distance);
             target = new Vector3Int(Mathf.RoundToInt(point.x), fallbackPlaneY, Mathf.RoundToInt(point.z));
             return true;
+        }
+
+        private bool TryPickBlockByRay(Ray ray, out Box3BlocksPlacedBlock block, out Vector3Int hitNormal)
+        {
+            block = null;
+            hitNormal = Vector3Int.zero;
+            if (_root == null)
+            {
+                return false;
+            }
+
+            float bestDistance = float.PositiveInfinity;
+            for (int i = 0; i < _root.childCount; i++)
+            {
+                Transform child = _root.GetChild(i);
+                Box3BlocksPlacedBlock candidate = child.GetComponent<Box3BlocksPlacedBlock>();
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                Vector3 center = candidate.transform.position;
+                Vector3 halfExtents = new Vector3(0.5f, 0.5f, 0.5f);
+                Vector3 min = center - halfExtents;
+                Vector3 max = center + halfExtents;
+                if (!TryIntersectRayAabb(ray, min, max, out float distance, out Vector3Int normal))
+                {
+                    continue;
+                }
+
+                if (distance >= 0f && distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    block = candidate;
+                    hitNormal = normal;
+                }
+            }
+
+            return block != null;
+        }
+
+        private static bool TryIntersectRayAabb(
+            Ray ray,
+            Vector3 min,
+            Vector3 max,
+            out float distance,
+            out Vector3Int normal)
+        {
+            distance = 0f;
+            normal = Vector3Int.zero;
+
+            float tMin = 0f;
+            float tMax = float.PositiveInfinity;
+            Vector3Int enterNormal = Vector3Int.zero;
+
+            if (!UpdateRayAabbSlab(ray.origin.x, ray.direction.x, min.x, max.x, Vector3Int.left, Vector3Int.right, ref tMin, ref tMax, ref enterNormal))
+            {
+                return false;
+            }
+
+            if (!UpdateRayAabbSlab(ray.origin.y, ray.direction.y, min.y, max.y, Vector3Int.down, Vector3Int.up, ref tMin, ref tMax, ref enterNormal))
+            {
+                return false;
+            }
+
+            if (!UpdateRayAabbSlab(ray.origin.z, ray.direction.z, min.z, max.z, new Vector3Int(0, 0, -1), new Vector3Int(0, 0, 1), ref tMin, ref tMax, ref enterNormal))
+            {
+                return false;
+            }
+
+            if (tMax < 0f)
+            {
+                return false;
+            }
+
+            distance = tMin >= 0f ? tMin : tMax;
+            normal = enterNormal == Vector3Int.zero ? Vector3Int.up : enterNormal;
+            return true;
+        }
+
+        private static bool UpdateRayAabbSlab(
+            float origin,
+            float direction,
+            float slabMin,
+            float slabMax,
+            Vector3Int minNormal,
+            Vector3Int maxNormal,
+            ref float tMin,
+            ref float tMax,
+            ref Vector3Int enterNormal)
+        {
+            const float epsilon = 1e-6f;
+            if (Mathf.Abs(direction) < epsilon)
+            {
+                return origin >= slabMin && origin <= slabMax;
+            }
+
+            float invDir = 1f / direction;
+            float t1 = (slabMin - origin) * invDir;
+            float t2 = (slabMax - origin) * invDir;
+            Vector3Int n1 = minNormal;
+            Vector3Int n2 = maxNormal;
+            if (t1 > t2)
+            {
+                (t1, t2) = (t2, t1);
+                (n1, n2) = (n2, n1);
+            }
+
+            if (t1 > tMin)
+            {
+                tMin = t1;
+                enterNormal = n1;
+            }
+
+            tMax = Mathf.Min(tMax, t2);
+            return tMin <= tMax;
+        }
+
+        private static Vector3Int GetFallbackPlaceNormal(Vector3 rayDirection)
+        {
+            Vector3 dir = rayDirection;
+            float ax = Mathf.Abs(dir.x);
+            float ay = Mathf.Abs(dir.y);
+            float az = Mathf.Abs(dir.z);
+
+            if (ay >= ax && ay >= az)
+            {
+                return dir.y > 0f ? Vector3Int.down : Vector3Int.up;
+            }
+
+            if (ax >= az)
+            {
+                return dir.x > 0f ? Vector3Int.left : Vector3Int.right;
+            }
+
+            return dir.z > 0f ? new Vector3Int(0, 0, -1) : new Vector3Int(0, 0, 1);
         }
 
         private bool TryFindClosestBlockFromScreen(Vector2 mousePosition, out Box3BlocksPlacedBlock block)
