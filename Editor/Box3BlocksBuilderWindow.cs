@@ -50,6 +50,7 @@ namespace Box3Blocks.Editor
         private EditTool _tool = EditTool.Place;
         private int _brushHorizontalSize = 1;
         private int _brushHeight = 1;
+        private bool _hollowBrush;
         private bool _generateCollider = true;
         private Box3ColliderMode _toolColliderMode = Box3ColliderMode.Full;
         private bool _spawnPointLightForEmissive = true;
@@ -379,7 +380,7 @@ namespace Box3Blocks.Editor
                 }
             }
 
-      
+            _hollowBrush = EditorGUILayout.ToggleLeft(L("tool.hollow_brush"), _hollowBrush);
             _generateCollider = EditorGUILayout.ToggleLeft(L("tool.generate_collider"), _generateCollider);
             if (_generateCollider)
             {
@@ -1323,6 +1324,17 @@ namespace Box3Blocks.Editor
                 {
                     for (int z = 0; z < size; z++)
                     {
+                        if (_hollowBrush)
+                        {
+                            bool isSurface = x == 0 || x == size - 1
+                                || y == 0 || y == height - 1
+                                || z == 0 || z == size - 1;
+                            if (!isSurface)
+                            {
+                                continue;
+                            }
+                        }
+
                         positions.Add(new Vector3Int(origin.x + x, origin.y + y, origin.z + z));
                     }
                 }
