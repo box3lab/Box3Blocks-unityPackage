@@ -96,8 +96,7 @@ namespace Box3Blocks.Editor
         private bool _chunkUseAlphaClip = true;
         private float _chunkAlphaCutoff = 0.33f;
         private bool _clearPrevious = true;
-        private bool _addSurfaceCollider;
-        private bool _addMeshCollider;
+        private Box3ColliderMode _chunkColliderMode = Box3ColliderMode.None;
         private RealtimeLightMode _realtimeLightMode = RealtimeLightMode.AllEmissive;
 
         private Phase _phase = Phase.Idle;
@@ -343,8 +342,16 @@ namespace Box3Blocks.Editor
                 EditorGUILayout.Space(6f);
                 EditorGUILayout.LabelField(LOr("voxel.group.chunk", "Chunk 选项"), _optionsGroupTitleStyle);
                 EditorGUI.BeginDisabledGroup(_importMode != ImportMode.Chunk);
-                _addSurfaceCollider = EditorGUILayout.ToggleLeft(L("voxel.option.surface_collider"), _addSurfaceCollider);
-                _addMeshCollider = EditorGUILayout.ToggleLeft(L("voxel.option.mesh_collider"), _addMeshCollider);
+                int colliderModeIndex = EditorGUILayout.Popup(
+                    L("voxel.option.collider_mode"),
+                    (int)_chunkColliderMode,
+                    new[]
+                    {
+                        L("voxel.collider_mode.none"),
+                        L("voxel.collider_mode.top"),
+                        L("voxel.collider_mode.full")
+                    });
+                _chunkColliderMode = (Box3ColliderMode)Mathf.Clamp(colliderModeIndex, 0, 2);
                 _chunkSize = Mathf.Max(1, EditorGUILayout.IntField(L("voxel.option.chunk_size"), _chunkSize));
                 _chunksPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.chunks_per_tick"), _chunksPerTick), 1, 64);
                 _chunkUseAlphaClip = EditorGUILayout.ToggleLeft(L("voxel.option.alpha_clip"), _chunkUseAlphaClip);
@@ -456,10 +463,10 @@ namespace Box3Blocks.Editor
                 bool useChunkMode = _importMode == ImportMode.Chunk;
                 _chunkBuckets = useChunkMode ? new Dictionary<ChunkKey, ChunkBucket>(512) : null;
                 _chunkKeys = null;
-                _chunkVoxelPositions = useChunkMode && _addSurfaceCollider
+                _chunkVoxelPositions = useChunkMode && _chunkColliderMode == Box3ColliderMode.TopOnly
                     ? new Dictionary<ChunkKey, HashSet<Vector3Int>>(512)
                     : null;
-                _occupiedVoxels = useChunkMode && _addSurfaceCollider
+                _occupiedVoxels = useChunkMode && _chunkColliderMode == Box3ColliderMode.TopOnly
                     ? new HashSet<Vector3Int>()
                     : null;
                 _allVoxels = _importMode == ImportMode.SingleBlock || useChunkMode ? new HashSet<Vector3Int>() : null;
@@ -651,7 +658,7 @@ namespace Box3Blocks.Editor
                         bucket.emissiveVoxels.Add(new EmissiveLightVoxel(gridPos, lightColor, lightIntensity, lightRange, lightOffset));
                     }
 
-                    if (_addSurfaceCollider && _occupiedVoxels != null && _chunkVoxelPositions != null)
+                    if (_chunkColliderMode == Box3ColliderMode.TopOnly && _occupiedVoxels != null && _chunkVoxelPositions != null)
                     {
                         _occupiedVoxels.Add(gridPos);
                         if (!_chunkVoxelPositions.TryGetValue(key, out HashSet<Vector3Int> set))
@@ -794,7 +801,7 @@ namespace Box3Blocks.Editor
                     string assetPath = BuildChunkMeshAssetPath(key, i, "opaque");
                     AssetDatabase.CreateAsset(mesh, assetPath);
                     mf.sharedMesh = mesh;
-                    if (_addMeshCollider)
+                    if (_chunkColliderMode == Box3ColliderMode.Full)
                     {
                         MeshCollider chunkCollider = opaqueGo.AddComponent<MeshCollider>();
                         chunkCollider.sharedMesh = mesh;
@@ -821,7 +828,7 @@ namespace Box3Blocks.Editor
                     mf.sharedMesh = mesh;
                 }
 
-                if (_addSurfaceCollider
+                if (_chunkColliderMode == Box3ColliderMode.TopOnly
                     && _chunkVoxelPositions != null
                     && _chunkVoxelPositions.TryGetValue(key, out HashSet<Vector3Int> chunkVoxels))
                 {
