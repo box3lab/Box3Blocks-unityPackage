@@ -226,7 +226,10 @@ namespace Box3Blocks.Editor
                 anisoLevel = 0
             };
 
-            int maxSize = Mathf.Clamp(SystemInfo.maxTextureSize, 2048, 8192);
+            int maxSize = Mathf.Clamp(
+                Mathf.Min(SystemInfo.maxTextureSize, Box3BlocksAtlasQualitySettings.GetMaxSize()),
+                128,
+                8192);
             Rect[] rects = generated.PackTextures(readableTextures.ToArray(), 0, maxSize, false);
             for (int i = 0; i < texturePaths.Count && i < rects.Length; i++)
             {

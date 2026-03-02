@@ -408,6 +408,42 @@
     {
       "key": "voxel.err.url_empty",
       "value": "URL is empty."
+    },
+    {
+      "key": "atlas.window.title",
+      "value": "Atlas Quality Settings"
+    },
+    {
+      "key": "atlas.window.help",
+      "value": "Switch block atlas resolution. Higher quality gives sharper textures but increases memory and build size."
+    },
+    {
+      "key": "atlas.quality",
+      "value": "Atlas Quality"
+    },
+    {
+      "key": "atlas.current_size",
+      "value": "Current max atlas size: {0}"
+    },
+    {
+      "key": "atlas.quality_option",
+      "value": "{0}"
+    },
+    {
+      "key": "atlas.apply_rebuild",
+      "value": "Apply and Rebuild Atlas"
+    },
+    {
+      "key": "atlas.status.ready",
+      "value": "Ready: choose a resolution and apply."
+    },
+    {
+      "key": "atlas.status.rebuild_failed",
+      "value": "Rebuild failed: atlas material is unavailable."
+    },
+    {
+      "key": "atlas.status.applied",
+      "value": "Applied atlas quality: {0}. Atlas rebuilt."
     }
   ],
   "categories": [
