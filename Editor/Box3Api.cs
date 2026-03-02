@@ -21,6 +21,7 @@ namespace Box3Blocks.Editor
         /// <param name="replaceExisting">目标位置已有方块时是否替换。 / Whether to replace existing block at target position.</param>
         /// <param name="rotationQuarter">放置旋转（90° 步进）。 / Placement rotation in quarter turns.</param>
         /// <param name="spawnRealtimeLight">是否生成实时点光源；null 表示使用全局设置。 / Whether to spawn realtime point light; null uses global setting.</param>
+        /// <param name="colliderMode">碰撞体模式。 / Collider mode.</param>
         /// <returns>放置成功返回 true。 / Returns true on success.</returns>
         public static bool TryPlaceBlockAt(
             Transform root,
@@ -28,9 +29,10 @@ namespace Box3Blocks.Editor
             Vector3Int position,
             bool replaceExisting = true,
             Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0,
-            bool? spawnRealtimeLight = null)
+            bool? spawnRealtimeLight = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
-            return Box3BlocksBuilderWindow.TryPlaceBlockAtApi(root, blockId, position, replaceExisting, (int)rotationQuarter, spawnRealtimeLight);
+            return Box3BlocksBuilderWindow.TryPlaceBlockAtApi(root, blockId, position, replaceExisting, (int)rotationQuarter, spawnRealtimeLight, colliderMode);
         }
 
         /// <summary>
@@ -46,6 +48,7 @@ namespace Box3Blocks.Editor
         /// <param name="replaceExisting">最终落点已有方块时是否替换。 / Whether to replace existing block at final position.</param>
         /// <param name="rotationQuarter">放置旋转（90° 步进）。 / Placement rotation in quarter turns.</param>
         /// <param name="spawnRealtimeLight">是否生成实时点光源；null 表示使用全局设置。 / Whether to spawn realtime point light; null uses global setting.</param>
+        /// <param name="colliderMode">碰撞体模式。 / Collider mode.</param>
         /// <returns>放置成功返回 true。 / Returns true on success.</returns>
         public static bool TryPlaceBlockOnTop(
             Transform root,
@@ -55,9 +58,10 @@ namespace Box3Blocks.Editor
             int baseY = 0,
             bool replaceExisting = true,
             Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0,
-            bool? spawnRealtimeLight = null)
+            bool? spawnRealtimeLight = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
-            return Box3BlocksBuilderWindow.TryPlaceBlockOnTopApi(root, blockId, x, z, baseY, replaceExisting, (int)rotationQuarter, spawnRealtimeLight);
+            return Box3BlocksBuilderWindow.TryPlaceBlockOnTopApi(root, blockId, x, z, baseY, replaceExisting, (int)rotationQuarter, spawnRealtimeLight, colliderMode);
         }
 
         /// <summary>
@@ -72,6 +76,7 @@ namespace Box3Blocks.Editor
         /// <param name="replaceExisting">范围内已有方块时是否替换。 / Whether to replace existing blocks in bounds.</param>
         /// <param name="rotationQuarter">放置旋转（90° 步进）。 / Placement rotation in quarter turns.</param>
         /// <param name="spawnRealtimeLight">是否生成实时点光源；null 表示使用全局设置。 / Whether to spawn realtime point light; null uses global setting.</param>
+        /// <param name="colliderMode">碰撞体模式。 / Collider mode.</param>
         /// <returns>成功放置数量。 / Number of placed blocks.</returns>
         public static int PlaceBlocksInBounds(
             Transform root,
@@ -80,9 +85,10 @@ namespace Box3Blocks.Editor
             Vector3Int maxInclusive,
             bool replaceExisting = true,
             Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0,
-            bool? spawnRealtimeLight = null)
+            bool? spawnRealtimeLight = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
-            return Box3BlocksBuilderWindow.PlaceBlocksInBoundsApi(root, blockId, minInclusive, maxInclusive, replaceExisting, (int)rotationQuarter, spawnRealtimeLight);
+            return Box3BlocksBuilderWindow.PlaceBlocksInBoundsApi(root, blockId, minInclusive, maxInclusive, replaceExisting, (int)rotationQuarter, spawnRealtimeLight, colliderMode);
         }
 
         /// <summary>
@@ -122,15 +128,17 @@ namespace Box3Blocks.Editor
         /// <param name="position">目标网格坐标。 / Target grid position.</param>
         /// <param name="rotationQuarter">替换后的旋转（90° 步进）。 / Rotation after replace in quarter turns.</param>
         /// <param name="spawnRealtimeLight">是否生成实时点光源；null 表示使用全局设置。 / Whether to spawn realtime point light; null uses global setting.</param>
+        /// <param name="colliderMode">碰撞体模式。 / Collider mode.</param>
         /// <returns>替换成功返回 true。 / Returns true on success.</returns>
         public static bool ReplaceBlockAt(
             Transform root,
             string blockId,
             Vector3Int position,
             Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0,
-            bool? spawnRealtimeLight = null)
+            bool? spawnRealtimeLight = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
-            return Box3BlocksBuilderWindow.ReplaceBlockAtApi(root, blockId, position, (int)rotationQuarter, spawnRealtimeLight);
+            return Box3BlocksBuilderWindow.ReplaceBlockAtApi(root, blockId, position, (int)rotationQuarter, spawnRealtimeLight, colliderMode);
         }
 
         /// <summary>
@@ -144,6 +152,7 @@ namespace Box3Blocks.Editor
         /// <param name="maxInclusive">最大角点（包含）。 / Inclusive max corner.</param>
         /// <param name="rotationQuarter">替换后的旋转（90° 步进）。 / Rotation after replace in quarter turns.</param>
         /// <param name="spawnRealtimeLight">是否生成实时点光源；null 表示使用全局设置。 / Whether to spawn realtime point light; null uses global setting.</param>
+        /// <param name="colliderMode">碰撞体模式。 / Collider mode.</param>
         /// <returns>成功替换数量。 / Number of replaced blocks.</returns>
         public static int ReplaceBlocksInBounds(
             Transform root,
@@ -151,9 +160,10 @@ namespace Box3Blocks.Editor
             Vector3Int minInclusive,
             Vector3Int maxInclusive,
             Box3QuarterTurn rotationQuarter = Box3QuarterTurn.R0,
-            bool? spawnRealtimeLight = null)
+            bool? spawnRealtimeLight = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
-            return Box3BlocksBuilderWindow.ReplaceBlocksInBoundsApi(root, blockId, minInclusive, maxInclusive, (int)rotationQuarter, spawnRealtimeLight);
+            return Box3BlocksBuilderWindow.ReplaceBlocksInBoundsApi(root, blockId, minInclusive, maxInclusive, (int)rotationQuarter, spawnRealtimeLight, colliderMode);
         }
 
         /// <summary>

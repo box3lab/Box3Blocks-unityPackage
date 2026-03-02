@@ -13,7 +13,13 @@ namespace Box3Blocks
         /// <summary>查找坐标上的方块对象 / Find block object at a grid position.</summary>
         GameObject FindBlockAt(Transform root, Vector3Int position);
         /// <summary>执行放置 / Execute placement.</summary>
-        bool TryPlaceBlock(Transform root, string blockId, Vector3Int position, int rotationQuarter, bool? spawnRealtimeLightOverride = null);
+        bool TryPlaceBlock(
+            Transform root,
+            string blockId,
+            Vector3Int position,
+            int rotationQuarter,
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full);
         /// <summary>执行删除 / Execute erase.</summary>
         bool EraseBlock(Transform root, Vector3Int position, GameObject existing);
         /// <summary>执行旋转 / Execute rotation.</summary>
@@ -45,7 +51,8 @@ namespace Box3Blocks
             Vector3Int position,
             bool replaceExisting = true,
             int rotationQuarter = 0,
-            bool? spawnRealtimeLightOverride = null)
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             if (backend == null || root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -61,7 +68,7 @@ namespace Box3Blocks
                 }
             }
 
-            return backend.TryPlaceBlock(root, blockId, position, rotationQuarter, spawnRealtimeLightOverride);
+            return backend.TryPlaceBlock(root, blockId, position, rotationQuarter, spawnRealtimeLightOverride, colliderMode);
         }
 
         /// <summary>
@@ -78,7 +85,8 @@ namespace Box3Blocks
             int baseY = 0,
             bool replaceExisting = true,
             int rotationQuarter = 0,
-            bool? spawnRealtimeLightOverride = null)
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             if (backend == null || root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -102,7 +110,8 @@ namespace Box3Blocks
                 new Vector3Int(x, targetY, z),
                 replaceExisting,
                 rotationQuarter,
-                spawnRealtimeLightOverride);
+                spawnRealtimeLightOverride,
+                colliderMode);
         }
 
         /// <summary>
@@ -118,7 +127,8 @@ namespace Box3Blocks
             Vector3Int maxInclusive,
             bool replaceExisting = true,
             int rotationQuarter = 0,
-            bool? spawnRealtimeLightOverride = null)
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             if (backend == null || root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -126,7 +136,7 @@ namespace Box3Blocks
             }
 
             return CountInBounds(minInclusive, maxInclusive, p =>
-                TryPlaceBlockAt(backend, root, blockId, p, replaceExisting, rotationQuarter, spawnRealtimeLightOverride));
+                TryPlaceBlockAt(backend, root, blockId, p, replaceExisting, rotationQuarter, spawnRealtimeLightOverride, colliderMode));
         }
 
         /// <summary>
@@ -171,7 +181,8 @@ namespace Box3Blocks
             string blockId,
             Vector3Int position,
             int rotationQuarter = 0,
-            bool? spawnRealtimeLightOverride = null)
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             if (backend == null || root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -191,7 +202,7 @@ namespace Box3Blocks
             }
 
             return backend.EraseBlock(root, position, existing)
-                && backend.TryPlaceBlock(root, blockId, position, rotationQuarter, spawnRealtimeLightOverride);
+                && backend.TryPlaceBlock(root, blockId, position, rotationQuarter, spawnRealtimeLightOverride, colliderMode);
         }
 
         /// <summary>
@@ -206,7 +217,8 @@ namespace Box3Blocks
             Vector3Int minInclusive,
             Vector3Int maxInclusive,
             int rotationQuarter = 0,
-            bool? spawnRealtimeLightOverride = null)
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             if (backend == null || root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -214,7 +226,7 @@ namespace Box3Blocks
             }
 
             return CountInBounds(minInclusive, maxInclusive, p =>
-                ReplaceBlockAt(backend, root, blockId, p, rotationQuarter, spawnRealtimeLightOverride));
+                ReplaceBlockAt(backend, root, blockId, p, rotationQuarter, spawnRealtimeLightOverride, colliderMode));
         }
 
         /// <summary>

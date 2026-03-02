@@ -81,6 +81,7 @@ using UnityEngine;
 - 查询：`TryGetBlockIdAt`、`ExistsAt`、`GetTopY`、`GetAvailableBlockIds`、`IsTransparent`
 - 资源：`PrepareGeneratedAssets`
 - 发光默认策略：`SetSpawnRealtimeLightForEmissive`、`GetSpawnRealtimeLightForEmissive`
+- 碰撞体模式：放置/替换相关 API 支持 `colliderMode`（`None` / `TopOnly` / `Full`）
 
 ### Runtime API（运行时）
 
@@ -106,6 +107,9 @@ using UnityEngine;
 - 资源检查：`PrepareGeneratedAssets`
 - 发光默认策略：`SetSpawnRealtimeLightForEmissive`、`GetSpawnRealtimeLightForEmissive`
 - 运行时目录：`SetDefaultRuntimeCatalog`、`GetDefaultRuntimeCatalog`
+- 碰撞体模式：
+  - 放置/替换相关 API 支持 `colliderMode`（`None` / `TopOnly` / `Full`）
+  - 可设置默认模式：`SetDefaultColliderMode`、`GetDefaultColliderMode`
 
 旋转参数说明（Editor/Runtime 通用 `Box3QuarterTurn`）：
 

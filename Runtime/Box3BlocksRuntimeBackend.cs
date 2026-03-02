@@ -53,7 +53,13 @@ namespace Box3Blocks
         /// <para/>
         /// Create and place a block object.
         /// </summary>
-        public bool TryPlaceBlock(Transform root, string blockId, Vector3Int position, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
+        public bool TryPlaceBlock(
+            Transform root,
+            string blockId,
+            Vector3Int position,
+            int rotationQuarter,
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             _ = spawnRealtimeLightOverride;
             if (!Box3BlocksRuntimeBlockFactory.TryResolve(Catalog, blockId, out Box3BlocksRuntimeBlockFactory.PlacementData data))
@@ -61,7 +67,7 @@ namespace Box3Blocks
                 return false;
             }
 
-            return Box3BlocksRuntimeBlockFactory.Create(root, blockId, position, rotationQuarter, data) != null;
+            return Box3BlocksRuntimeBlockFactory.Create(root, blockId, position, rotationQuarter, data, colliderMode) != null;
         }
 
         /// <summary>

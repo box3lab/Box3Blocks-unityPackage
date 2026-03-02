@@ -74,7 +74,13 @@ namespace Box3Blocks
         /// <param name="rotationQuarter">旋转步进 / Rotation steps (90° each).</param>
         /// <param name="data">放置数据 / Placement data.</param>
         /// <returns>创建成功返回对象，否则返回 null / Created object, or null when failed.</returns>
-        public static GameObject Create(Transform parent, string blockId, Vector3Int position, int rotationQuarter, PlacementData data)
+        public static GameObject Create(
+            Transform parent,
+            string blockId,
+            Vector3Int position,
+            int rotationQuarter,
+            PlacementData data,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             if (parent == null || data.mesh == null || data.material == null || data.entry == null)
             {
@@ -102,14 +108,32 @@ namespace Box3Blocks
             Box3BlocksRuntimeRenderApplier.ApplyEmission(meshRenderer, data.entry.emitsLight ? data.entry.lightColor : Color.black);
             bool hasAnimation = Box3BlocksRuntimeRenderApplier.ConfigureFaceAnimations(meshRenderer, data.entry);
 
-            MeshCollider meshCollider = go.AddComponent<MeshCollider>();
-            meshCollider.sharedMesh = data.mesh;
+            ApplyColliderMode(go, data.mesh, colliderMode);
 
             Box3BlocksPlacedBlock marker = go.AddComponent<Box3BlocksPlacedBlock>();
             marker.BlockId = blockId;
             marker.HasAnimation = hasAnimation;
 
             return go;
+        }
+
+        private static void ApplyColliderMode(GameObject go, Mesh mesh, Box3ColliderMode colliderMode)
+        {
+            if (go == null || colliderMode == Box3ColliderMode.None)
+            {
+                return;
+            }
+
+            if (colliderMode == Box3ColliderMode.TopOnly)
+            {
+                BoxCollider box = go.AddComponent<BoxCollider>();
+                box.center = new Vector3(0f, 0.49f, 0f);
+                box.size = new Vector3(1f, 0.02f, 1f);
+                return;
+            }
+
+            MeshCollider meshCollider = go.AddComponent<MeshCollider>();
+            meshCollider.sharedMesh = mesh;
         }
     }
 }

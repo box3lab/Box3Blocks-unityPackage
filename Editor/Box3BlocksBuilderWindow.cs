@@ -896,7 +896,11 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private bool TryPlaceSingleBlock(BlockDefinition definition, Vector3Int position, bool? spawnRealtimeLightOverride = null)
+        private bool TryPlaceSingleBlock(
+            BlockDefinition definition,
+            Vector3Int position,
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             if (FindBlockAt(position) != null)
             {
@@ -944,8 +948,7 @@ namespace Box3Blocks.Editor
                 }
             }
 
-            MeshCollider meshCollider = go.AddComponent<MeshCollider>();
-            meshCollider.sharedMesh = meshToUse;
+            ApplyColliderMode(go, meshToUse, colliderMode);
 
             Box3BlocksPlacedBlock marker = go.AddComponent<Box3BlocksPlacedBlock>();
             marker.BlockId = definition.id;
@@ -959,6 +962,25 @@ namespace Box3Blocks.Editor
             RefreshOcclusionAround(position);
             EditorUtility.SetDirty(go);
             return true;
+        }
+
+        private static void ApplyColliderMode(GameObject go, Mesh mesh, Box3ColliderMode colliderMode)
+        {
+            if (go == null || colliderMode == Box3ColliderMode.None)
+            {
+                return;
+            }
+
+            if (colliderMode == Box3ColliderMode.TopOnly)
+            {
+                BoxCollider box = go.AddComponent<BoxCollider>();
+                box.center = new Vector3(0f, 0.49f, 0f);
+                box.size = new Vector3(1f, 0.02f, 1f);
+                return;
+            }
+
+            MeshCollider meshCollider = go.AddComponent<MeshCollider>();
+            meshCollider.sharedMesh = mesh;
         }
 
         private void EraseBlockBrush(Box3BlocksPlacedBlock hitBlock, Vector3Int fallbackPosition)
@@ -2571,22 +2593,46 @@ namespace Box3Blocks.Editor
             _recentBlockIds.Insert(0, blockId);
         }
 
-        public static bool TryPlaceBlockAtApi(Transform root, string blockId, Vector3Int position, bool replaceExisting = true, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
+        public static bool TryPlaceBlockAtApi(
+            Transform root,
+            string blockId,
+            Vector3Int position,
+            bool replaceExisting = true,
+            int rotationQuarter = 0,
+            bool? spawnRealtimeLight = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null && window.TryPlaceBlockAtInternal(root, blockId, position, replaceExisting, rotationQuarter, spawnRealtimeLight);
+            return window != null && window.TryPlaceBlockAtInternal(root, blockId, position, replaceExisting, rotationQuarter, spawnRealtimeLight, colliderMode);
         }
 
-        public static bool TryPlaceBlockOnTopApi(Transform root, string blockId, int x, int z, int baseY = 0, bool replaceExisting = true, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
+        public static bool TryPlaceBlockOnTopApi(
+            Transform root,
+            string blockId,
+            int x,
+            int z,
+            int baseY = 0,
+            bool replaceExisting = true,
+            int rotationQuarter = 0,
+            bool? spawnRealtimeLight = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null && window.TryPlaceBlockOnTopInternal(root, blockId, x, z, baseY, replaceExisting, rotationQuarter, spawnRealtimeLight);
+            return window != null && window.TryPlaceBlockOnTopInternal(root, blockId, x, z, baseY, replaceExisting, rotationQuarter, spawnRealtimeLight, colliderMode);
         }
 
-        public static int PlaceBlocksInBoundsApi(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting = true, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
+        public static int PlaceBlocksInBoundsApi(
+            Transform root,
+            string blockId,
+            Vector3Int minInclusive,
+            Vector3Int maxInclusive,
+            bool replaceExisting = true,
+            int rotationQuarter = 0,
+            bool? spawnRealtimeLight = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null ? window.PlaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, replaceExisting, rotationQuarter, spawnRealtimeLight) : 0;
+            return window != null ? window.PlaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, replaceExisting, rotationQuarter, spawnRealtimeLight, colliderMode) : 0;
         }
 
         public static bool EraseBlockAtApi(Transform root, Vector3Int position)
@@ -2601,16 +2647,29 @@ namespace Box3Blocks.Editor
             return window != null ? window.EraseBlocksInBoundsInternal(root, minInclusive, maxInclusive) : 0;
         }
 
-        public static bool ReplaceBlockAtApi(Transform root, string blockId, Vector3Int position, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
+        public static bool ReplaceBlockAtApi(
+            Transform root,
+            string blockId,
+            Vector3Int position,
+            int rotationQuarter = 0,
+            bool? spawnRealtimeLight = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null && window.ReplaceBlockAtInternal(root, blockId, position, rotationQuarter, spawnRealtimeLight);
+            return window != null && window.ReplaceBlockAtInternal(root, blockId, position, rotationQuarter, spawnRealtimeLight, colliderMode);
         }
 
-        public static int ReplaceBlocksInBoundsApi(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter = 0, bool? spawnRealtimeLight = null)
+        public static int ReplaceBlocksInBoundsApi(
+            Transform root,
+            string blockId,
+            Vector3Int minInclusive,
+            Vector3Int maxInclusive,
+            int rotationQuarter = 0,
+            bool? spawnRealtimeLight = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
-            return window != null ? window.ReplaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, rotationQuarter, spawnRealtimeLight) : 0;
+            return window != null ? window.ReplaceBlocksInBoundsInternal(root, blockId, minInclusive, maxInclusive, rotationQuarter, spawnRealtimeLight, colliderMode) : 0;
         }
 
         public static bool RotateBlockAtApi(Transform root, Vector3Int position, int stepQuarter = 1)
@@ -2714,17 +2773,47 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private bool TryPlaceBlockAtInternal(Transform root, string blockId, Vector3Int position, bool replaceExisting, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
+        private bool TryPlaceBlockAtInternal(
+            Transform root,
+            string blockId,
+            Vector3Int position,
+            bool replaceExisting,
+            int rotationQuarter,
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
-            return Box3BlocksCore.TryPlaceBlockAt(_apiCoreBackend, root, blockId, position, replaceExisting, rotationQuarter, spawnRealtimeLightOverride);
+            Box3Blocks.Box3ColliderMode coreColliderMode = colliderMode == Box3ColliderMode.None
+                ? Box3Blocks.Box3ColliderMode.None
+                : (colliderMode == Box3ColliderMode.TopOnly ? Box3Blocks.Box3ColliderMode.TopOnly : Box3Blocks.Box3ColliderMode.Full);
+            return Box3BlocksCore.TryPlaceBlockAt(_apiCoreBackend, root, blockId, position, replaceExisting, rotationQuarter, spawnRealtimeLightOverride, coreColliderMode);
         }
 
-        private bool TryPlaceBlockOnTopInternal(Transform root, string blockId, int x, int z, int baseY, bool replaceExisting, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
+        private bool TryPlaceBlockOnTopInternal(
+            Transform root,
+            string blockId,
+            int x,
+            int z,
+            int baseY,
+            bool replaceExisting,
+            int rotationQuarter,
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
-            return Box3BlocksCore.TryPlaceBlockOnTop(_apiCoreBackend, root, blockId, x, z, baseY, replaceExisting, rotationQuarter, spawnRealtimeLightOverride);
+            Box3Blocks.Box3ColliderMode coreColliderMode = colliderMode == Box3ColliderMode.None
+                ? Box3Blocks.Box3ColliderMode.None
+                : (colliderMode == Box3ColliderMode.TopOnly ? Box3Blocks.Box3ColliderMode.TopOnly : Box3Blocks.Box3ColliderMode.Full);
+            return Box3BlocksCore.TryPlaceBlockOnTop(_apiCoreBackend, root, blockId, x, z, baseY, replaceExisting, rotationQuarter, spawnRealtimeLightOverride, coreColliderMode);
         }
 
-        private int PlaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, bool replaceExisting, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
+        private int PlaceBlocksInBoundsInternal(
+            Transform root,
+            string blockId,
+            Vector3Int minInclusive,
+            Vector3Int maxInclusive,
+            bool replaceExisting,
+            int rotationQuarter,
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             if (root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -2743,7 +2832,10 @@ namespace Box3Blocks.Editor
                 maxInclusive,
                 replaceExisting,
                 rotationQuarter,
-                spawnRealtimeLightOverride);
+                spawnRealtimeLightOverride,
+                colliderMode == Box3ColliderMode.None
+                    ? Box3Blocks.Box3ColliderMode.None
+                    : (colliderMode == Box3ColliderMode.TopOnly ? Box3Blocks.Box3ColliderMode.TopOnly : Box3Blocks.Box3ColliderMode.Full));
 
             Undo.CollapseUndoOperations(group);
             return placed;
@@ -2770,12 +2862,28 @@ namespace Box3Blocks.Editor
             return removed;
         }
 
-        private bool ReplaceBlockAtInternal(Transform root, string blockId, Vector3Int position, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
+        private bool ReplaceBlockAtInternal(
+            Transform root,
+            string blockId,
+            Vector3Int position,
+            int rotationQuarter,
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
-            return Box3BlocksCore.ReplaceBlockAt(_apiCoreBackend, root, blockId, position, rotationQuarter, spawnRealtimeLightOverride);
+            Box3Blocks.Box3ColliderMode coreColliderMode = colliderMode == Box3ColliderMode.None
+                ? Box3Blocks.Box3ColliderMode.None
+                : (colliderMode == Box3ColliderMode.TopOnly ? Box3Blocks.Box3ColliderMode.TopOnly : Box3Blocks.Box3ColliderMode.Full);
+            return Box3BlocksCore.ReplaceBlockAt(_apiCoreBackend, root, blockId, position, rotationQuarter, spawnRealtimeLightOverride, coreColliderMode);
         }
 
-        private int ReplaceBlocksInBoundsInternal(Transform root, string blockId, Vector3Int minInclusive, Vector3Int maxInclusive, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
+        private int ReplaceBlocksInBoundsInternal(
+            Transform root,
+            string blockId,
+            Vector3Int minInclusive,
+            Vector3Int maxInclusive,
+            int rotationQuarter,
+            bool? spawnRealtimeLightOverride = null,
+            Box3ColliderMode colliderMode = Box3ColliderMode.Full)
         {
             if (root == null || string.IsNullOrWhiteSpace(blockId))
             {
@@ -2792,7 +2900,10 @@ namespace Box3Blocks.Editor
                 minInclusive,
                 maxInclusive,
                 rotationQuarter,
-                spawnRealtimeLightOverride);
+                spawnRealtimeLightOverride,
+                colliderMode == Box3ColliderMode.None
+                    ? Box3Blocks.Box3ColliderMode.None
+                    : (colliderMode == Box3ColliderMode.TopOnly ? Box3Blocks.Box3ColliderMode.TopOnly : Box3Blocks.Box3ColliderMode.Full));
 
             Undo.CollapseUndoOperations(group);
             return replaced;
@@ -2862,7 +2973,13 @@ namespace Box3Blocks.Editor
                 }
             }
 
-            public bool TryPlaceBlock(Transform root, string blockId, Vector3Int position, int rotationQuarter, bool? spawnRealtimeLightOverride = null)
+            public bool TryPlaceBlock(
+                Transform root,
+                string blockId,
+                Vector3Int position,
+                int rotationQuarter,
+                bool? spawnRealtimeLightOverride = null,
+                Box3Blocks.Box3ColliderMode colliderMode = Box3Blocks.Box3ColliderMode.Full)
             {
                 if (_owner == null || root == null || string.IsNullOrWhiteSpace(blockId))
                 {
@@ -2887,7 +3004,10 @@ namespace Box3Blocks.Editor
                 {
                     _owner._root = root;
                     definition.placementRotationQuarter = rotationQuarter & 3;
-                    bool placed = _owner.TryPlaceSingleBlock(definition, position, spawnRealtimeLightOverride);
+                    Box3ColliderMode editorColliderMode = colliderMode == Box3Blocks.Box3ColliderMode.None
+                        ? Box3ColliderMode.None
+                        : (colliderMode == Box3Blocks.Box3ColliderMode.TopOnly ? Box3ColliderMode.TopOnly : Box3ColliderMode.Full);
+                    bool placed = _owner.TryPlaceSingleBlock(definition, position, spawnRealtimeLightOverride, editorColliderMode);
                     if (placed)
                     {
                         _owner.RegisterRecentPlaced(definition.id);
@@ -3002,6 +3122,5 @@ namespace Box3Blocks.Editor
             ids.Sort(StringComparer.OrdinalIgnoreCase);
             return ids;
         }
-
     }
 }
