@@ -1,6 +1,7 @@
 # Box3 Blocks for Unity
 
-一个 Unity 编辑器扩展包，用于导入、导出和编辑神岛方块世界。
+一个 Unity 方块工具包，用于导入、导出和编辑神岛方块世界。
+还提供可复用 API，支持在编辑器扩展脚本或运行时脚本中调用，统一进行方块放置、删除、替换、旋转与查询。
 
 ## 环境要求
 
@@ -50,6 +51,15 @@ https://github.com/box3lab/Box3Blocks-unityPackage.git
 
 ## 二次开发 API
 
+可通过 Package Manager 导入示例：
+
+1. 打开 `Window > Package Manager`
+2. 选中 `Box3 Blocks`
+3. 进入 `Samples` 标签页
+4. 点击导入 Demo
+
+### Editor API（编辑器）
+
 命名空间：
 
 ```csharp
@@ -62,83 +72,44 @@ using UnityEngine;
 - `Box3Blocks.Editor.Box3Api`
 - `Box3Blocks.Editor.Box3QuarterTurn`
 
-### 使用前准备
+核心方法（Editor）：
+
+- 放置：`TryPlaceBlockAt`、`TryPlaceBlockOnTop`、`PlaceBlocksInBounds`
+- 删除：`EraseBlockAt`、`EraseBlocksInBounds`
+- 替换：`ReplaceBlockAt`、`ReplaceBlocksInBounds`
+- 旋转：`RotateBlockAt`、`RotateBlocksInBounds`
+- 查询：`TryGetBlockIdAt`、`ExistsAt`、`GetTopY`、`GetAvailableBlockIds`、`IsTransparent`
+- 资源：`PrepareGeneratedAssets`
+- 发光默认策略：`SetSpawnRealtimeLightForEmissive`、`GetSpawnRealtimeLightForEmissive`
+
+### Runtime API（运行时）
+
+命名空间：
 
 ```csharp
-[UnityEditor.MenuItem("Tools/Box3/API Example/Init")]
-private static void Init()
-{
-    var rootGo = GameObject.Find("Box3Root") ?? new GameObject("Box3Root");
-    Box3Api.PrepareGeneratedAssets();
-    Debug.Log($"Block count: {Box3Api.GetAvailableBlockIds().Count}");
-}
+using Box3Blocks;
+using UnityEngine;
 ```
 
-### 放置 API
+入口类型：
 
-- `TryPlaceBlockAt(root, blockId, position, replaceExisting = true, rotationQuarter = Box3QuarterTurn.R0)`
-- `TryPlaceBlockOnTop(root, blockId, x, z, baseY = 0, replaceExisting = true, rotationQuarter = Box3QuarterTurn.R0)`
-- `PlaceBlocksInBounds(root, blockId, minInclusive, maxInclusive, replaceExisting = true, rotationQuarter = Box3QuarterTurn.R0)`
+- `Box3Blocks.Box3Api`
+- `Box3Blocks.Box3QuarterTurn`
 
-示例：
+核心方法（Runtime）：
 
-```csharp
-var root = GameObject.Find("Box3Root")?.transform;
-if (root == null) return;
+- 放置：`TryPlaceBlockAt`、`TryPlaceBlockOnTop`、`PlaceBlocksInBounds`
+- 删除：`EraseBlockAt`、`EraseBlocksInBounds`
+- 替换：`ReplaceBlockAt`、`ReplaceBlocksInBounds`
+- 旋转：`RotateBlockAt`、`RotateBlocksInBounds`
+- 查询：`TryGetBlockIdAt`、`ExistsAt`、`GetTopY`、`GetAvailableBlockIds`、`IsTransparent`
+- 资源检查：`PrepareGeneratedAssets`
+- 发光默认策略：`SetSpawnRealtimeLightForEmissive`、`GetSpawnRealtimeLightForEmissive`
+- 运行时目录：`SetDefaultRuntimeCatalog`、`GetDefaultRuntimeCatalog`
 
-Box3Api.PrepareGeneratedAssets();
-
-Box3Api.TryPlaceBlockAt(root, "stone", new Vector3Int(10, 5, 10), true, Box3QuarterTurn.R90);
-Box3Api.TryPlaceBlockOnTop(root, "blue_decorative_light", 12, 12, 0, true, Box3QuarterTurn.R0);
-
-int placed = Box3Api.PlaceBlocksInBounds(
-    root,
-    "grass",
-    new Vector3Int(0, 0, 0),
-    new Vector3Int(4, 2, 4),
-    true,
-    Box3QuarterTurn.R0);
-
-Debug.Log($"Placed: {placed}");
-```
-
-### 删除 / 替换 / 旋转 API
-
-- `EraseBlockAt(root, position)`
-- `EraseBlocksInBounds(root, minInclusive, maxInclusive)`
-- `ReplaceBlockAt(root, blockId, position, rotationQuarter = Box3QuarterTurn.R0)`
-- `ReplaceBlocksInBounds(root, blockId, minInclusive, maxInclusive, rotationQuarter = Box3QuarterTurn.R0)`
-- `RotateBlockAt(root, position, stepQuarter = Box3QuarterTurn.R90)`
-- `RotateBlocksInBounds(root, minInclusive, maxInclusive, stepQuarter = Box3QuarterTurn.R90)`
-
-旋转参数说明（`Box3QuarterTurn`）：
+旋转参数说明（Editor/Runtime 通用 `Box3QuarterTurn`）：
 
 - `R0 = 0°`
 - `R90 = 90°`
 - `R180 = 180°`
 - `R270 = 270°`
-
-### 查询 API
-
-- `TryGetBlockIdAt(root, position, out blockId)`
-- `ExistsAt(root, position)`
-- `GetTopY(root, x, z, fallbackY = 0)`
-- `GetAvailableBlockIds()`
-- `IsTransparent(blockId)`
-- `PrepareGeneratedAssets()`：主动生成 `Assets/Box3` 下的网格/图集/材质
-
-示例：
-
-```csharp
-var root = GameObject.Find("Box3Root")?.transform;
-if (root == null) return;
-
-var p = new Vector3Int(5, 2, 5);
-if (Box3Api.TryGetBlockIdAt(root, p, out var id))
-{
-    Debug.Log($"Block at {p}: {id}, transparent={Box3Api.IsTransparent(id)}");
-}
-
-int topY = Box3Api.GetTopY(root, 5, 5, 0);
-Debug.Log($"TopY(5,5) = {topY}");
-```
