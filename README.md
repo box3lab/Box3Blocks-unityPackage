@@ -91,6 +91,7 @@ using UnityEngine;
 - 旋转：`RotateBlockAt`、`RotateBlocksInBounds`
 - 查询：`TryGetBlockIdAt`、`ExistsAt`、`GetTopY`、`GetAvailableBlockIds`、`IsTransparent`
 - 资源：`PrepareGeneratedAssets`
+- Chunk 构建：`BuildChunkFromRoot`
 - 发光默认策略：`SetSpawnRealtimeLightForEmissive`、`GetSpawnRealtimeLightForEmissive`
 - 碰撞体模式：放置/替换相关 API 支持 `colliderMode`（`None` / `TopOnly` / `Full`）
 

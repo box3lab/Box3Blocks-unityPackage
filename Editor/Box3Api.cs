@@ -11,6 +11,35 @@ namespace Box3Blocks.Editor
     public static class Box3Api
     {
         /// <summary>
+        /// 实时点光源生成策略。
+        /// <para/>
+        /// Realtime light spawn strategy for GZ chunk import.
+        /// </summary>
+        public enum Box3RealtimeLightMode
+        {
+            /// <summary>
+            /// 全不用。
+            /// <para/>
+            /// Disable realtime lights.
+            /// </summary>
+            None = 0,
+
+            /// <summary>
+            /// 全部发光方块都生成。
+            /// <para/>
+            /// Spawn lights for all emissive blocks.
+            /// </summary>
+            AllEmissive = 1,
+
+            /// <summary>
+            /// 仅导入数据里带有光照信息的发光方块生成。
+            /// <para/>
+            /// Spawn lights only for emissive blocks with payload light data.
+            /// </summary>
+            DataOnly = 2
+        }
+
+        /// <summary>
         /// 在指定格子坐标尝试放置一个方块。
         /// <para/>
         /// Try placing a block at a grid position.
@@ -301,6 +330,59 @@ namespace Box3Blocks.Editor
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// 从场景中已有 root 方块数据直接构建 Chunk。
+        /// <para/>
+        /// Build chunk meshes directly from an existing scene root.
+        /// </summary>
+        /// <param name="sourceRoot">源方块根节点（读取其下 `Box3BlocksPlacedBlock`）。 / Source root containing placed blocks.</param>
+        /// <param name="parent">导入父节点；null 时自动创建。 / Import parent; null creates one automatically.</param>
+        /// <param name="origin">
+        /// 额外原点偏移；会加到源 root 最小角点上。
+        /// <para/>
+        /// Extra origin offset added on top of source-root min corner.
+        /// </param>
+        /// <param name="ignoreBarrier">是否忽略屏障方块。 / Whether to ignore barrier blocks.</param>
+        /// <param name="clearPrevious">是否替换上次导入根节点。 / Whether to replace previous import root.</param>
+        /// <param name="realtimeLightMode">实时点光源生成策略。 / Realtime light spawn mode.</param>
+        /// <param name="colliderMode">Chunk 碰撞模式。 / Chunk collider mode.</param>
+        /// <param name="chunkSize">Chunk 尺寸。 / Chunk size.</param>
+        /// <param name="chunksPerTick">每 Tick 构建的 Chunk 数。 / Chunks built per tick.</param>
+        /// <param name="voxelsPerTick">每 Tick 处理体素数。 / Voxels processed per tick.</param>
+        /// <param name="deleteSourceBlocksAfterBuild">
+        /// 构建成功后是否删除 sourceRoot 下原始方块（仅删除带 `Box3BlocksPlacedBlock` 的对象）。
+        /// <para/>
+        /// Whether to delete original placed blocks under sourceRoot after successful chunk build
+        /// (only objects with `Box3BlocksPlacedBlock` are removed).
+        /// </param>
+        /// <returns>构建成功返回 true。 / Returns true when build succeeds.</returns>
+        public static bool BuildChunkFromRoot(
+            Transform sourceRoot,
+            Transform parent = null,
+            Vector3Int origin = default,
+            bool ignoreBarrier = false,
+            bool clearPrevious = true,
+            Box3RealtimeLightMode realtimeLightMode = Box3RealtimeLightMode.None,
+            Box3ColliderMode colliderMode = Box3ColliderMode.None,
+            int chunkSize = 32,
+            int chunksPerTick = 6,
+            int voxelsPerTick = 25000,
+            bool deleteSourceBlocksAfterBuild = false)
+        {
+            return Box3BlocksGzImportWindow.ImportChunkFromRootApi(
+                sourceRoot,
+                parent,
+                origin,
+                ignoreBarrier,
+                clearPrevious,
+                (int)realtimeLightMode,
+                colliderMode,
+                chunkSize,
+                chunksPerTick,
+                voxelsPerTick,
+                deleteSourceBlocksAfterBuild);
         }
 
         /// <summary>

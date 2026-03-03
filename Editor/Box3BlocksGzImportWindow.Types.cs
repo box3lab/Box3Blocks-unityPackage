@@ -147,32 +147,6 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private readonly struct PendingBlock
-        {
-            public readonly Vector3Int pos;
-            public readonly int rot;
-            public readonly PreparedBlock prepared;
-            public readonly string blockName;
-            public readonly bool hasLightData;
-            public readonly Color lightColor;
-            public readonly float lightIntensity;
-            public readonly float lightRange;
-            public readonly Vector3 lightOffset;
-
-            public PendingBlock(Vector3Int pos, int rot, PreparedBlock prepared, string blockName, bool hasLightData, Color lightColor, float lightIntensity, float lightRange, Vector3 lightOffset)
-            {
-                this.pos = pos;
-                this.rot = rot;
-                this.prepared = prepared;
-                this.blockName = blockName;
-                this.hasLightData = hasLightData;
-                this.lightColor = lightColor;
-                this.lightIntensity = lightIntensity;
-                this.lightRange = lightRange;
-                this.lightOffset = lightOffset;
-            }
-        }
-
         private readonly struct EmissiveLightVoxel
         {
             public readonly Vector3Int pos;
@@ -224,15 +198,8 @@ namespace Box3Blocks.Editor
         {
             Idle,
             ProcessVoxels,
-            PlaceSingleBlocks,
             BuildChunks,
             Done
-        }
-
-        private enum ImportMode
-        {
-            Chunk = 0,
-            SingleBlock = 1
         }
 
         private sealed class FaceAnimationSpec

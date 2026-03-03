@@ -383,19 +383,24 @@ namespace Box3Blocks.Editor
 
             EnsureFolders();
             Material material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+            Shader transparentShader = ResolveBuilderTransparentShader();
+            if (transparentShader == null)
+            {
+                return material;
+            }
+
             if (material == null)
             {
-                Shader shader = Shader.Find("Unlit/Transparent");
-                if (shader == null)
-                {
-                    shader = Shader.Find("Standard");
-                }
-
-                material = new Material(shader)
+                material = new Material(transparentShader)
                 {
                     name = "WorldBuilderAtlas_Transparent"
                 };
                 AssetDatabase.CreateAsset(material, materialPath);
+            }
+            else if (material.shader == null || IsChunkShader(material.shader))
+            {
+                // Generated Builder atlas material must never use chunk shaders.
+                material.shader = transparentShader;
             }
 
             material.mainTexture = atlasTexture;
@@ -403,6 +408,31 @@ namespace Box3Blocks.Editor
 
             EditorUtility.SetDirty(material);
             return material;
+        }
+
+        private static Shader ResolveBuilderTransparentShader()
+        {
+            Shader shader = Shader.Find("Unlit/Transparent");
+            if (shader != null)
+            {
+                return shader;
+            }
+
+            shader = Shader.Find("Standard");
+            if (shader != null)
+            {
+                return shader;
+            }
+
+            shader = Shader.Find("Universal Render Pipeline/Lit");
+            return shader;
+        }
+
+        private static bool IsChunkShader(Shader shader)
+        {
+            return shader != null
+                && !string.IsNullOrWhiteSpace(shader.name)
+                && shader.name.StartsWith("Box3Blocks/Chunk", StringComparison.OrdinalIgnoreCase);
         }
 
         private static Texture2D BuildBumpAtlasTexture(Texture2D colorAtlas, List<string> colorTexturePaths)
@@ -927,6 +957,16 @@ namespace Box3Blocks.Editor
             if (material == null)
             {
                 return;
+            }
+
+            if (material.HasProperty("_Mode"))
+            {
+                material.SetFloat("_Mode", 3f); // Standard: Transparent
+            }
+
+            if (material.HasProperty("_Surface"))
+            {
+                material.SetFloat("_Surface", 1f); // URP: Transparent
             }
 
             material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
