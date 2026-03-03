@@ -913,6 +913,16 @@ namespace Box3Blocks.Editor
 
                                 animator.SetAnimations(prepared.animations, prepared.faceMainTexSt);
                             }
+
+                            AnimatedChunkGroupMeta meta = animatedGo.GetComponent<AnimatedChunkGroupMeta>();
+                            if (meta == null)
+                            {
+                                meta = animatedGo.AddComponent<AnimatedChunkGroupMeta>();
+                            }
+
+                            meta.groupKey = kv.Key;
+                            meta.faceMainTexSt = prepared != null && prepared.faceMainTexSt != null ? (Vector4[])prepared.faceMainTexSt.Clone() : null;
+                            meta.animations = prepared != null && prepared.animations != null ? (Box3BlocksTextureAnimator.FaceAnimation[])prepared.animations.Clone() : null;
                         }
                         else
                         {
@@ -969,6 +979,11 @@ namespace Box3Blocks.Editor
             EditorApplication.update -= OnEditorUpdate;
             EditorUtility.ClearProgressBar();
 
+            if (_importMode == ImportMode.Chunk && !_chunkMergeAnimatedAsStatic)
+            {
+                MergeAnimatedChunkGroupsAcrossChunks();
+            }
+
             if (_importRoot != null)
             {
                 Selection.activeObject = _importRoot.gameObject;
@@ -991,6 +1006,201 @@ namespace Box3Blocks.Editor
             _status = summary.Replace("\n", " | ");
             EditorUtility.DisplayDialog(L("voxel.window.title"), summary, L("dialog.ok"));
             Repaint();
+        }
+
+        private void MergeAnimatedChunkGroupsAcrossChunks()
+        {
+            if (_importRoot == null)
+            {
+                return;
+            }
+
+            AnimatedChunkGroupMeta[] metas = _importRoot.GetComponentsInChildren<AnimatedChunkGroupMeta>(true);
+            if (metas == null || metas.Length <= 1)
+            {
+                return;
+            }
+
+            Dictionary<string, List<AnimatedChunkGroupMeta>> groups = new Dictionary<string, List<AnimatedChunkGroupMeta>>();
+            for (int i = 0; i < metas.Length; i++)
+            {
+                AnimatedChunkGroupMeta meta = metas[i];
+                if (meta == null || string.IsNullOrWhiteSpace(meta.groupKey) || meta.gameObject == null)
+                {
+                    continue;
+                }
+
+                if (!groups.TryGetValue(meta.groupKey, out List<AnimatedChunkGroupMeta> list))
+                {
+                    list = new List<AnimatedChunkGroupMeta>(8);
+                    groups.Add(meta.groupKey, list);
+                }
+
+                list.Add(meta);
+            }
+
+            int mergedIndex = 0;
+            foreach (KeyValuePair<string, List<AnimatedChunkGroupMeta>> kv in groups)
+            {
+                List<AnimatedChunkGroupMeta> list = kv.Value;
+                if (list == null || list.Count <= 1)
+                {
+                    continue;
+                }
+
+                MeshRenderer sampleRenderer = list[0] != null ? list[0].GetComponent<MeshRenderer>() : null;
+                if (sampleRenderer == null || sampleRenderer.sharedMaterials == null || sampleRenderer.sharedMaterials.Length == 0)
+                {
+                    continue;
+                }
+
+                List<CombineInstance>[] bySubmesh = new List<CombineInstance>[SideOrder.Length];
+                for (int s = 0; s < SideOrder.Length; s++)
+                {
+                    bySubmesh[s] = new List<CombineInstance>(list.Count);
+                }
+
+                for (int i = 0; i < list.Count; i++)
+                {
+                    AnimatedChunkGroupMeta meta = list[i];
+                    if (meta == null || meta.gameObject == null)
+                    {
+                        continue;
+                    }
+
+                    MeshFilter mf = meta.GetComponent<MeshFilter>();
+                    if (mf == null || mf.sharedMesh == null)
+                    {
+                        continue;
+                    }
+
+                    Mesh mesh = mf.sharedMesh;
+                    int subCount = Mathf.Min(mesh.subMeshCount, SideOrder.Length);
+                    Matrix4x4 trs = _importRoot.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+                    for (int s = 0; s < subCount; s++)
+                    {
+                        bySubmesh[s].Add(new CombineInstance
+                        {
+                            mesh = mesh,
+                            subMeshIndex = s,
+                            transform = trs
+                        });
+                    }
+                }
+
+                Mesh merged = CombineAnimatedSubmeshes(bySubmesh);
+                if (merged == null)
+                {
+                    continue;
+                }
+
+                string mergedName = $"animated_merged_{SanitizeName(kv.Key)}";
+                GameObject mergedGo = new GameObject(mergedName);
+                mergedGo.transform.SetParent(_importRoot, false);
+                MeshFilter mergedFilter = mergedGo.AddComponent<MeshFilter>();
+                MeshRenderer mergedRenderer = mergedGo.AddComponent<MeshRenderer>();
+
+                string assetPath = $"{GeneratedMeshFolder}/{mergedName}_{mergedIndex}.asset";
+                if (AssetDatabase.LoadAssetAtPath<Mesh>(assetPath) != null)
+                {
+                    AssetDatabase.DeleteAsset(assetPath);
+                }
+                AssetDatabase.CreateAsset(merged, assetPath);
+                mergedFilter.sharedMesh = merged;
+                mergedRenderer.sharedMaterials = sampleRenderer.sharedMaterials;
+
+                AnimatedChunkGroupMeta mergedMeta = mergedGo.AddComponent<AnimatedChunkGroupMeta>();
+                mergedMeta.groupKey = kv.Key;
+                mergedMeta.faceMainTexSt = list[0].faceMainTexSt;
+                mergedMeta.animations = list[0].animations;
+
+                if (mergedMeta.animations != null && mergedMeta.animations.Length > 0)
+                {
+                    Box3BlocksTextureAnimator animator = mergedGo.AddComponent<Box3BlocksTextureAnimator>();
+                    animator.SetAnimations(mergedMeta.animations, mergedMeta.faceMainTexSt);
+                }
+
+                for (int i = 0; i < list.Count; i++)
+                {
+                    AnimatedChunkGroupMeta meta = list[i];
+                    if (meta != null && meta.gameObject != null)
+                    {
+                        DestroyImmediate(meta.gameObject);
+                    }
+                }
+
+                mergedIndex++;
+            }
+        }
+
+        private static Mesh CombineAnimatedSubmeshes(List<CombineInstance>[] bySubmesh)
+        {
+            if (bySubmesh == null || bySubmesh.Length == 0)
+            {
+                return null;
+            }
+
+            List<Vector3> vertices = new List<Vector3>();
+            List<Vector2> uvs = new List<Vector2>();
+            List<int>[] trisBySub = new List<int>[SideOrder.Length];
+            for (int s = 0; s < SideOrder.Length; s++)
+            {
+                trisBySub[s] = new List<int>();
+            }
+
+            for (int s = 0; s < SideOrder.Length; s++)
+            {
+                List<CombineInstance> combines = bySubmesh[s];
+                if (combines == null || combines.Count == 0)
+                {
+                    continue;
+                }
+
+                Mesh temp = new Mesh { indexFormat = IndexFormat.UInt32 };
+                temp.CombineMeshes(combines.ToArray(), true, true, false);
+
+                int baseIndex = vertices.Count;
+                Vector3[] tempVerts = temp.vertices;
+                Vector2[] tempUv = temp.uv;
+                int[] tempTris = temp.triangles;
+                vertices.AddRange(tempVerts);
+                if (tempUv != null && tempUv.Length == tempVerts.Length)
+                {
+                    uvs.AddRange(tempUv);
+                }
+                else
+                {
+                    for (int i = 0; i < tempVerts.Length; i++)
+                    {
+                        uvs.Add(Vector2.zero);
+                    }
+                }
+
+                for (int i = 0; i < tempTris.Length; i++)
+                {
+                    trisBySub[s].Add(baseIndex + tempTris[i]);
+                }
+
+                DestroyImmediate(temp);
+            }
+
+            if (vertices.Count == 0)
+            {
+                return null;
+            }
+
+            Mesh mesh = new Mesh { indexFormat = IndexFormat.UInt32 };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.subMeshCount = SideOrder.Length;
+            for (int s = 0; s < SideOrder.Length; s++)
+            {
+                mesh.SetTriangles(trisBySub[s], s, true);
+            }
+
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         private void ExportGz()
@@ -1803,51 +2013,128 @@ namespace Box3Blocks.Editor
                 return null;
             }
 
-            List<Vector3> vertices = new List<Vector3>(group.Count * 24);
-            List<Vector2> uvs = new List<Vector2>(group.Count * 24);
+            int size = Mathf.Max(1, _chunkSize);
+            int baseX = key.x * size;
+            int baseY = key.y * size;
+            int baseZ = key.z * size;
+            int layers = size + 1;
+            int cellsPerLayer = size * size;
+            int rot = group[0].rot & 3;
+
+            int[] localFaceByDir = new int[WorldFaceDirs.Length];
+            for (int d = 0; d < WorldFaceDirs.Length; d++)
+            {
+                localFaceByDir[d] = ResolveLocalFaceIndexForWorldDir(rot, WorldFaceDirs[d]);
+            }
+
+            int[][] masks = new int[WorldFaceDirs.Length][];
+            for (int d = 0; d < WorldFaceDirs.Length; d++)
+            {
+                masks[d] = new int[layers * cellsPerLayer];
+                for (int j = 0; j < masks[d].Length; j++)
+                {
+                    masks[d][j] = 0;
+                }
+            }
+
+            for (int i = 0; i < group.Count; i++)
+            {
+                AnimatedChunkVoxel voxel = group[i];
+                int lx = voxel.pos.x - baseX;
+                int ly = voxel.pos.y - baseY;
+                int lz = voxel.pos.z - baseZ;
+                if (lx < 0 || ly < 0 || lz < 0 || lx >= size || ly >= size || lz >= size)
+                {
+                    continue;
+                }
+
+                for (int d = 0; d < WorldFaceDirs.Length; d++)
+                {
+                    Vector3Int worldDir = WorldFaceDirs[d];
+                    if (cullSet != null && cullSet.Contains(voxel.pos + worldDir))
+                    {
+                        continue;
+                    }
+
+                    MapFaceToMaskCoordinates(d, lx, ly, lz, out int layer, out int u, out int v);
+                    if (layer < 0 || layer >= layers || u < 0 || u >= size || v < 0 || v >= size)
+                    {
+                        continue;
+                    }
+
+                    int idx = (layer * cellsPerLayer) + (v * size) + u;
+                    masks[d][idx] = 1;
+                }
+            }
+
+            List<Vector3> vertices = new List<Vector3>(group.Count * 8);
+            List<Vector2> uvs = new List<Vector2>(group.Count * 8);
             List<int>[] subTris = new List<int>[SideOrder.Length];
             for (int s = 0; s < SideOrder.Length; s++)
             {
                 subTris[s] = new List<int>(group.Count * 6);
             }
 
-            for (int i = 0; i < group.Count; i++)
+            for (int d = 0; d < WorldFaceDirs.Length; d++)
             {
-                AnimatedChunkVoxel voxel = group[i];
-                PreparedBlock prepared = voxel.prepared;
-                if (prepared == null || prepared.faceMainTexSt == null || prepared.faceMainTexSt.Length < SideOrder.Length)
+                int localFace = localFaceByDir[d];
+                if (localFace < 0 || localFace >= SideOrder.Length)
                 {
                     continue;
                 }
 
-                Quaternion rotQ = _rotLookup[voxel.rot & 3];
-                for (int localFace = 0; localFace < SideOrder.Length; localFace++)
+                int[] mask = masks[d];
+                for (int layer = 0; layer < layers; layer++)
                 {
-                    Vector3Int worldDir = ToVector3Int(rotQ * FaceNormals[localFace]);
-                    if (cullSet != null && cullSet.Contains(voxel.pos + worldDir))
+                    int layerOffset = layer * cellsPerLayer;
+                    for (int v = 0; v < size; v++)
                     {
-                        continue;
+                        for (int u = 0; u < size; u++)
+                        {
+                            int cellIndex = layerOffset + (v * size) + u;
+                            if (mask[cellIndex] == 0)
+                            {
+                                continue;
+                            }
+
+                            int width = 1;
+                            while (u + width < size && mask[layerOffset + (v * size) + (u + width)] != 0)
+                            {
+                                width++;
+                            }
+
+                            int height = 1;
+                            bool canGrow = true;
+                            while (v + height < size && canGrow)
+                            {
+                                int rowOffset = layerOffset + ((v + height) * size);
+                                for (int x = 0; x < width; x++)
+                                {
+                                    if (mask[rowOffset + u + x] == 0)
+                                    {
+                                        canGrow = false;
+                                        break;
+                                    }
+                                }
+
+                                if (canGrow)
+                                {
+                                    height++;
+                                }
+                            }
+
+                            AddGreedyAnimatedQuad(d, key, size, layer, u, v, width, height, vertices, uvs, subTris[localFace]);
+
+                            for (int yy = 0; yy < height; yy++)
+                            {
+                                int rowOffset = layerOffset + ((v + yy) * size);
+                                for (int xx = 0; xx < width; xx++)
+                                {
+                                    mask[rowOffset + u + xx] = 0;
+                                }
+                            }
+                        }
                     }
-
-                    int baseIndex = vertices.Count;
-                    for (int v = 0; v < 4; v++)
-                    {
-                        Vector3 rotated = rotQ * FaceVertices[localFace][v];
-                        vertices.Add(rotated + (Vector3)voxel.pos);
-                    }
-
-                    uvs.Add(new Vector2(0f, 0f));
-                    uvs.Add(new Vector2(1f, 0f));
-                    uvs.Add(new Vector2(1f, 1f));
-                    uvs.Add(new Vector2(0f, 1f));
-
-                    List<int> faceTris = subTris[localFace];
-                    faceTris.Add(baseIndex + 0);
-                    faceTris.Add(baseIndex + 2);
-                    faceTris.Add(baseIndex + 1);
-                    faceTris.Add(baseIndex + 0);
-                    faceTris.Add(baseIndex + 3);
-                    faceTris.Add(baseIndex + 2);
                 }
             }
 
@@ -1872,6 +2159,144 @@ namespace Box3Blocks.Editor
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
+        }
+
+        private int ResolveLocalFaceIndexForWorldDir(int rot, Vector3Int worldDir)
+        {
+            Quaternion q = _rotLookup[rot & 3];
+            for (int i = 0; i < SideOrder.Length; i++)
+            {
+                Vector3Int dir = ToVector3Int(q * FaceNormals[i]);
+                if (dir == worldDir)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private static void AddGreedyAnimatedQuad(
+            int dirIndex,
+            ChunkKey key,
+            int chunkSize,
+            int layer,
+            int u,
+            int v,
+            int width,
+            int height,
+            List<Vector3> vertices,
+            List<Vector2> uvs,
+            List<int> triangles)
+        {
+            float bx = key.x * chunkSize;
+            float by = key.y * chunkSize;
+            float bz = key.z * chunkSize;
+
+            Vector3 v0;
+            Vector3 v1;
+            Vector3 v2;
+            Vector3 v3;
+            switch (dirIndex)
+            {
+                case 0:
+                {
+                    float x = (key.x * chunkSize) + layer - 0.5f;
+                    float yy0 = by + v - 0.5f;
+                    float yy1 = by + v + height - 0.5f;
+                    float zz0 = bz + u - 0.5f;
+                    float zz1 = bz + u + width - 0.5f;
+                    v0 = new Vector3(x, yy0, zz1);
+                    v1 = new Vector3(x, yy0, zz0);
+                    v2 = new Vector3(x, yy1, zz0);
+                    v3 = new Vector3(x, yy1, zz1);
+                    break;
+                }
+                case 1:
+                {
+                    float x = (key.x * chunkSize) + layer - 0.5f;
+                    float yy0 = by + v - 0.5f;
+                    float yy1 = by + v + height - 0.5f;
+                    float zz0 = bz + u - 0.5f;
+                    float zz1 = bz + u + width - 0.5f;
+                    v0 = new Vector3(x, yy0, zz0);
+                    v1 = new Vector3(x, yy0, zz1);
+                    v2 = new Vector3(x, yy1, zz1);
+                    v3 = new Vector3(x, yy1, zz0);
+                    break;
+                }
+                case 2:
+                {
+                    float y = (key.y * chunkSize) + layer - 0.5f;
+                    float xx0 = bx + u - 0.5f;
+                    float xx1 = bx + u + width - 0.5f;
+                    float zz0 = bz + v - 0.5f;
+                    float zz1 = bz + v + height - 0.5f;
+                    v0 = new Vector3(xx0, y, zz1);
+                    v1 = new Vector3(xx1, y, zz1);
+                    v2 = new Vector3(xx1, y, zz0);
+                    v3 = new Vector3(xx0, y, zz0);
+                    break;
+                }
+                case 3:
+                {
+                    float y = (key.y * chunkSize) + layer - 0.5f;
+                    float xx0 = bx + u - 0.5f;
+                    float xx1 = bx + u + width - 0.5f;
+                    float zz0 = bz + v - 0.5f;
+                    float zz1 = bz + v + height - 0.5f;
+                    v0 = new Vector3(xx0, y, zz0);
+                    v1 = new Vector3(xx1, y, zz0);
+                    v2 = new Vector3(xx1, y, zz1);
+                    v3 = new Vector3(xx0, y, zz1);
+                    break;
+                }
+                case 4:
+                {
+                    float z = (key.z * chunkSize) + layer - 0.5f;
+                    float xx0 = bx + u - 0.5f;
+                    float xx1 = bx + u + width - 0.5f;
+                    float yy0 = by + v - 0.5f;
+                    float yy1 = by + v + height - 0.5f;
+                    v0 = new Vector3(xx0, yy0, z);
+                    v1 = new Vector3(xx1, yy0, z);
+                    v2 = new Vector3(xx1, yy1, z);
+                    v3 = new Vector3(xx0, yy1, z);
+                    break;
+                }
+                default:
+                {
+                    float z = (key.z * chunkSize) + layer - 0.5f;
+                    float xx0 = bx + u - 0.5f;
+                    float xx1 = bx + u + width - 0.5f;
+                    float yy0 = by + v - 0.5f;
+                    float yy1 = by + v + height - 0.5f;
+                    v0 = new Vector3(xx1, yy0, z);
+                    v1 = new Vector3(xx0, yy0, z);
+                    v2 = new Vector3(xx0, yy1, z);
+                    v3 = new Vector3(xx1, yy1, z);
+                    break;
+                }
+            }
+
+            int baseIndex = vertices.Count;
+            vertices.Add(v0);
+            vertices.Add(v1);
+            vertices.Add(v2);
+            vertices.Add(v3);
+
+            // Keep 0..1 per merged face to preserve compatibility with _MainTex_ST animation.
+            uvs.Add(new Vector2(0f, 0f));
+            uvs.Add(new Vector2(1f, 0f));
+            uvs.Add(new Vector2(1f, 1f));
+            uvs.Add(new Vector2(0f, 1f));
+
+            triangles.Add(baseIndex + 0);
+            triangles.Add(baseIndex + 2);
+            triangles.Add(baseIndex + 1);
+            triangles.Add(baseIndex + 0);
+            triangles.Add(baseIndex + 3);
+            triangles.Add(baseIndex + 2);
         }
 
         private Mesh BuildOpaqueChunkMesh(ChunkKey key, List<OpaqueVoxel> voxels, HashSet<Vector3Int> opaqueVoxels)

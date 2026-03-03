@@ -241,5 +241,12 @@ namespace Box3Blocks.Editor
             public float frameDuration = 0.05f;
             public int[] frames = Array.Empty<int>();
         }
+
+        private sealed class AnimatedChunkGroupMeta : MonoBehaviour
+        {
+            public string groupKey;
+            public Vector4[] faceMainTexSt;
+            public Box3BlocksTextureAnimator.FaceAnimation[] animations;
+        }
     }
 }
