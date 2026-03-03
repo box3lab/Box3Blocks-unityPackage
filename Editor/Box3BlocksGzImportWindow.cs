@@ -335,13 +335,9 @@ namespace Box3Blocks.Editor
         {
             using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
+                _importMode = ImportMode.Chunk;
                 EditorGUILayout.LabelField(LOr("voxel.group.general", "通用选项"), _optionsGroupTitleStyle);
                 _ignoreBarrier = EditorGUILayout.ToggleLeft(L("voxel.option.ignore_barrier"), _ignoreBarrier);
-                int modeIndex = EditorGUILayout.Popup(
-                    L("voxel.option.import_mode"),
-                    (int)_importMode,
-                    new[] { L("voxel.mode.chunk"), L("voxel.mode.single_block") });
-                _importMode = (ImportMode)Mathf.Clamp(modeIndex, 0, 1);
                 _clearPrevious = EditorGUILayout.ToggleLeft(L("voxel.option.replace_previous"), _clearPrevious);
                 int lightModeIndex = EditorGUILayout.Popup(
                     LOr("voxel.option.realtime_light_mode", "点光源生成策略"),
@@ -356,7 +352,6 @@ namespace Box3Blocks.Editor
 
                 EditorGUILayout.Space(6f);
                 EditorGUILayout.LabelField(LOr("voxel.group.chunk", "Chunk 选项"), _optionsGroupTitleStyle);
-                EditorGUI.BeginDisabledGroup(_importMode != ImportMode.Chunk);
                 int colliderModeIndex = EditorGUILayout.Popup(
                     L("voxel.option.collider_mode"),
                     (int)_chunkColliderMode,
@@ -372,7 +367,6 @@ namespace Box3Blocks.Editor
                 _chunkUseAlphaClip = EditorGUILayout.ToggleLeft(L("voxel.option.alpha_clip"), _chunkUseAlphaClip);
                 _chunkAlphaCutoff = Mathf.Clamp01(EditorGUILayout.Slider(L("voxel.option.alpha_cutoff"), _chunkAlphaCutoff, 0.01f, 0.9f));
                 _chunkMergeAnimatedAsStatic = EditorGUILayout.ToggleLeft(L("voxel.option.chunk_merge_animated_static"), _chunkMergeAnimatedAsStatic);
-                EditorGUI.EndDisabledGroup();
 
                 EditorGUILayout.Space(6f);
                 EditorGUILayout.LabelField(LOr("voxel.group.performance", "性能选项"), _optionsGroupTitleStyle);
@@ -455,6 +449,7 @@ namespace Box3Blocks.Editor
         {
             try
             {
+                _importMode = ImportMode.Chunk;
                 CancelImport(clearStatus: false);
                 string json = _sourceType == SourceType.LocalFile ? ReadGzipJsonFromFile(_localGzPath) : ReadGzipJsonFromUrl(_url);
                 if (string.IsNullOrWhiteSpace(json))
