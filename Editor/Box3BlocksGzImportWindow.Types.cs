@@ -81,6 +81,7 @@ namespace Box3Blocks.Editor
         {
             public readonly List<OpaqueVoxel> opaqueVoxels = new List<OpaqueVoxel>(2048);
             public readonly List<TransparentVoxel> transparentVoxels = new List<TransparentVoxel>(512);
+            public readonly List<AnimatedChunkVoxel> animatedVoxels = new List<AnimatedChunkVoxel>(256);
             public readonly List<EmissiveLightVoxel> emissiveVoxels = new List<EmissiveLightVoxel>(64);
         }
 
@@ -125,6 +126,24 @@ namespace Box3Blocks.Editor
                 this.pos = pos;
                 this.rot = rot;
                 this.prepared = prepared;
+            }
+        }
+
+        private readonly struct AnimatedChunkVoxel
+        {
+            public readonly Vector3Int pos;
+            public readonly int rot;
+            public readonly PreparedBlock prepared;
+            public readonly string blockName;
+            public readonly bool isTransparent;
+
+            public AnimatedChunkVoxel(Vector3Int pos, int rot, PreparedBlock prepared, string blockName, bool isTransparent)
+            {
+                this.pos = pos;
+                this.rot = rot;
+                this.prepared = prepared;
+                this.blockName = blockName;
+                this.isTransparent = isTransparent;
             }
         }
 

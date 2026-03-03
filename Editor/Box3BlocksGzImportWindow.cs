@@ -619,8 +619,7 @@ namespace Box3Blocks.Editor
                 Quaternion worldRot = _rotLookup[rot];
                 bool isEmissive = IsEmissiveBlock(blockName);
                 bool hasLightData = TryGetPayloadLightData(i, idx, out Color payloadLightColor, out float payloadLightIntensity, out float payloadLightRange, out Vector3 payloadLightOffset);
-                bool forceSingleForAnimation = prepared.hasAnimation && (_importMode != ImportMode.Chunk || !_chunkMergeAnimatedAsStatic);
-                if (_importMode == ImportMode.SingleBlock || forceSingleForAnimation)
+                if (_importMode == ImportMode.SingleBlock)
                 {
                     bool isTransparent = IsTransparentBlock(blockName);
                     Vector3Int gridPos = new Vector3Int(wx, wy, wz);
@@ -654,7 +653,15 @@ namespace Box3Blocks.Editor
                         _chunkBuckets.Add(key, bucket);
                     }
 
-                    if (isTransparent)
+                    if (prepared.hasAnimation && !_chunkMergeAnimatedAsStatic)
+                    {
+                        bucket.animatedVoxels.Add(new AnimatedChunkVoxel(gridPos, rot, prepared, blockName, isTransparent));
+                        if (!isTransparent)
+                        {
+                            _opaqueVoxels?.Add(gridPos);
+                        }
+                    }
+                    else if (isTransparent)
                     {
                         bucket.transparentVoxels.Add(new TransparentVoxel(gridPos, rot, prepared));
                     }
@@ -789,7 +796,7 @@ namespace Box3Blocks.Editor
             {
                 ChunkKey key = _chunkKeys[i];
                 if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket)
-                    || (bucket.opaqueVoxels.Count == 0 && bucket.transparentVoxels.Count == 0 && bucket.emissiveVoxels.Count == 0))
+                    || (bucket.opaqueVoxels.Count == 0 && bucket.transparentVoxels.Count == 0 && bucket.animatedVoxels.Count == 0 && bucket.emissiveVoxels.Count == 0))
                 {
                     continue;
                 }
@@ -842,6 +849,77 @@ namespace Box3Blocks.Editor
                     else
                     {
                         DestroyImmediate(transparentGo);
+                    }
+                }
+
+                if (bucket.animatedVoxels.Count > 0)
+                {
+                    Dictionary<string, List<AnimatedChunkVoxel>> animatedGroups = new Dictionary<string, List<AnimatedChunkVoxel>>();
+                    for (int a = 0; a < bucket.animatedVoxels.Count; a++)
+                    {
+                        AnimatedChunkVoxel av = bucket.animatedVoxels[a];
+                        string groupKey = BuildAnimatedGroupKey(av);
+                        if (!animatedGroups.TryGetValue(groupKey, out List<AnimatedChunkVoxel> list))
+                        {
+                            list = new List<AnimatedChunkVoxel>(32);
+                            animatedGroups.Add(groupKey, list);
+                        }
+
+                        list.Add(av);
+                    }
+
+                    int groupIndex = 0;
+                    foreach (KeyValuePair<string, List<AnimatedChunkVoxel>> kv in animatedGroups)
+                    {
+                        List<AnimatedChunkVoxel> group = kv.Value;
+                        if (group == null || group.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        AnimatedChunkVoxel sample = group[0];
+                        GameObject animatedGo = new GameObject($"animated_{groupIndex}");
+                        animatedGo.transform.SetParent(go.transform, false);
+                        MeshFilter mf = animatedGo.AddComponent<MeshFilter>();
+                        MeshRenderer mr = animatedGo.AddComponent<MeshRenderer>();
+
+                        Mesh mesh = BuildAnimatedChunkGroupMesh(
+                            key,
+                            group,
+                            sample.isTransparent ? _allVoxels : _opaqueVoxels);
+                        if (mesh != null)
+                        {
+                            string assetPath = BuildChunkMeshAssetPath(key, i, $"animated_{groupIndex}");
+                            AssetDatabase.CreateAsset(mesh, assetPath);
+                            mf.sharedMesh = mesh;
+
+                            PreparedBlock prepared = sample.prepared;
+                            if (prepared != null && prepared.materials != null && prepared.materials.Length > 0)
+                            {
+                                mr.sharedMaterials = prepared.materials;
+                            }
+                            else if (prepared != null && prepared.material != null)
+                            {
+                                mr.sharedMaterial = prepared.material;
+                            }
+
+                            if (prepared != null && prepared.animations != null && prepared.animations.Length > 0)
+                            {
+                                Box3BlocksTextureAnimator animator = animatedGo.GetComponent<Box3BlocksTextureAnimator>();
+                                if (animator == null)
+                                {
+                                    animator = animatedGo.AddComponent<Box3BlocksTextureAnimator>();
+                                }
+
+                                animator.SetAnimations(prepared.animations, prepared.faceMainTexSt);
+                            }
+                        }
+                        else
+                        {
+                            DestroyImmediate(animatedGo);
+                        }
+
+                        groupIndex++;
                     }
                 }
 
@@ -1704,6 +1782,94 @@ namespace Box3Blocks.Editor
             };
             mesh.SetVertices(vertices);
             mesh.SetTriangles(triangles, 0, true);
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static string BuildAnimatedGroupKey(AnimatedChunkVoxel voxel)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}|r{1}|t{2}",
+                voxel.blockName ?? string.Empty,
+                voxel.rot & 3,
+                voxel.isTransparent ? 1 : 0);
+        }
+
+        private Mesh BuildAnimatedChunkGroupMesh(ChunkKey key, List<AnimatedChunkVoxel> group, HashSet<Vector3Int> cullSet)
+        {
+            if (group == null || group.Count == 0)
+            {
+                return null;
+            }
+
+            List<Vector3> vertices = new List<Vector3>(group.Count * 24);
+            List<Vector2> uvs = new List<Vector2>(group.Count * 24);
+            List<int>[] subTris = new List<int>[SideOrder.Length];
+            for (int s = 0; s < SideOrder.Length; s++)
+            {
+                subTris[s] = new List<int>(group.Count * 6);
+            }
+
+            for (int i = 0; i < group.Count; i++)
+            {
+                AnimatedChunkVoxel voxel = group[i];
+                PreparedBlock prepared = voxel.prepared;
+                if (prepared == null || prepared.faceMainTexSt == null || prepared.faceMainTexSt.Length < SideOrder.Length)
+                {
+                    continue;
+                }
+
+                Quaternion rotQ = _rotLookup[voxel.rot & 3];
+                for (int localFace = 0; localFace < SideOrder.Length; localFace++)
+                {
+                    Vector3Int worldDir = ToVector3Int(rotQ * FaceNormals[localFace]);
+                    if (cullSet != null && cullSet.Contains(voxel.pos + worldDir))
+                    {
+                        continue;
+                    }
+
+                    int baseIndex = vertices.Count;
+                    for (int v = 0; v < 4; v++)
+                    {
+                        Vector3 rotated = rotQ * FaceVertices[localFace][v];
+                        vertices.Add(rotated + (Vector3)voxel.pos);
+                    }
+
+                    uvs.Add(new Vector2(0f, 0f));
+                    uvs.Add(new Vector2(1f, 0f));
+                    uvs.Add(new Vector2(1f, 1f));
+                    uvs.Add(new Vector2(0f, 1f));
+
+                    List<int> faceTris = subTris[localFace];
+                    faceTris.Add(baseIndex + 0);
+                    faceTris.Add(baseIndex + 2);
+                    faceTris.Add(baseIndex + 1);
+                    faceTris.Add(baseIndex + 0);
+                    faceTris.Add(baseIndex + 3);
+                    faceTris.Add(baseIndex + 2);
+                }
+            }
+
+            if (vertices.Count == 0)
+            {
+                return null;
+            }
+
+            Mesh mesh = new Mesh
+            {
+                name = $"VoxelChunk_{key.x}_{key.y}_{key.z}_animated",
+                indexFormat = IndexFormat.UInt32
+            };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.subMeshCount = SideOrder.Length;
+            for (int s = 0; s < SideOrder.Length; s++)
+            {
+                mesh.SetTriangles(subTris[s], s, true);
+            }
+
+            mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
         }
