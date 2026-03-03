@@ -2068,11 +2068,15 @@ namespace Box3Blocks.Editor
 
             int[] localFaceByDir = new int[WorldFaceDirs.Length];
             Vector4[] stByDir = new Vector4[WorldFaceDirs.Length];
+            int[] uvPatternByDir = new int[WorldFaceDirs.Length];
             for (int d = 0; d < WorldFaceDirs.Length; d++)
             {
                 int localFace = ResolveLocalFaceIndexForWorldDir(rot, WorldFaceDirs[d]);
                 localFaceByDir[d] = localFace;
                 stByDir[d] = localFace >= 0 && localFace < SideOrder.Length ? samplePrepared.faceMainTexSt[localFace] : new Vector4(1f, 1f, 0f, 0f);
+                uvPatternByDir[d] = localFace >= 0 && localFace < SideOrder.Length
+                    ? BuildUvPatternForFace(localFace, rot, d)
+                    : 0xE4;
             }
 
             int[][] masks = new int[WorldFaceDirs.Length][];
@@ -2183,6 +2187,7 @@ namespace Box3Blocks.Editor
                                 width,
                                 height,
                                 stByDir[d],
+                                uvPatternByDir[d],
                                 vertices,
                                 uvs,
                                 uvMin,
@@ -2433,6 +2438,12 @@ namespace Box3Blocks.Editor
                     continue;
                 }
 
+                int dirIndex = GetWorldDirIndex(worldDir);
+                if (dirIndex < 0)
+                {
+                    continue;
+                }
+
                 Vector4 st = ResolveStaticFaceSt(voxel.prepared, localFace);
                 int baseIndex = vertices.Count;
                 for (int v = 0; v < 4; v++)
@@ -2441,10 +2452,8 @@ namespace Box3Blocks.Editor
                     vertices.Add(rotated + (Vector3)voxel.pos);
                 }
 
-                tiledUvs.Add(new Vector2(0f, 0f));
-                tiledUvs.Add(new Vector2(1f, 0f));
-                tiledUvs.Add(new Vector2(1f, 1f));
-                tiledUvs.Add(new Vector2(0f, 1f));
+                int uvPattern = BuildUvPatternForFace(localFace, voxel.rot & 3, dirIndex);
+                AddMappedTiledUv(tiledUvs, 1, 1, uvPattern);
                 Vector2 min = new Vector2(st.z, st.w);
                 Vector2 size = new Vector2(st.x, st.y);
                 atlasUvMin.Add(min);
@@ -2590,6 +2599,19 @@ namespace Box3Blocks.Editor
             }
 
             return baseSt;
+        }
+
+        private static int GetWorldDirIndex(Vector3Int worldDir)
+        {
+            for (int i = 0; i < WorldFaceDirs.Length; i++)
+            {
+                if (WorldFaceDirs[i] == worldDir)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
         }
 
         private static void MapFaceToMaskCoordinates(int dirIndex, int lx, int ly, int lz, out int layer, out int u, out int v)
@@ -2766,11 +2788,16 @@ namespace Box3Blocks.Editor
         private static void AddMappedTiledUv(List<Vector2> tiledUvs, int width, int height, int uvPattern)
         {
             Vector2[] unit = { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) };
+            int localAtWorld0 = (uvPattern >> 0) & 0x3;
+            int localAtWorld1 = (uvPattern >> 2) & 0x3;
+            bool worldUMapsToLocalV = Mathf.Abs(unit[localAtWorld1].y - unit[localAtWorld0].y) > 0.5f;
+            int uScale = worldUMapsToLocalV ? height : width;
+            int vScale = worldUMapsToLocalV ? width : height;
             for (int worldCorner = 0; worldCorner < 4; worldCorner++)
             {
                 int localUvCorner = (uvPattern >> (worldCorner * 2)) & 0x3;
                 Vector2 uv = unit[localUvCorner];
-                tiledUvs.Add(new Vector2(uv.x * width, uv.y * height));
+                tiledUvs.Add(new Vector2(uv.x * uScale, uv.y * vScale));
             }
         }
 
@@ -2799,6 +2826,7 @@ namespace Box3Blocks.Editor
             int width,
             int height,
             Vector4 st,
+            int uvPattern,
             List<Vector3> vertices,
             List<Vector2> tiledUv,
             List<Vector2> uvMin,
@@ -2901,10 +2929,7 @@ namespace Box3Blocks.Editor
             vertices.Add(v2);
             vertices.Add(v3);
 
-            tiledUv.Add(new Vector2(0f, 0f));
-            tiledUv.Add(new Vector2(width, 0f));
-            tiledUv.Add(new Vector2(width, height));
-            tiledUv.Add(new Vector2(0f, height));
+            AddMappedTiledUv(tiledUv, width, height, uvPattern);
 
             Vector2 min = new Vector2(st.z, st.w);
             Vector2 size = new Vector2(st.x, st.y);
@@ -3171,6 +3196,12 @@ namespace Box3Blocks.Editor
                     continue;
                 }
 
+                int dirIndex = GetWorldDirIndex(worldDir);
+                if (dirIndex < 0)
+                {
+                    continue;
+                }
+
                 Vector4 st = ResolveStaticFaceSt(voxel.prepared, localFace);
                 int baseIndex = vertices.Count;
                 for (int v = 0; v < 4; v++)
@@ -3179,10 +3210,8 @@ namespace Box3Blocks.Editor
                     vertices.Add(rotated + (Vector3)voxel.pos);
                 }
 
-                tiledUvs.Add(new Vector2(0f, 0f));
-                tiledUvs.Add(new Vector2(1f, 0f));
-                tiledUvs.Add(new Vector2(1f, 1f));
-                tiledUvs.Add(new Vector2(0f, 1f));
+                int uvPattern = BuildUvPatternForFace(localFace, voxel.rot & 3, dirIndex);
+                AddMappedTiledUv(tiledUvs, 1, 1, uvPattern);
                 Vector2 min = new Vector2(st.z, st.w);
                 Vector2 size = new Vector2(st.x, st.y);
                 atlasUvMin.Add(min);
