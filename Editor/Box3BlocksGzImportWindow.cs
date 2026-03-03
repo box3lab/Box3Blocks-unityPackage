@@ -20,8 +20,8 @@ namespace Box3Blocks.Editor
         private const string BlockSpecPath = "Packages/com.box3lab.box3/Editor/SourceAssets/block-spec.json";
         private const string GeneratedMeshFolder = "Assets/Box3/Meshes/Import";
         private const string GeneratedMaterialFolder = "Assets/Box3/Materials";
-        private const string ChunkOpaqueMaterialPath = "Assets/Box3/Materials/M_Block.mat";
-        private const string ChunkTransparentMaterialPath = "Assets/Box3/Materials/M_Block_Transparent_Chunk.mat";
+        private const string ChunkOpaqueMaterialPath = "Assets/Box3/Materials/M_Block_Chunk_Opaque.mat";
+        private const string ChunkTransparentMaterialPath = "Assets/Box3/Materials/M_Block_Chunk_Transparent.mat";
         private const string ChunkOpaqueShaderName = "Box3Blocks/ChunkOpaqueTiled";
         private const string ChunkTransparentShaderName = "Box3Blocks/ChunkTransparentTiled";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
@@ -1830,7 +1830,7 @@ namespace Box3Blocks.Editor
 
             Material m = new Material(shader)
             {
-                name = "M_Block_Transparent_Chunk"
+                name = "M_Block_Chunk_Transparent"
             };
             if (source.mainTexture != null)
             {
@@ -1888,7 +1888,7 @@ namespace Box3Blocks.Editor
             }
             if (shader == null)
             {
-                _chunkOpaqueMaterialInstance = new Material(source) { name = "M_Block" };
+                _chunkOpaqueMaterialInstance = new Material(source) { name = "M_Block_Chunk_Opaque" };
                 _chunkOpaqueMaterialInstance.renderQueue = (int)RenderQueue.Geometry;
                 _chunkOpaqueMaterialInstance.SetInt("_ZWrite", 1);
                 ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
@@ -1899,7 +1899,7 @@ namespace Box3Blocks.Editor
 
             Material m = new Material(shader)
             {
-                name = "M_Block"
+                name = "M_Block_Chunk_Opaque"
             };
             if (source.mainTexture != null)
             {
