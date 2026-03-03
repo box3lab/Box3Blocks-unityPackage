@@ -1119,6 +1119,12 @@ namespace Box3Blocks.Editor
                 AssetDatabase.CreateAsset(merged, assetPath);
                 mergedFilter.sharedMesh = merged;
                 mergedRenderer.sharedMaterials = sampleRenderer.sharedMaterials;
+                if (_chunkColliderMode == Box3ColliderMode.Full)
+                {
+                    MeshCollider mergedCollider = mergedGo.AddComponent<MeshCollider>();
+                    mergedCollider.sharedMesh = merged;
+                    _stats.createdMeshColliders++;
+                }
 
                 AnimatedChunkGroupMeta mergedMeta = mergedGo.AddComponent<AnimatedChunkGroupMeta>();
                 mergedMeta.groupKey = kv.Key;
