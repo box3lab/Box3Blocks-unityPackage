@@ -1971,29 +1971,9 @@ namespace Box3Blocks.Editor
                 return;
             }
 
-            bool isTransparent = definition != null && definition.transparent;
-            if (!isTransparent)
-            {
-                Material opaque = GetOrCreateOpaqueAtlasMaterial(renderData.materials[0]);
-                if (opaque != null)
-                {
-                    Material[] shared = new Material[renderData.materials.Length];
-                    for (int i = 0; i < shared.Length; i++)
-                    {
-                        shared[i] = opaque;
-                    }
-
-                    renderer.sharedMaterials = shared;
-                }
-                else
-                {
-                    renderer.sharedMaterials = renderData.materials;
-                }
-            }
-            else
-            {
-                renderer.sharedMaterials = renderData.materials;
-            }
+            // Animated blocks must keep atlas animation material chain.
+            // Do not route animated blocks through M_Block, otherwise external material overrides can break UV animation sampling.
+            renderer.sharedMaterials = renderData.materials;
 
             if (!definition.hasAnimation || definition.sideAnimations.Count == 0)
             {

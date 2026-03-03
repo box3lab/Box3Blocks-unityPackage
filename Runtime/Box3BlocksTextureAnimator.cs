@@ -27,7 +27,8 @@ namespace Box3Blocks
         private MaterialPropertyBlock _propertyBlock;
         private float _startTime;
 
-        private static readonly int MainTexStId = Shader.PropertyToID("_Box3AnimST");
+        private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
+        private static readonly int ChunkAnimStId = Shader.PropertyToID("_Box3AnimST");
 
         public void SetAnimations(FaceAnimation[] value)
         {
@@ -89,8 +90,24 @@ namespace Box3Blocks
                     st = EvaluateAnimatedSt(animation, elapsed);
                 }
 
+                Material material = materials[i];
+                bool isChunkShader = material != null
+                    && material.shader != null
+                    && !string.IsNullOrWhiteSpace(material.shader.name)
+                    && material.shader.name.StartsWith("Box3Blocks/Chunk", StringComparison.OrdinalIgnoreCase);
+
                 _renderer.GetPropertyBlock(_propertyBlock, i);
-                _propertyBlock.SetVector(MainTexStId, st);
+                _propertyBlock.Clear();
+                if (isChunkShader)
+                {
+                    // Keep chunk behavior unchanged.
+                    _propertyBlock.SetVector(ChunkAnimStId, st);
+                }
+                else
+                {
+                    // Builder/non-chunk materials animate with _MainTex_ST.
+                    _propertyBlock.SetVector(MainTexStId, st);
+                }
                 _renderer.SetPropertyBlock(_propertyBlock, i);
             }
         }
