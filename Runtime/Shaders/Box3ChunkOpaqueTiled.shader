@@ -4,6 +4,7 @@ Shader "Box3Blocks/ChunkOpaqueTiled"
     {
         _Color ("Color", Color) = (1,1,1,1)
         _MainTex ("Albedo", 2D) = "white" {}
+        [HideInInspector] _Box3AnimST ("Box3 Anim ST", Vector) = (1,1,0,0)
         _BumpMap ("Normal Map", 2D) = "bump" {}
         _BumpScale ("Normal Scale", Range(0,2)) = 1
         _MetallicGlossMap ("Metallic", 2D) = "black" {}
@@ -39,6 +40,7 @@ Shader "Box3Blocks/ChunkOpaqueTiled"
         half _Glossiness;
         half _GlossMapScale;
         fixed4 _EmissionColor;
+        float4 _Box3AnimST;
         float4 _MainTex_TexelSize;
 
         struct Input
@@ -59,10 +61,11 @@ Shader "Box3Blocks/ChunkOpaqueTiled"
         inline float2 GetAtlasUv(Input IN)
         {
             float2 tile = frac(IN.uv_MainTex);
+            float2 animatedTile = saturate(tile * _Box3AnimST.xy + _Box3AnimST.zw);
             float2 inset = _MainTex_TexelSize.xy * 0.5;
             float2 uvMin = IN.atlasMin + inset;
             float2 uvMax = IN.atlasMin + IN.atlasSize - inset;
-            return lerp(uvMin, uvMax, tile);
+            return lerp(uvMin, uvMax, animatedTile);
         }
 
         void surf(Input IN, inout SurfaceOutputStandard o)

@@ -894,13 +894,20 @@ namespace Box3Blocks.Editor
                             mf.sharedMesh = mesh;
 
                             PreparedBlock prepared = sample.prepared;
-                            if (prepared != null && prepared.materials != null && prepared.materials.Length > 0)
+                            Material chunkMat = sample.isTransparent ? ResolveChunkTransparentMaterial() : ResolveChunkOpaqueMaterial();
+                            if (chunkMat != null)
+                            {
+                                Material[] shared = new Material[SideOrder.Length];
+                                for (int sm = 0; sm < shared.Length; sm++)
+                                {
+                                    shared[sm] = chunkMat;
+                                }
+
+                                mr.sharedMaterials = shared;
+                            }
+                            else if (prepared != null && prepared.materials != null && prepared.materials.Length > 0)
                             {
                                 mr.sharedMaterials = prepared.materials;
-                            }
-                            else if (prepared != null && prepared.material != null)
-                            {
-                                mr.sharedMaterial = prepared.material;
                             }
 
                             if (prepared != null && prepared.animations != null && prepared.animations.Length > 0)
@@ -911,7 +918,9 @@ namespace Box3Blocks.Editor
                                     animator = animatedGo.AddComponent<Box3BlocksTextureAnimator>();
                                 }
 
-                                animator.SetAnimations(prepared.animations, prepared.faceMainTexSt);
+                                Vector4[] unitSt = BuildUnitFaceMainTexSt();
+                                Box3BlocksTextureAnimator.FaceAnimation[] tiledAnimations = CloneAnimationsForTiled(prepared.animations);
+                                animator.SetAnimations(tiledAnimations, unitSt);
                             }
 
                             AnimatedChunkGroupMeta meta = animatedGo.GetComponent<AnimatedChunkGroupMeta>();
@@ -921,8 +930,8 @@ namespace Box3Blocks.Editor
                             }
 
                             meta.groupKey = kv.Key;
-                            meta.faceMainTexSt = prepared != null && prepared.faceMainTexSt != null ? (Vector4[])prepared.faceMainTexSt.Clone() : null;
-                            meta.animations = prepared != null && prepared.animations != null ? (Box3BlocksTextureAnimator.FaceAnimation[])prepared.animations.Clone() : null;
+                            meta.faceMainTexSt = BuildUnitFaceMainTexSt();
+                            meta.animations = prepared != null && prepared.animations != null ? CloneAnimationsForTiled(prepared.animations) : null;
                         }
                         else
                         {
@@ -1141,7 +1150,9 @@ namespace Box3Blocks.Editor
             }
 
             List<Vector3> vertices = new List<Vector3>();
-            List<Vector2> uvs = new List<Vector2>();
+            List<Vector2> uvs0 = new List<Vector2>();
+            List<Vector2> uvs1 = new List<Vector2>();
+            List<Vector2> uvs2 = new List<Vector2>();
             List<int>[] trisBySub = new List<int>[SideOrder.Length];
             for (int s = 0; s < SideOrder.Length; s++)
             {
@@ -1161,18 +1172,46 @@ namespace Box3Blocks.Editor
 
                 int baseIndex = vertices.Count;
                 Vector3[] tempVerts = temp.vertices;
-                Vector2[] tempUv = temp.uv;
+                Vector2[] tempUv0 = temp.uv;
+                List<Vector2> tempUv1 = new List<Vector2>();
+                List<Vector2> tempUv2 = new List<Vector2>();
+                temp.GetUVs(1, tempUv1);
+                temp.GetUVs(2, tempUv2);
                 int[] tempTris = temp.triangles;
                 vertices.AddRange(tempVerts);
-                if (tempUv != null && tempUv.Length == tempVerts.Length)
+                if (tempUv0 != null && tempUv0.Length == tempVerts.Length)
                 {
-                    uvs.AddRange(tempUv);
+                    uvs0.AddRange(tempUv0);
                 }
                 else
                 {
                     for (int i = 0; i < tempVerts.Length; i++)
                     {
-                        uvs.Add(Vector2.zero);
+                        uvs0.Add(Vector2.zero);
+                    }
+                }
+
+                if (tempUv1 != null && tempUv1.Count == tempVerts.Length)
+                {
+                    uvs1.AddRange(tempUv1);
+                }
+                else
+                {
+                    for (int i = 0; i < tempVerts.Length; i++)
+                    {
+                        uvs1.Add(Vector2.zero);
+                    }
+                }
+
+                if (tempUv2 != null && tempUv2.Count == tempVerts.Length)
+                {
+                    uvs2.AddRange(tempUv2);
+                }
+                else
+                {
+                    for (int i = 0; i < tempVerts.Length; i++)
+                    {
+                        uvs2.Add(Vector2.zero);
                     }
                 }
 
@@ -1191,7 +1230,9 @@ namespace Box3Blocks.Editor
 
             Mesh mesh = new Mesh { indexFormat = IndexFormat.UInt32 };
             mesh.SetVertices(vertices);
-            mesh.SetUVs(0, uvs);
+            mesh.SetUVs(0, uvs0);
+            mesh.SetUVs(1, uvs1);
+            mesh.SetUVs(2, uvs2);
             mesh.subMeshCount = SideOrder.Length;
             for (int s = 0; s < SideOrder.Length; s++)
             {
@@ -2012,7 +2053,6 @@ namespace Box3Blocks.Editor
             {
                 return null;
             }
-
             int size = Mathf.Max(1, _chunkSize);
             int baseX = key.x * size;
             int baseY = key.y * size;
@@ -2020,11 +2060,19 @@ namespace Box3Blocks.Editor
             int layers = size + 1;
             int cellsPerLayer = size * size;
             int rot = group[0].rot & 3;
+            PreparedBlock samplePrepared = group[0].prepared;
+            if (samplePrepared == null || samplePrepared.faceMainTexSt == null || samplePrepared.faceMainTexSt.Length < SideOrder.Length)
+            {
+                return null;
+            }
 
             int[] localFaceByDir = new int[WorldFaceDirs.Length];
+            Vector4[] stByDir = new Vector4[WorldFaceDirs.Length];
             for (int d = 0; d < WorldFaceDirs.Length; d++)
             {
-                localFaceByDir[d] = ResolveLocalFaceIndexForWorldDir(rot, WorldFaceDirs[d]);
+                int localFace = ResolveLocalFaceIndexForWorldDir(rot, WorldFaceDirs[d]);
+                localFaceByDir[d] = localFace;
+                stByDir[d] = localFace >= 0 && localFace < SideOrder.Length ? samplePrepared.faceMainTexSt[localFace] : new Vector4(1f, 1f, 0f, 0f);
             }
 
             int[][] masks = new int[WorldFaceDirs.Length][];
@@ -2069,6 +2117,8 @@ namespace Box3Blocks.Editor
 
             List<Vector3> vertices = new List<Vector3>(group.Count * 8);
             List<Vector2> uvs = new List<Vector2>(group.Count * 8);
+            List<Vector2> uvMin = new List<Vector2>(group.Count * 8);
+            List<Vector2> uvSize = new List<Vector2>(group.Count * 8);
             List<int>[] subTris = new List<int>[SideOrder.Length];
             for (int s = 0; s < SideOrder.Length; s++)
             {
@@ -2123,7 +2173,21 @@ namespace Box3Blocks.Editor
                                 }
                             }
 
-                            AddGreedyAnimatedQuad(d, key, size, layer, u, v, width, height, vertices, uvs, subTris[localFace]);
+                            AddGreedyAnimatedTiledQuad(
+                                d,
+                                key,
+                                size,
+                                layer,
+                                u,
+                                v,
+                                width,
+                                height,
+                                stByDir[d],
+                                vertices,
+                                uvs,
+                                uvMin,
+                                uvSize,
+                                subTris[localFace]);
 
                             for (int yy = 0; yy < height; yy++)
                             {
@@ -2150,6 +2214,8 @@ namespace Box3Blocks.Editor
             };
             mesh.SetVertices(vertices);
             mesh.SetUVs(0, uvs);
+            mesh.SetUVs(1, uvMin);
+            mesh.SetUVs(2, uvSize);
             mesh.subMeshCount = SideOrder.Length;
             for (int s = 0; s < SideOrder.Length; s++)
             {
@@ -2159,144 +2225,6 @@ namespace Box3Blocks.Editor
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
-        }
-
-        private int ResolveLocalFaceIndexForWorldDir(int rot, Vector3Int worldDir)
-        {
-            Quaternion q = _rotLookup[rot & 3];
-            for (int i = 0; i < SideOrder.Length; i++)
-            {
-                Vector3Int dir = ToVector3Int(q * FaceNormals[i]);
-                if (dir == worldDir)
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
-        private static void AddGreedyAnimatedQuad(
-            int dirIndex,
-            ChunkKey key,
-            int chunkSize,
-            int layer,
-            int u,
-            int v,
-            int width,
-            int height,
-            List<Vector3> vertices,
-            List<Vector2> uvs,
-            List<int> triangles)
-        {
-            float bx = key.x * chunkSize;
-            float by = key.y * chunkSize;
-            float bz = key.z * chunkSize;
-
-            Vector3 v0;
-            Vector3 v1;
-            Vector3 v2;
-            Vector3 v3;
-            switch (dirIndex)
-            {
-                case 0:
-                {
-                    float x = (key.x * chunkSize) + layer - 0.5f;
-                    float yy0 = by + v - 0.5f;
-                    float yy1 = by + v + height - 0.5f;
-                    float zz0 = bz + u - 0.5f;
-                    float zz1 = bz + u + width - 0.5f;
-                    v0 = new Vector3(x, yy0, zz1);
-                    v1 = new Vector3(x, yy0, zz0);
-                    v2 = new Vector3(x, yy1, zz0);
-                    v3 = new Vector3(x, yy1, zz1);
-                    break;
-                }
-                case 1:
-                {
-                    float x = (key.x * chunkSize) + layer - 0.5f;
-                    float yy0 = by + v - 0.5f;
-                    float yy1 = by + v + height - 0.5f;
-                    float zz0 = bz + u - 0.5f;
-                    float zz1 = bz + u + width - 0.5f;
-                    v0 = new Vector3(x, yy0, zz0);
-                    v1 = new Vector3(x, yy0, zz1);
-                    v2 = new Vector3(x, yy1, zz1);
-                    v3 = new Vector3(x, yy1, zz0);
-                    break;
-                }
-                case 2:
-                {
-                    float y = (key.y * chunkSize) + layer - 0.5f;
-                    float xx0 = bx + u - 0.5f;
-                    float xx1 = bx + u + width - 0.5f;
-                    float zz0 = bz + v - 0.5f;
-                    float zz1 = bz + v + height - 0.5f;
-                    v0 = new Vector3(xx0, y, zz1);
-                    v1 = new Vector3(xx1, y, zz1);
-                    v2 = new Vector3(xx1, y, zz0);
-                    v3 = new Vector3(xx0, y, zz0);
-                    break;
-                }
-                case 3:
-                {
-                    float y = (key.y * chunkSize) + layer - 0.5f;
-                    float xx0 = bx + u - 0.5f;
-                    float xx1 = bx + u + width - 0.5f;
-                    float zz0 = bz + v - 0.5f;
-                    float zz1 = bz + v + height - 0.5f;
-                    v0 = new Vector3(xx0, y, zz0);
-                    v1 = new Vector3(xx1, y, zz0);
-                    v2 = new Vector3(xx1, y, zz1);
-                    v3 = new Vector3(xx0, y, zz1);
-                    break;
-                }
-                case 4:
-                {
-                    float z = (key.z * chunkSize) + layer - 0.5f;
-                    float xx0 = bx + u - 0.5f;
-                    float xx1 = bx + u + width - 0.5f;
-                    float yy0 = by + v - 0.5f;
-                    float yy1 = by + v + height - 0.5f;
-                    v0 = new Vector3(xx0, yy0, z);
-                    v1 = new Vector3(xx1, yy0, z);
-                    v2 = new Vector3(xx1, yy1, z);
-                    v3 = new Vector3(xx0, yy1, z);
-                    break;
-                }
-                default:
-                {
-                    float z = (key.z * chunkSize) + layer - 0.5f;
-                    float xx0 = bx + u - 0.5f;
-                    float xx1 = bx + u + width - 0.5f;
-                    float yy0 = by + v - 0.5f;
-                    float yy1 = by + v + height - 0.5f;
-                    v0 = new Vector3(xx1, yy0, z);
-                    v1 = new Vector3(xx0, yy0, z);
-                    v2 = new Vector3(xx0, yy1, z);
-                    v3 = new Vector3(xx1, yy1, z);
-                    break;
-                }
-            }
-
-            int baseIndex = vertices.Count;
-            vertices.Add(v0);
-            vertices.Add(v1);
-            vertices.Add(v2);
-            vertices.Add(v3);
-
-            // Keep 0..1 per merged face to preserve compatibility with _MainTex_ST animation.
-            uvs.Add(new Vector2(0f, 0f));
-            uvs.Add(new Vector2(1f, 0f));
-            uvs.Add(new Vector2(1f, 1f));
-            uvs.Add(new Vector2(0f, 1f));
-
-            triangles.Add(baseIndex + 0);
-            triangles.Add(baseIndex + 2);
-            triangles.Add(baseIndex + 1);
-            triangles.Add(baseIndex + 0);
-            triangles.Add(baseIndex + 3);
-            triangles.Add(baseIndex + 2);
         }
 
         private Mesh BuildOpaqueChunkMesh(ChunkKey key, List<OpaqueVoxel> voxels, HashSet<Vector3Int> opaqueVoxels)
@@ -2844,6 +2772,197 @@ namespace Box3Blocks.Editor
                 Vector2 uv = unit[localUvCorner];
                 tiledUvs.Add(new Vector2(uv.x * width, uv.y * height));
             }
+        }
+
+        private int ResolveLocalFaceIndexForWorldDir(int rot, Vector3Int worldDir)
+        {
+            Quaternion q = _rotLookup[rot & 3];
+            for (int i = 0; i < SideOrder.Length; i++)
+            {
+                Vector3Int dir = ToVector3Int(q * FaceNormals[i]);
+                if (dir == worldDir)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private static void AddGreedyAnimatedTiledQuad(
+            int dirIndex,
+            ChunkKey key,
+            int chunkSize,
+            int layer,
+            int u,
+            int v,
+            int width,
+            int height,
+            Vector4 st,
+            List<Vector3> vertices,
+            List<Vector2> tiledUv,
+            List<Vector2> uvMin,
+            List<Vector2> uvSize,
+            List<int> triangles)
+        {
+            float bx = key.x * chunkSize;
+            float by = key.y * chunkSize;
+            float bz = key.z * chunkSize;
+
+            Vector3 v0;
+            Vector3 v1;
+            Vector3 v2;
+            Vector3 v3;
+            switch (dirIndex)
+            {
+                case 0:
+                {
+                    float x = (key.x * chunkSize) + layer - 0.5f;
+                    float yy0 = by + v - 0.5f;
+                    float yy1 = by + v + height - 0.5f;
+                    float zz0 = bz + u - 0.5f;
+                    float zz1 = bz + u + width - 0.5f;
+                    v0 = new Vector3(x, yy0, zz1);
+                    v1 = new Vector3(x, yy0, zz0);
+                    v2 = new Vector3(x, yy1, zz0);
+                    v3 = new Vector3(x, yy1, zz1);
+                    break;
+                }
+                case 1:
+                {
+                    float x = (key.x * chunkSize) + layer - 0.5f;
+                    float yy0 = by + v - 0.5f;
+                    float yy1 = by + v + height - 0.5f;
+                    float zz0 = bz + u - 0.5f;
+                    float zz1 = bz + u + width - 0.5f;
+                    v0 = new Vector3(x, yy0, zz0);
+                    v1 = new Vector3(x, yy0, zz1);
+                    v2 = new Vector3(x, yy1, zz1);
+                    v3 = new Vector3(x, yy1, zz0);
+                    break;
+                }
+                case 2:
+                {
+                    float y = (key.y * chunkSize) + layer - 0.5f;
+                    float xx0 = bx + u - 0.5f;
+                    float xx1 = bx + u + width - 0.5f;
+                    float zz0 = bz + v - 0.5f;
+                    float zz1 = bz + v + height - 0.5f;
+                    v0 = new Vector3(xx0, y, zz1);
+                    v1 = new Vector3(xx1, y, zz1);
+                    v2 = new Vector3(xx1, y, zz0);
+                    v3 = new Vector3(xx0, y, zz0);
+                    break;
+                }
+                case 3:
+                {
+                    float y = (key.y * chunkSize) + layer - 0.5f;
+                    float xx0 = bx + u - 0.5f;
+                    float xx1 = bx + u + width - 0.5f;
+                    float zz0 = bz + v - 0.5f;
+                    float zz1 = bz + v + height - 0.5f;
+                    v0 = new Vector3(xx0, y, zz0);
+                    v1 = new Vector3(xx1, y, zz0);
+                    v2 = new Vector3(xx1, y, zz1);
+                    v3 = new Vector3(xx0, y, zz1);
+                    break;
+                }
+                case 4:
+                {
+                    float z = (key.z * chunkSize) + layer - 0.5f;
+                    float xx0 = bx + u - 0.5f;
+                    float xx1 = bx + u + width - 0.5f;
+                    float yy0 = by + v - 0.5f;
+                    float yy1 = by + v + height - 0.5f;
+                    v0 = new Vector3(xx0, yy0, z);
+                    v1 = new Vector3(xx1, yy0, z);
+                    v2 = new Vector3(xx1, yy1, z);
+                    v3 = new Vector3(xx0, yy1, z);
+                    break;
+                }
+                default:
+                {
+                    float z = (key.z * chunkSize) + layer - 0.5f;
+                    float xx0 = bx + u - 0.5f;
+                    float xx1 = bx + u + width - 0.5f;
+                    float yy0 = by + v - 0.5f;
+                    float yy1 = by + v + height - 0.5f;
+                    v0 = new Vector3(xx1, yy0, z);
+                    v1 = new Vector3(xx0, yy0, z);
+                    v2 = new Vector3(xx0, yy1, z);
+                    v3 = new Vector3(xx1, yy1, z);
+                    break;
+                }
+            }
+
+            int baseIndex = vertices.Count;
+            vertices.Add(v0);
+            vertices.Add(v1);
+            vertices.Add(v2);
+            vertices.Add(v3);
+
+            tiledUv.Add(new Vector2(0f, 0f));
+            tiledUv.Add(new Vector2(width, 0f));
+            tiledUv.Add(new Vector2(width, height));
+            tiledUv.Add(new Vector2(0f, height));
+
+            Vector2 min = new Vector2(st.z, st.w);
+            Vector2 size = new Vector2(st.x, st.y);
+            uvMin.Add(min);
+            uvMin.Add(min);
+            uvMin.Add(min);
+            uvMin.Add(min);
+            uvSize.Add(size);
+            uvSize.Add(size);
+            uvSize.Add(size);
+            uvSize.Add(size);
+
+            triangles.Add(baseIndex + 0);
+            triangles.Add(baseIndex + 2);
+            triangles.Add(baseIndex + 1);
+            triangles.Add(baseIndex + 0);
+            triangles.Add(baseIndex + 3);
+            triangles.Add(baseIndex + 2);
+        }
+
+        private static Vector4[] BuildUnitFaceMainTexSt()
+        {
+            Vector4[] unit = new Vector4[SideOrder.Length];
+            for (int i = 0; i < unit.Length; i++)
+            {
+                unit[i] = new Vector4(1f, 1f, 0f, 0f);
+            }
+
+            return unit;
+        }
+
+        private static Box3BlocksTextureAnimator.FaceAnimation[] CloneAnimationsForTiled(Box3BlocksTextureAnimator.FaceAnimation[] source)
+        {
+            if (source == null || source.Length == 0)
+            {
+                return Array.Empty<Box3BlocksTextureAnimator.FaceAnimation>();
+            }
+
+            Box3BlocksTextureAnimator.FaceAnimation[] cloned = new Box3BlocksTextureAnimator.FaceAnimation[source.Length];
+            for (int i = 0; i < source.Length; i++)
+            {
+                Box3BlocksTextureAnimator.FaceAnimation s = source[i];
+                if (s == null)
+                {
+                    continue;
+                }
+
+                cloned[i] = new Box3BlocksTextureAnimator.FaceAnimation
+                {
+                    materialIndex = s.materialIndex,
+                    frameCount = Mathf.Max(1, s.frameCount),
+                    frameDuration = Mathf.Max(0.01f, s.frameDuration),
+                    frames = s.frames != null ? (int[])s.frames.Clone() : Array.Empty<int>(),
+                    baseMainTexSt = new Vector4(1f, 1f, 0f, 0f)
+                };
+            }
+
+            return cloned;
         }
 
         private Mesh BuildTransparentChunkMesh(ChunkKey key, List<TransparentVoxel> voxels, HashSet<Vector3Int> allVoxels)

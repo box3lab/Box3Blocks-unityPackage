@@ -27,7 +27,7 @@ namespace Box3Blocks
         private MaterialPropertyBlock _propertyBlock;
         private float _startTime;
 
-        private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
+        private static readonly int MainTexStId = Shader.PropertyToID("_Box3AnimST");
 
         public void SetAnimations(FaceAnimation[] value)
         {
