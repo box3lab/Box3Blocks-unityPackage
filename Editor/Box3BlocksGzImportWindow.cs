@@ -102,15 +102,13 @@ namespace Box3Blocks.Editor
         private bool _ignoreWater = true;
         private bool _ignoreBarrier = false;
         private ImportMode _importMode = ImportMode.Chunk;
-        private int _chunkSize = 16;
+        private int _chunkSize = 32;
         private int _voxelsPerTick = 25000;
         private int _chunksPerTick = 6;
-        private bool _chunkUseAlphaClip = true;
-        private float _chunkAlphaCutoff = 0.33f;
-        private bool _chunkMergeAnimatedAsStatic = true;
+        private bool _chunkMergeAnimatedAsStatic = false;
         private bool _clearPrevious = true;
         private Box3ColliderMode _chunkColliderMode = Box3ColliderMode.None;
-        private RealtimeLightMode _realtimeLightMode = RealtimeLightMode.AllEmissive;
+        private RealtimeLightMode _realtimeLightMode = RealtimeLightMode.None;
 
         private Phase _phase = Phase.Idle;
         private string _status = string.Empty;
@@ -364,9 +362,6 @@ namespace Box3Blocks.Editor
                 _chunkColliderMode = (Box3ColliderMode)Mathf.Clamp(colliderModeIndex, 0, 2);
                 _chunkSize = Mathf.Max(1, EditorGUILayout.IntField(L("voxel.option.chunk_size"), _chunkSize));
                 _chunksPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.chunks_per_tick"), _chunksPerTick), 1, 64);
-                _chunkUseAlphaClip = EditorGUILayout.ToggleLeft(L("voxel.option.alpha_clip"), _chunkUseAlphaClip);
-                _chunkAlphaCutoff = Mathf.Clamp01(EditorGUILayout.Slider(L("voxel.option.alpha_cutoff"), _chunkAlphaCutoff, 0.01f, 0.9f));
-                _chunkMergeAnimatedAsStatic = EditorGUILayout.ToggleLeft(L("voxel.option.chunk_merge_animated_static"), _chunkMergeAnimatedAsStatic);
 
                 EditorGUILayout.Space(6f);
                 EditorGUILayout.LabelField(LOr("voxel.group.performance", "性能选项"), _optionsGroupTitleStyle);
@@ -840,6 +835,12 @@ namespace Box3Blocks.Editor
                         string assetPath = BuildChunkMeshAssetPath(key, i, "transparent");
                         AssetDatabase.CreateAsset(mesh, assetPath);
                         mf.sharedMesh = mesh;
+                        if (_chunkColliderMode == Box3ColliderMode.Full)
+                        {
+                            MeshCollider chunkCollider = transparentGo.AddComponent<MeshCollider>();
+                            chunkCollider.sharedMesh = mesh;
+                            _stats.createdMeshColliders++;
+                        }
                     }
                     else
                     {
@@ -887,6 +888,12 @@ namespace Box3Blocks.Editor
                             string assetPath = BuildChunkMeshAssetPath(key, i, $"animated_{groupIndex}");
                             AssetDatabase.CreateAsset(mesh, assetPath);
                             mf.sharedMesh = mesh;
+                            if (_chunkColliderMode == Box3ColliderMode.Full)
+                            {
+                                MeshCollider chunkCollider = animatedGo.AddComponent<MeshCollider>();
+                                chunkCollider.sharedMesh = mesh;
+                                _stats.createdMeshColliders++;
+                            }
 
                             PreparedBlock prepared = sample.prepared;
                             Material chunkMat = sample.isTransparent ? ResolveChunkTransparentMaterial() : ResolveChunkOpaqueMaterial();
