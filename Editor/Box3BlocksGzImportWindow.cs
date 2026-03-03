@@ -101,7 +101,6 @@ namespace Box3Blocks.Editor
         private bool _ignoreAir = true;
         private bool _ignoreWater = true;
         private bool _ignoreBarrier = false;
-        private ImportMode _importMode = ImportMode.Chunk;
         private int _chunkSize = 32;
         private int _voxelsPerTick = 25000;
         private int _chunksPerTick = 6;
@@ -135,7 +134,6 @@ namespace Box3Blocks.Editor
         private ImportStats _stats;
         private int _cursorVoxel;
         private int _cursorChunk;
-        private int _cursorPlace;
         private Quaternion[] _rotLookup;
         private Material _chunkOpaqueMaterialInstance;
         private Material _chunkTransparentMaterialInstance;
@@ -143,14 +141,181 @@ namespace Box3Blocks.Editor
         private HashSet<Vector3Int> _occupiedVoxels;
         private HashSet<Vector3Int> _allVoxels;
         private HashSet<Vector3Int> _opaqueVoxels;
-        private List<PendingBlock> _pendingBlocks;
         private int _createdRealtimeLights;
         private Dictionary<int, PayloadLightData> _payloadLightByFlatIndex;
+        private bool _suppressDialogs;
+        private bool _lastImportSucceeded;
+        private bool _useInjectedPayload;
+        private VoxelPayload _injectedPayload;
 
         [MenuItem("Box3/地形导入", false, 20)]
         public static void Open()
         {
             GetWindow<Box3BlocksGzImportWindow>(L("voxel.window.title"));
+        }
+
+        public static bool ImportChunkFromFileApi(
+            string gzFilePath,
+            Transform parent,
+            Vector3Int origin,
+            bool ignoreBarrier,
+            bool clearPrevious,
+            int realtimeLightMode,
+            Box3ColliderMode colliderMode,
+            int chunkSize,
+            int chunksPerTick,
+            int voxelsPerTick)
+        {
+            if (string.IsNullOrWhiteSpace(gzFilePath))
+            {
+                return false;
+            }
+
+            return ExecuteImportApi(window =>
+            {
+                window._sourceType = SourceType.LocalFile;
+                window._localGzPath = gzFilePath;
+                window._parent = parent;
+                window._origin = origin;
+                window._ignoreBarrier = ignoreBarrier;
+                window._clearPrevious = clearPrevious;
+                window._realtimeLightMode = (RealtimeLightMode)Mathf.Clamp(realtimeLightMode, 0, 2);
+                window._chunkColliderMode = colliderMode;
+                window._chunkSize = Mathf.Max(1, chunkSize);
+                window._chunksPerTick = Mathf.Clamp(chunksPerTick, 1, 64);
+                window._voxelsPerTick = Mathf.Clamp(voxelsPerTick, 2000, 200000);
+                window._chunkMergeAnimatedAsStatic = false;
+            });
+        }
+
+        public static bool ImportChunkFromUrlApi(
+            string gzUrl,
+            Transform parent,
+            Vector3Int origin,
+            bool ignoreBarrier,
+            bool clearPrevious,
+            int realtimeLightMode,
+            Box3ColliderMode colliderMode,
+            int chunkSize,
+            int chunksPerTick,
+            int voxelsPerTick)
+        {
+            if (string.IsNullOrWhiteSpace(gzUrl))
+            {
+                return false;
+            }
+
+            return ExecuteImportApi(window =>
+            {
+                window._sourceType = SourceType.Url;
+                window._url = gzUrl;
+                window._parent = parent;
+                window._origin = origin;
+                window._ignoreBarrier = ignoreBarrier;
+                window._clearPrevious = clearPrevious;
+                window._realtimeLightMode = (RealtimeLightMode)Mathf.Clamp(realtimeLightMode, 0, 2);
+                window._chunkColliderMode = colliderMode;
+                window._chunkSize = Mathf.Max(1, chunkSize);
+                window._chunksPerTick = Mathf.Clamp(chunksPerTick, 1, 64);
+                window._voxelsPerTick = Mathf.Clamp(voxelsPerTick, 2000, 200000);
+                window._chunkMergeAnimatedAsStatic = false;
+            });
+        }
+
+        public static bool ImportChunkFromRootApi(
+            Transform sourceRoot,
+            Transform parent,
+            Vector3Int origin,
+            bool ignoreBarrier,
+            bool clearPrevious,
+            int realtimeLightMode,
+            Box3ColliderMode colliderMode,
+            int chunkSize,
+            int chunksPerTick,
+            int voxelsPerTick,
+            bool deleteSourceBlocksAfterBuild)
+        {
+            if (sourceRoot == null)
+            {
+                return false;
+            }
+
+            if (!TryBuildPayloadFromRoot(sourceRoot, ignoreBarrier, out VoxelPayload payload, out Vector3Int minCorner))
+            {
+                return false;
+            }
+
+            bool success = ExecuteImportApi(window =>
+            {
+                window._parent = parent;
+                // Keep source world-space by default; origin works as extra offset.
+                window._origin = minCorner + origin;
+                window._ignoreBarrier = ignoreBarrier;
+                window._clearPrevious = clearPrevious;
+                window._realtimeLightMode = (RealtimeLightMode)Mathf.Clamp(realtimeLightMode, 0, 2);
+                window._chunkColliderMode = colliderMode;
+                window._chunkSize = Mathf.Max(1, chunkSize);
+                window._chunksPerTick = Mathf.Clamp(chunksPerTick, 1, 64);
+                window._voxelsPerTick = Mathf.Clamp(voxelsPerTick, 2000, 200000);
+                window._chunkMergeAnimatedAsStatic = false;
+                window._useInjectedPayload = true;
+                window._injectedPayload = payload;
+            });
+
+            if (success && deleteSourceBlocksAfterBuild)
+            {
+                DeletePlacedBlocksUnderRoot(sourceRoot);
+            }
+
+            return success;
+        }
+
+        private static bool ExecuteImportApi(Action<Box3BlocksGzImportWindow> configure)
+        {
+            Box3BlocksGzImportWindow window = GetApiWindowInstance();
+            if (window == null)
+            {
+                return false;
+            }
+
+            configure?.Invoke(window);
+            window._suppressDialogs = true;
+            window._lastImportSucceeded = false;
+            window.StartImport();
+
+            int safety = 0;
+            while (window._phase != Phase.Idle && safety < 100000)
+            {
+                window.OnEditorUpdate();
+                safety++;
+            }
+
+            window._suppressDialogs = false;
+            if (safety >= 100000)
+            {
+                window.CancelImport(clearStatus: false);
+                window._useInjectedPayload = false;
+                window._injectedPayload = null;
+                return false;
+            }
+
+            bool success = window._lastImportSucceeded;
+            window._useInjectedPayload = false;
+            window._injectedPayload = null;
+            return success;
+        }
+
+        private static Box3BlocksGzImportWindow GetApiWindowInstance()
+        {
+            Box3BlocksGzImportWindow[] existing = Resources.FindObjectsOfTypeAll<Box3BlocksGzImportWindow>();
+            if (existing != null && existing.Length > 0)
+            {
+                return existing[0];
+            }
+
+            Box3BlocksGzImportWindow created = CreateInstance<Box3BlocksGzImportWindow>();
+            created.hideFlags = HideFlags.HideAndDontSave;
+            return created;
         }
 
         private void OnDisable()
@@ -181,17 +346,6 @@ namespace Box3Blocks.Editor
         private static string L(string key)
         {
             return Box3BlocksI18n.Get(key);
-        }
-
-        private static string LOr(string key, string fallback)
-        {
-            string value = L(key);
-            if (string.IsNullOrWhiteSpace(value) || string.Equals(value, key, StringComparison.Ordinal))
-            {
-                return fallback;
-            }
-
-            return value;
         }
 
         private static string Lf(string key, params object[] args)
@@ -333,23 +487,22 @@ namespace Box3Blocks.Editor
         {
             using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
-                _importMode = ImportMode.Chunk;
-                EditorGUILayout.LabelField(LOr("voxel.group.general", "通用选项"), _optionsGroupTitleStyle);
+                EditorGUILayout.LabelField(L("voxel.group.general"), _optionsGroupTitleStyle);
                 _ignoreBarrier = EditorGUILayout.ToggleLeft(L("voxel.option.ignore_barrier"), _ignoreBarrier);
                 _clearPrevious = EditorGUILayout.ToggleLeft(L("voxel.option.replace_previous"), _clearPrevious);
                 int lightModeIndex = EditorGUILayout.Popup(
-                    LOr("voxel.option.realtime_light_mode", "点光源生成策略"),
+                    L("voxel.option.realtime_light_mode"),
                     (int)_realtimeLightMode,
                     new[]
                     {
-                        LOr("voxel.light_mode.none", "全不用"),
-                        LOr("voxel.light_mode.all", "全用"),
-                        LOr("voxel.light_mode.data_only", "仅有数据的发光方块")
+                        L("voxel.light_mode.none"),
+                        L("voxel.light_mode.all"),
+                        L("voxel.light_mode.data_only")
                     });
                 _realtimeLightMode = (RealtimeLightMode)Mathf.Clamp(lightModeIndex, 0, 2);
 
                 EditorGUILayout.Space(6f);
-                EditorGUILayout.LabelField(LOr("voxel.group.chunk", "Chunk 选项"), _optionsGroupTitleStyle);
+                EditorGUILayout.LabelField(L("voxel.group.chunk"), _optionsGroupTitleStyle);
                 int colliderModeIndex = EditorGUILayout.Popup(
                     L("voxel.option.collider_mode"),
                     (int)_chunkColliderMode,
@@ -364,7 +517,7 @@ namespace Box3Blocks.Editor
                 _chunksPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.chunks_per_tick"), _chunksPerTick), 1, 64);
 
                 EditorGUILayout.Space(6f);
-                EditorGUILayout.LabelField(LOr("voxel.group.performance", "性能选项"), _optionsGroupTitleStyle);
+                EditorGUILayout.LabelField(L("voxel.group.performance"), _optionsGroupTitleStyle);
                 _voxelsPerTick = Mathf.Clamp(EditorGUILayout.IntField(L("voxel.option.voxels_per_tick"), _voxelsPerTick), 2000, 200000);
             }
         }
@@ -444,16 +597,24 @@ namespace Box3Blocks.Editor
         {
             try
             {
-                _importMode = ImportMode.Chunk;
+                _lastImportSucceeded = false;
                 CancelImport(clearStatus: false);
-                string json = _sourceType == SourceType.LocalFile ? ReadGzipJsonFromFile(_localGzPath) : ReadGzipJsonFromUrl(_url);
-                if (string.IsNullOrWhiteSpace(json))
+                if (_useInjectedPayload && _injectedPayload != null)
                 {
-                    _status = L("voxel.err.empty_json");
-                    return;
+                    _payload = _injectedPayload;
+                }
+                else
+                {
+                    string json = _sourceType == SourceType.LocalFile ? ReadGzipJsonFromFile(_localGzPath) : ReadGzipJsonFromUrl(_url);
+                    if (string.IsNullOrWhiteSpace(json))
+                    {
+                        _status = L("voxel.err.empty_json");
+                        return;
+                    }
+
+                    _payload = JsonUtility.FromJson<VoxelPayload>(json);
                 }
 
-                _payload = JsonUtility.FromJson<VoxelPayload>(json);
                 if (!ValidatePayload(_payload, out string payloadError))
                 {
                     _status = Lf("voxel.err.failed_with_reason", payloadError);
@@ -466,17 +627,16 @@ namespace Box3Blocks.Editor
                 _emissiveLightColorByName = LoadBlockLightColorMap();
                 _blockDefs = LoadBlockDefinitions();
                 _preparedByName = new Dictionary<string, PreparedBlock>(StringComparer.OrdinalIgnoreCase);
-                bool useChunkMode = _importMode == ImportMode.Chunk;
-                _chunkBuckets = useChunkMode ? new Dictionary<ChunkKey, ChunkBucket>(512) : null;
+                _chunkBuckets = new Dictionary<ChunkKey, ChunkBucket>(512);
                 _chunkKeys = null;
-                _chunkVoxelPositions = useChunkMode && _chunkColliderMode == Box3ColliderMode.TopOnly
+                _chunkVoxelPositions = _chunkColliderMode == Box3ColliderMode.TopOnly
                     ? new Dictionary<ChunkKey, HashSet<Vector3Int>>(512)
                     : null;
-                _occupiedVoxels = useChunkMode && _chunkColliderMode == Box3ColliderMode.TopOnly
+                _occupiedVoxels = _chunkColliderMode == Box3ColliderMode.TopOnly
                     ? new HashSet<Vector3Int>()
                     : null;
-                _allVoxels = _importMode == ImportMode.SingleBlock || useChunkMode ? new HashSet<Vector3Int>() : null;
-                _opaqueVoxels = useChunkMode ? new HashSet<Vector3Int>() : null;
+                _allVoxels = new HashSet<Vector3Int>();
+                _opaqueVoxels = new HashSet<Vector3Int>();
                 _chunkOpaqueMaterialInstance = null;
                 _chunkTransparentMaterialInstance = null;
                 _stats = new ImportStats
@@ -486,7 +646,6 @@ namespace Box3Blocks.Editor
                 };
                 _cursorVoxel = 0;
                 _cursorChunk = 0;
-                _cursorPlace = 0;
                 _rotLookup = new[]
                 {
                     Quaternion.identity,
@@ -494,7 +653,6 @@ namespace Box3Blocks.Editor
                     Quaternion.Euler(0f, 180f, 0f),
                     Quaternion.Euler(0f, 270f, 0f)
                 };
-                _pendingBlocks = _importMode == ImportMode.SingleBlock ? new List<PendingBlock>(_stats.total) : null;
                 _createdRealtimeLights = 0;
                 _payloadLightByFlatIndex = null;
 
@@ -509,6 +667,123 @@ namespace Box3Blocks.Editor
                 _phase = Phase.Idle;
                 _status = Lf("voxel.err.failed_with_reason", ex.Message);
                 EditorUtility.ClearProgressBar();
+                _lastImportSucceeded = false;
+            }
+        }
+
+        private static bool TryBuildPayloadFromRoot(Transform sourceRoot, bool ignoreBarrier, out VoxelPayload payload, out Vector3Int minCorner)
+        {
+            payload = null;
+            minCorner = Vector3Int.zero;
+            List<Box3BlocksPlacedBlock> allBlocks = CollectPlacedBlocksForExport(sourceRoot);
+            if (allBlocks.Count == 0)
+            {
+                return false;
+            }
+
+            Dictionary<string, int> nameToId = LoadNameToBlockIdMap();
+            List<Vector3Int> positions = new List<Vector3Int>(allBlocks.Count);
+            List<int> ids = new List<int>(allBlocks.Count);
+            List<int> rots = new List<int>(allBlocks.Count);
+
+            for (int i = 0; i < allBlocks.Count; i++)
+            {
+                Box3BlocksPlacedBlock block = allBlocks[i];
+                if (block == null || string.IsNullOrWhiteSpace(block.BlockId))
+                {
+                    continue;
+                }
+
+                if (ignoreBarrier && IsBarrierBlock(block.BlockId))
+                {
+                    continue;
+                }
+
+                if (!nameToId.TryGetValue(block.BlockId, out int numericId))
+                {
+                    continue;
+                }
+
+                Vector3Int pos = Vector3Int.RoundToInt(block.transform.position);
+                float yRot = NormalizeYRotation(block.transform.eulerAngles.y);
+                int rotQuarter = (Mathf.RoundToInt(yRot / 90f) + 2) & 3;
+
+                positions.Add(pos);
+                ids.Add(numericId);
+                rots.Add(rotQuarter);
+            }
+
+            if (positions.Count == 0)
+            {
+                return false;
+            }
+
+            int minX = int.MaxValue;
+            int minY = int.MaxValue;
+            int minZ = int.MaxValue;
+            int maxX = int.MinValue;
+            int maxY = int.MinValue;
+            int maxZ = int.MinValue;
+            for (int i = 0; i < positions.Count; i++)
+            {
+                Vector3Int p = positions[i];
+                if (p.x < minX) minX = p.x;
+                if (p.y < minY) minY = p.y;
+                if (p.z < minZ) minZ = p.z;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y > maxY) maxY = p.y;
+                if (p.z > maxZ) maxZ = p.z;
+            }
+
+            minCorner = new Vector3Int(minX, minY, minZ);
+            int shapeX = maxX - minX + 1;
+            int shapeY = maxY - minY + 1;
+            int shapeZ = maxZ - minZ + 1;
+            int shapeXY = shapeX * shapeY;
+
+            int count = positions.Count;
+            int[] indices = new int[count];
+            int[] data = new int[count];
+            int[] rot = new int[count];
+            for (int i = 0; i < count; i++)
+            {
+                Vector3Int p = positions[i];
+                int x = p.x - minX;
+                int y = p.y - minY;
+                int z = p.z - minZ;
+                x = (shapeX - 1) - x;
+                indices[i] = x + (y * shapeX) + (z * shapeXY);
+                data[i] = ids[i];
+                rot[i] = rots[i];
+            }
+
+            payload = new VoxelPayload
+            {
+                formatVersion = "unity",
+                shape = new[] { shapeX, shapeY, shapeZ },
+                dir = new[] { 1, 1, 1 },
+                indices = indices,
+                data = data,
+                rot = rot
+            };
+            return true;
+        }
+
+        private static void DeletePlacedBlocksUnderRoot(Transform sourceRoot)
+        {
+            if (sourceRoot == null)
+            {
+                return;
+            }
+
+            List<Box3BlocksPlacedBlock> blocks = CollectPlacedBlocksForExport(sourceRoot);
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                Box3BlocksPlacedBlock block = blocks[i];
+                if (block != null)
+                {
+                    DestroyImmediate(block.gameObject);
+                }
             }
         }
 
@@ -519,12 +794,6 @@ namespace Box3Blocks.Editor
                 if (_phase == Phase.ProcessVoxels)
                 {
                     TickProcessVoxels();
-                    return;
-                }
-
-                if (_phase == Phase.PlaceSingleBlocks)
-                {
-                    TickPlaceSingleBlocks();
                     return;
                 }
 
@@ -543,6 +812,7 @@ namespace Box3Blocks.Editor
             {
                 CancelImport(clearStatus: false);
                 _status = Lf("voxel.err.failed_with_reason", ex.Message);
+                _lastImportSucceeded = false;
             }
         }
 
@@ -605,82 +875,55 @@ namespace Box3Blocks.Editor
                 int rot = (_payload.rot != null && _payload.rot.Length > i) ? (_payload.rot[i] & 3) : 0;
                 // Import convention: always rotate voxel yaw by +180 degrees.
                 rot = (rot + 2) & 3;
-                Vector3 worldPos = new Vector3(wx, wy, wz);
-                Quaternion worldRot = _rotLookup[rot];
                 bool isEmissive = IsEmissiveBlock(blockName);
                 bool hasLightData = TryGetPayloadLightData(i, idx, out Color payloadLightColor, out float payloadLightIntensity, out float payloadLightRange, out Vector3 payloadLightOffset);
-                if (_importMode == ImportMode.SingleBlock)
+                bool isTransparent = IsTransparentBlock(blockName);
+                Vector3Int gridPos = new Vector3Int(wx, wy, wz);
+                _allVoxels?.Add(gridPos);
+                ChunkKey key = BuildChunkKey(wx, wy, wz, _chunkSize);
+                if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket))
                 {
-                    bool isTransparent = IsTransparentBlock(blockName);
-                    Vector3Int gridPos = new Vector3Int(wx, wy, wz);
-                    if (_allVoxels != null)
-                    {
-                        _allVoxels.Add(gridPos);
-                    }
+                    bucket = new ChunkBucket();
+                    _chunkBuckets.Add(key, bucket);
+                }
 
-                    if (_importMode == ImportMode.SingleBlock && isTransparent && !prepared.hasAnimation)
+                if (prepared.hasAnimation && !_chunkMergeAnimatedAsStatic)
+                {
+                    bucket.animatedVoxels.Add(new AnimatedChunkVoxel(gridPos, rot, prepared, blockName, isTransparent));
+                    if (!isTransparent)
                     {
-                        _pendingBlocks?.Add(new PendingBlock(gridPos, rot, prepared, blockName, hasLightData, payloadLightColor, payloadLightIntensity, payloadLightRange, payloadLightOffset));
+                        _opaqueVoxels?.Add(gridPos);
                     }
-                    else
-                    {
-                        PlaceSingleBlock(prepared, blockName, worldPos, worldRot, null, hasLightData, payloadLightColor, payloadLightIntensity, payloadLightRange, payloadLightOffset, isEmissive);
-                        _stats.createdBlocks++;
-                    }
+                }
+                else if (isTransparent)
+                {
+                    bucket.transparentVoxels.Add(new TransparentVoxel(gridPos, rot, prepared));
                 }
                 else
                 {
-                    bool isTransparent = IsTransparentBlock(blockName);
-                    Vector3Int gridPos = new Vector3Int(wx, wy, wz);
-                    if (_allVoxels != null)
+                    bucket.opaqueVoxels.Add(new OpaqueVoxel(gridPos, rot, prepared));
+                    _opaqueVoxels?.Add(gridPos);
+                }
+
+                if (ShouldSpawnRealtimeLight(isEmissive, hasLightData))
+                {
+                    Color lightColor = hasLightData ? payloadLightColor : ResolveEmissiveLightColor(blockName);
+                    float lightIntensity = hasLightData ? payloadLightIntensity : 1.05f;
+                    float lightRange = hasLightData ? payloadLightRange : 6f;
+                    Vector3 lightOffset = hasLightData ? payloadLightOffset : Vector3.zero;
+                    bucket.emissiveVoxels.Add(new EmissiveLightVoxel(gridPos, lightColor, lightIntensity, lightRange, lightOffset));
+                }
+
+                if (_chunkColliderMode == Box3ColliderMode.TopOnly && _occupiedVoxels != null && _chunkVoxelPositions != null)
+                {
+                    _occupiedVoxels.Add(gridPos);
+                    if (!_chunkVoxelPositions.TryGetValue(key, out HashSet<Vector3Int> set))
                     {
-                        _allVoxels.Add(gridPos);
-                    }
-                    ChunkKey key = BuildChunkKey(wx, wy, wz, _chunkSize);
-                    if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket))
-                    {
-                        bucket = new ChunkBucket();
-                        _chunkBuckets.Add(key, bucket);
+                        set = new HashSet<Vector3Int>();
+                        _chunkVoxelPositions.Add(key, set);
                     }
 
-                    if (prepared.hasAnimation && !_chunkMergeAnimatedAsStatic)
-                    {
-                        bucket.animatedVoxels.Add(new AnimatedChunkVoxel(gridPos, rot, prepared, blockName, isTransparent));
-                        if (!isTransparent)
-                        {
-                            _opaqueVoxels?.Add(gridPos);
-                        }
-                    }
-                    else if (isTransparent)
-                    {
-                        bucket.transparentVoxels.Add(new TransparentVoxel(gridPos, rot, prepared));
-                    }
-                    else
-                    {
-                        bucket.opaqueVoxels.Add(new OpaqueVoxel(gridPos, rot, prepared));
-                        _opaqueVoxels?.Add(gridPos);
-                    }
-
-                    if (ShouldSpawnRealtimeLight(isEmissive, hasLightData))
-                    {
-                        Color lightColor = hasLightData ? payloadLightColor : ResolveEmissiveLightColor(blockName);
-                        float lightIntensity = hasLightData ? payloadLightIntensity : 1.05f;
-                        float lightRange = hasLightData ? payloadLightRange : 6f;
-                        Vector3 lightOffset = hasLightData ? payloadLightOffset : Vector3.zero;
-                        bucket.emissiveVoxels.Add(new EmissiveLightVoxel(gridPos, lightColor, lightIntensity, lightRange, lightOffset));
-                    }
-
-                    if (_chunkColliderMode == Box3ColliderMode.TopOnly && _occupiedVoxels != null && _chunkVoxelPositions != null)
-                    {
-                        _occupiedVoxels.Add(gridPos);
-                        if (!_chunkVoxelPositions.TryGetValue(key, out HashSet<Vector3Int> set))
-                        {
-                            set = new HashSet<Vector3Int>();
-                            _chunkVoxelPositions.Add(key, set);
-                        }
-
-                        set.Add(gridPos);
-                    }
+                    set.Add(gridPos);
                 }
                 _stats.valid++;
             }
@@ -696,21 +939,6 @@ namespace Box3Blocks.Editor
                 return;
             }
 
-            if (_importMode == ImportMode.SingleBlock)
-            {
-                if (_pendingBlocks != null && _pendingBlocks.Count > 0)
-                {
-                    _phase = Phase.PlaceSingleBlocks;
-                    _status = L("voxel.status.placing_blocks");
-                }
-                else
-                {
-                    _phase = Phase.Done;
-                    _status = L("voxel.done.title");
-                }
-                return;
-            }
-
             _chunkKeys = new List<ChunkKey>(_chunkBuckets.Keys);
             _chunkKeys.Sort((a, b) =>
             {
@@ -721,56 +949,6 @@ namespace Box3Blocks.Editor
             });
             _phase = Phase.BuildChunks;
             _status = L("voxel.status.building_start");
-        }
-
-        private void TickPlaceSingleBlocks()
-        {
-            if (_pendingBlocks == null || _pendingBlocks.Count == 0)
-            {
-                _phase = Phase.Done;
-                _status = L("voxel.done.title");
-                return;
-            }
-
-            int total = _pendingBlocks.Count;
-            int maxIndex = Mathf.Min(total, _cursorPlace + _voxelsPerTick);
-            for (int i = _cursorPlace; i < maxIndex; i++)
-            {
-                PendingBlock pending = _pendingBlocks[i];
-                Mesh mesh = BuildCulledSingleBlockMesh(pending.prepared, pending.pos, pending.rot, _allVoxels);
-                if (mesh == null)
-                {
-                    continue;
-                }
-
-                Vector3 worldPos = new Vector3(pending.pos.x, pending.pos.y, pending.pos.z);
-                Quaternion worldRot = _rotLookup[pending.rot];
-                PlaceSingleBlock(
-                    pending.prepared,
-                    pending.blockName,
-                    worldPos,
-                    worldRot,
-                    mesh,
-                    pending.hasLightData,
-                    pending.lightColor,
-                    pending.lightIntensity,
-                    pending.lightRange,
-                    pending.lightOffset,
-                    IsEmissiveBlock(pending.blockName));
-                _stats.createdBlocks++;
-            }
-
-            _cursorPlace = maxIndex;
-            _progress = total > 0 ? (float)_cursorPlace / total : 1f;
-            _status = Lf("voxel.status.placing_progress", _cursorPlace, total);
-            EditorUtility.DisplayProgressBar(L("voxel.window.title"), _status, _progress);
-            Repaint();
-
-            if (_cursorPlace >= total)
-            {
-                _phase = Phase.Done;
-                _status = L("voxel.done.title");
-            }
         }
 
         private void TickBuildChunks()
@@ -990,7 +1168,7 @@ namespace Box3Blocks.Editor
             EditorApplication.update -= OnEditorUpdate;
             EditorUtility.ClearProgressBar();
 
-            if (_importMode == ImportMode.Chunk && !_chunkMergeAnimatedAsStatic)
+            if (!_chunkMergeAnimatedAsStatic)
             {
                 MergeAnimatedChunkGroupsAcrossChunks();
             }
@@ -1015,7 +1193,11 @@ namespace Box3Blocks.Editor
                 Lf("voxel.done.skipped", _stats.skippedBarrier) + "\n" +
                 Lf("voxel.done.time", sec.ToString("F2", CultureInfo.InvariantCulture));
             _status = summary.Replace("\n", " | ");
-            EditorUtility.DisplayDialog(L("voxel.window.title"), summary, L("dialog.ok"));
+            _lastImportSucceeded = true;
+            if (!_suppressDialogs)
+            {
+                EditorUtility.DisplayDialog(L("voxel.window.title"), summary, L("dialog.ok"));
+            }
             Repaint();
         }
 
@@ -1390,99 +1572,6 @@ namespace Box3Blocks.Editor
             {
                 _status = Lf("voxel.err.failed_with_reason", ex.Message);
                 EditorUtility.DisplayDialog(L("voxel.window.title"), _status, L("dialog.ok"));
-            }
-        }
-
-        private void PlaceSingleBlock(
-            PreparedBlock prepared,
-            string blockName,
-            Vector3 position,
-            Quaternion rotation,
-            Mesh overrideMesh = null,
-            bool hasLightData = false,
-            Color payloadLightColor = default,
-            float payloadLightIntensity = 1.05f,
-            float payloadLightRange = 6f,
-            Vector3 payloadLightOffset = default,
-            bool isEmissive = false)
-        {
-            Mesh meshToUse = overrideMesh ?? prepared?.mesh;
-            if (_importRoot == null || prepared == null || meshToUse == null)
-            {
-                return;
-            }
-
-            GameObject go = new GameObject(blockName);
-            go.transform.SetParent(_importRoot, false);
-            go.transform.localPosition = position;
-            go.transform.localRotation = rotation;
-            go.transform.localScale = Vector3.one;
-
-            MeshFilter mf = go.AddComponent<MeshFilter>();
-            mf.sharedMesh = meshToUse;
-
-            MeshRenderer mr = go.AddComponent<MeshRenderer>();
-            if (prepared.usesSubmeshes && prepared.materials != null && prepared.materials.Length > 0)
-            {
-                mr.sharedMaterials = prepared.materials;
-            }
-            else if (prepared.material != null)
-            {
-                mr.sharedMaterial = prepared.material;
-            }
-
-            // Use chunk-optimized opaque material only for static non-transparent blocks.
-            // Animated blocks keep their original material setup.
-            bool isTransparent = IsTransparentBlock(blockName);
-            if (!isTransparent && !prepared.hasAnimation)
-            {
-                Material opaque = ResolveChunkOpaqueMaterial();
-                if (opaque != null)
-                {
-                    if (prepared.usesSubmeshes && prepared.materials != null && prepared.materials.Length > 0)
-                    {
-                        Material[] shared = new Material[prepared.materials.Length];
-                        for (int i = 0; i < shared.Length; i++)
-                        {
-                            shared[i] = opaque;
-                        }
-
-                        mr.sharedMaterials = shared;
-                    }
-                    else
-                    {
-                        mr.sharedMaterial = opaque;
-                    }
-                }
-            }
-
-            MeshCollider mc = go.AddComponent<MeshCollider>();
-            mc.sharedMesh = meshToUse;
-
-            Box3BlocksPlacedBlock marker = go.AddComponent<Box3BlocksPlacedBlock>();
-            marker.BlockId = blockName;
-            marker.HasAnimation = prepared.hasAnimation;
-
-            if (prepared.hasAnimation && prepared.animations != null && prepared.animations.Length > 0)
-            {
-                Box3BlocksTextureAnimator animator = go.GetComponent<Box3BlocksTextureAnimator>();
-                if (animator == null)
-                {
-                    animator = go.AddComponent<Box3BlocksTextureAnimator>();
-                }
-
-                animator.SetAnimations(prepared.animations, prepared.faceMainTexSt);
-            }
-
-            ApplyEmissionForBlockName(mr, blockName);
-
-            if (ShouldSpawnRealtimeLight(isEmissive || IsEmissiveBlock(blockName), hasLightData))
-            {
-                Color lightColor = hasLightData ? payloadLightColor : ResolveEmissiveLightColor(blockName);
-                float lightIntensity = hasLightData ? payloadLightIntensity : 1.05f;
-                float lightRange = hasLightData ? payloadLightRange : 6f;
-                CreateRealtimeLight(go.transform, payloadLightOffset, lightColor, lightIntensity, lightRange);
-                _createdRealtimeLights++;
             }
         }
 
@@ -3240,103 +3329,12 @@ namespace Box3Blocks.Editor
             }
         }
 
-        private Mesh BuildCulledSingleBlockMesh(PreparedBlock prepared, Vector3Int pos, int rot, HashSet<Vector3Int> allVoxels)
-        {
-            if (prepared == null || prepared.faceMainTexSt == null || prepared.faceMainTexSt.Length < SideOrder.Length || allVoxels == null)
-            {
-                return prepared?.mesh;
-            }
-
-            List<Vector3> vertices = new List<Vector3>(24);
-            List<Vector2> uvs = new List<Vector2>(24);
-            List<int> triangles = new List<int>(36);
-            Quaternion rotation = _rotLookup[rot];
-
-            for (int face = 0; face < SideOrder.Length; face++)
-            {
-                Vector3 dir = rotation * FaceNormals[face];
-                Vector3Int neighbor = pos + ToVector3Int(dir);
-                if (allVoxels.Contains(neighbor))
-                {
-                    continue;
-                }
-
-                Vector4 st = prepared.faceMainTexSt[face];
-                int baseIndex = vertices.Count;
-                vertices.Add(FaceVertices[face][0]);
-                vertices.Add(FaceVertices[face][1]);
-                vertices.Add(FaceVertices[face][2]);
-                vertices.Add(FaceVertices[face][3]);
-
-                uvs.Add(new Vector2(st.z, st.w));
-                uvs.Add(new Vector2(st.z + st.x, st.w));
-                uvs.Add(new Vector2(st.z + st.x, st.w + st.y));
-                uvs.Add(new Vector2(st.z, st.w + st.y));
-
-                triangles.Add(baseIndex + 0);
-                triangles.Add(baseIndex + 2);
-                triangles.Add(baseIndex + 1);
-                triangles.Add(baseIndex + 0);
-                triangles.Add(baseIndex + 3);
-                triangles.Add(baseIndex + 2);
-            }
-
-            if (vertices.Count == 0)
-            {
-                return null;
-            }
-
-            Mesh mesh = new Mesh
-            {
-                name = $"VoxelSingle_{pos.x}_{pos.y}_{pos.z}",
-                indexFormat = IndexFormat.UInt32
-            };
-            mesh.SetVertices(vertices);
-            mesh.SetUVs(0, uvs);
-            mesh.SetTriangles(triangles, 0, true);
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            return mesh;
-        }
-
         private static Vector3Int ToVector3Int(Vector3 dir)
         {
             return new Vector3Int(
                 Mathf.RoundToInt(dir.x),
                 Mathf.RoundToInt(dir.y),
                 Mathf.RoundToInt(dir.z));
-        }
-
-        private static void ApplyEmissionForBlockName(Renderer renderer, string blockName)
-        {
-            if (renderer == null)
-            {
-                return;
-            }
-
-      
-
-            Material[] mats = renderer.sharedMaterials;
-            if (mats == null || mats.Length == 0)
-            {
-                return;
-            }
-
-            Color emissionColor =  Color.white;
-            MaterialPropertyBlock mpb = new MaterialPropertyBlock();
-            for (int i = 0; i < mats.Length; i++)
-            {
-                Material mat = mats[i];
-                if (mat == null || !mat.HasProperty("_EmissionColor"))
-                {
-                    continue;
-                }
-
-                mpb.Clear();
-                renderer.GetPropertyBlock(mpb, i);
-                mpb.SetColor("_EmissionColor", emissionColor);
-                renderer.SetPropertyBlock(mpb, i);
-            }
         }
 
         private static Mesh BuildStaticBlockMesh(string blockName, Vector4[] faceMainTexSt)

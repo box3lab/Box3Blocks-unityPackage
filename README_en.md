@@ -91,6 +91,7 @@ Core methods (Editor):
 - Rotate: `RotateBlockAt`, `RotateBlocksInBounds`
 - Query: `TryGetBlockIdAt`, `ExistsAt`, `GetTopY`, `GetAvailableBlockIds`, `IsTransparent`
 - Resources: `PrepareGeneratedAssets`
+- Chunk build: `BuildChunkFromRoot`
 - Emissive light default: `SetSpawnRealtimeLightForEmissive`, `GetSpawnRealtimeLightForEmissive`
 - Collider mode: placement/replacement APIs support `colliderMode` (`None` / `TopOnly` / `Full`)
 

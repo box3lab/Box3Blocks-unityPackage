@@ -10,7 +10,7 @@ using UnityEngine;
 /// Editor noise-generation demo window (single feature).
 /// Demonstrates batch block placement in Edit Mode via <see cref="Box3Api"/>.
 /// </summary>
-public sealed class Box3EditorApiDemoWindow : EditorWindow
+public sealed class Box3EditorNoiseTerrainDemoWindow : EditorWindow
 {
     /// <summary>
     /// 方块根节点。
@@ -89,6 +89,13 @@ public sealed class Box3EditorApiDemoWindow : EditorWindow
     private string _status = "就绪。";
 
     /// <summary>
+    /// 是否在噪声生成完成后自动转为 Chunk。
+    /// <para/>
+    /// Whether to convert generated blocks to chunk automatically after noise generation.
+    /// </summary>
+    private bool _buildChunkAfterGenerate = true;
+
+    /// <summary>
     /// 打开示例窗口。
     /// 菜单路径：Box3/Samples/Editor API Demo。
     /// <para/>
@@ -98,7 +105,7 @@ public sealed class Box3EditorApiDemoWindow : EditorWindow
     [MenuItem("Box3/编辑端示例/噪音生成", false, 230)]
     private static void Open()
     {
-        GetWindow<Box3EditorApiDemoWindow>("Box3 噪声示例");
+        GetWindow<Box3EditorNoiseTerrainDemoWindow>("Box3 噪声示例");
     }
 
     /// <summary>
@@ -138,6 +145,7 @@ public sealed class Box3EditorApiDemoWindow : EditorWindow
             _noiseScale = Mathf.Max(0.001f, EditorGUILayout.FloatField("噪声缩放", _noiseScale));
             _seed = EditorGUILayout.IntField("种子", _seed);
             _colliderMode = (Box3ColliderMode)EditorGUILayout.EnumPopup("碰撞模式", _colliderMode);
+            _buildChunkAfterGenerate = EditorGUILayout.ToggleLeft("生成后自动转 Chunk", _buildChunkAfterGenerate);
         }
 
         EditorGUILayout.Space(6f);
@@ -265,5 +273,27 @@ public sealed class Box3EditorApiDemoWindow : EditorWindow
             ? $"已生成噪声地形：{placed} 个方块。"
             : "生成完成，但放置数量为 0。请检查方块ID与 Console 日志。";
         Selection.activeTransform = _root;
+
+        if (!_buildChunkAfterGenerate || _root == null)
+        {
+            return;
+        }
+
+        bool chunkOk = Box3Api.BuildChunkFromRoot(
+            sourceRoot: _root,
+            parent: null,
+            origin: Vector3Int.zero,
+            ignoreBarrier: false,
+            clearPrevious: true,
+            realtimeLightMode: Box3Api.Box3RealtimeLightMode.None,
+            colliderMode: _colliderMode,
+            chunkSize: 32,
+            chunksPerTick: 6,
+            voxelsPerTick: 25000,
+            deleteSourceBlocksAfterBuild: true);
+
+        _status = chunkOk
+            ? $"{_status} 已自动转为 Chunk。"
+            : $"{_status} Chunk 转换失败。";
     }
 }
