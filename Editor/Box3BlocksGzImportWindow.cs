@@ -1732,8 +1732,14 @@ namespace Box3Blocks.Editor
                 }
             }
 
-            Dictionary<Vector4, int> signatureToId = new Dictionary<Vector4, int>();
+            Dictionary<string, int> signatureToId = new Dictionary<string, int>();
             List<Vector4> idToSt = new List<Vector4>(128);
+            List<int> idToUvPattern = new List<int>(128);
+            List<Vector3> vertices = new List<Vector3>(voxels.Count * 8);
+            List<Vector2> tiledUvs = new List<Vector2>(voxels.Count * 8);
+            List<Vector2> atlasUvMin = new List<Vector2>(voxels.Count * 8);
+            List<Vector2> atlasUvSize = new List<Vector2>(voxels.Count * 8);
+            List<int> triangles = new List<int>(voxels.Count * 12);
 
             for (int i = 0; i < voxels.Count; i++)
             {
@@ -1741,6 +1747,12 @@ namespace Box3Blocks.Editor
                 PreparedBlock prepared = voxel.prepared;
                 if (prepared == null || prepared.faceMainTexSt == null || prepared.faceMainTexSt.Length < SideOrder.Length)
                 {
+                    continue;
+                }
+
+                if (prepared.hasAnimation)
+                {
+                    AppendDirectFacesForOpaqueAnimated(voxel, opaqueVoxels, vertices, tiledUvs, atlasUvMin, atlasUvSize, triangles);
                     continue;
                 }
 
@@ -1760,16 +1772,18 @@ namespace Box3Blocks.Editor
                         continue;
                     }
 
-                    if (!TryGetFaceStForWorldDir(prepared, voxel.rot, worldDir, out Vector4 st))
+                    if (!TryGetFaceStForWorldDir(prepared, voxel.rot, dirIndex, worldDir, out Vector4 st, out int uvPattern))
                     {
                         continue;
                     }
 
-                    if (!signatureToId.TryGetValue(st, out int sigId))
+                    string sigKey = BuildFaceSignatureKey(st, uvPattern);
+                    if (!signatureToId.TryGetValue(sigKey, out int sigId))
                     {
                         sigId = idToSt.Count;
                         idToSt.Add(st);
-                        signatureToId.Add(st, sigId);
+                        idToUvPattern.Add(uvPattern);
+                        signatureToId.Add(sigKey, sigId);
                     }
 
                     MapFaceToMaskCoordinates(dirIndex, lx, ly, lz, out int layer, out int u, out int v);
@@ -1782,12 +1796,6 @@ namespace Box3Blocks.Editor
                     masks[dirIndex][idx] = sigId;
                 }
             }
-
-            List<Vector3> vertices = new List<Vector3>(voxels.Count * 8);
-            List<Vector2> tiledUvs = new List<Vector2>(voxels.Count * 8);
-            List<Vector2> atlasUvMin = new List<Vector2>(voxels.Count * 8);
-            List<Vector2> atlasUvSize = new List<Vector2>(voxels.Count * 8);
-            List<int> triangles = new List<int>(voxels.Count * 12);
 
             for (int dirIndex = 0; dirIndex < WorldFaceDirs.Length; dirIndex++)
             {
@@ -1842,6 +1850,7 @@ namespace Box3Blocks.Editor
                                 width,
                                 height,
                                 idToSt[sigId],
+                                idToUvPattern[sigId],
                                 vertices,
                                 tiledUvs,
                                 atlasUvMin,
@@ -1881,9 +1890,66 @@ namespace Box3Blocks.Editor
             return mesh;
         }
 
-        private bool TryGetFaceStForWorldDir(PreparedBlock prepared, int rot, Vector3Int worldDir, out Vector4 st)
+        private void AppendDirectFacesForOpaqueAnimated(
+            OpaqueVoxel voxel,
+            HashSet<Vector3Int> opaqueVoxels,
+            List<Vector3> vertices,
+            List<Vector2> tiledUvs,
+            List<Vector2> atlasUvMin,
+            List<Vector2> atlasUvSize,
+            List<int> triangles)
+        {
+            if (voxel.prepared == null || voxel.prepared.faceMainTexSt == null || voxel.prepared.faceMainTexSt.Length < SideOrder.Length)
+            {
+                return;
+            }
+
+            Quaternion rotQ = _rotLookup[voxel.rot & 3];
+            for (int localFace = 0; localFace < SideOrder.Length; localFace++)
+            {
+                Vector3 worldDirF = rotQ * FaceNormals[localFace];
+                Vector3Int worldDir = ToVector3Int(worldDirF);
+                if (opaqueVoxels != null && opaqueVoxels.Contains(voxel.pos + worldDir))
+                {
+                    continue;
+                }
+
+                Vector4 st = ResolveStaticFaceSt(voxel.prepared, localFace);
+                int baseIndex = vertices.Count;
+                for (int v = 0; v < 4; v++)
+                {
+                    Vector3 rotated = rotQ * FaceVertices[localFace][v];
+                    vertices.Add(rotated + (Vector3)voxel.pos);
+                }
+
+                tiledUvs.Add(new Vector2(0f, 0f));
+                tiledUvs.Add(new Vector2(1f, 0f));
+                tiledUvs.Add(new Vector2(1f, 1f));
+                tiledUvs.Add(new Vector2(0f, 1f));
+                Vector2 min = new Vector2(st.z, st.w);
+                Vector2 size = new Vector2(st.x, st.y);
+                atlasUvMin.Add(min);
+                atlasUvMin.Add(min);
+                atlasUvMin.Add(min);
+                atlasUvMin.Add(min);
+                atlasUvSize.Add(size);
+                atlasUvSize.Add(size);
+                atlasUvSize.Add(size);
+                atlasUvSize.Add(size);
+
+                triangles.Add(baseIndex + 0);
+                triangles.Add(baseIndex + 2);
+                triangles.Add(baseIndex + 1);
+                triangles.Add(baseIndex + 0);
+                triangles.Add(baseIndex + 3);
+                triangles.Add(baseIndex + 2);
+            }
+        }
+
+        private bool TryGetFaceStForWorldDir(PreparedBlock prepared, int rot, int dirIndex, Vector3Int worldDir, out Vector4 st, out int uvPattern)
         {
             st = default;
+            uvPattern = 0xE4;
             if (prepared == null || prepared.faceMainTexSt == null || prepared.faceMainTexSt.Length < SideOrder.Length)
             {
                 return false;
@@ -1896,11 +1962,79 @@ namespace Box3Blocks.Editor
                 if (dir == worldDir)
                 {
                     st = ResolveStaticFaceSt(prepared, i);
+                    uvPattern = BuildUvPatternForFace(i, rot, dirIndex);
                     return true;
                 }
             }
 
             return false;
+        }
+
+        private static int BuildUvPatternForFace(int localFaceIndex, int rot, int dirIndex)
+        {
+            Quaternion q = Quaternion.Euler(0f, (rot & 3) * 90f, 0f);
+            int pattern = 0;
+            for (int localVertexIndex = 0; localVertexIndex < 4; localVertexIndex++)
+            {
+                Vector3 rotated = q * FaceVertices[localFaceIndex][localVertexIndex];
+                int worldCorner = MapRotatedVertexToWorldCorner(dirIndex, rotated);
+                pattern |= (localVertexIndex & 0x3) << (worldCorner * 2);
+            }
+
+            return pattern;
+        }
+
+        private static int MapRotatedVertexToWorldCorner(int dirIndex, Vector3 rotated)
+        {
+            bool xPos = rotated.x >= 0f;
+            bool yPos = rotated.y >= 0f;
+            bool zPos = rotated.z >= 0f;
+
+            switch (dirIndex)
+            {
+                case 0: // -X: 0(-y,+z),1(-y,-z),2(+y,-z),3(+y,+z)
+                    if (!yPos && zPos) return 0;
+                    if (!yPos && !zPos) return 1;
+                    if (yPos && !zPos) return 2;
+                    return 3;
+                case 1: // +X: 0(-y,-z),1(-y,+z),2(+y,+z),3(+y,-z)
+                    if (!yPos && !zPos) return 0;
+                    if (!yPos && zPos) return 1;
+                    if (yPos && zPos) return 2;
+                    return 3;
+                case 2: // -Y: 0(-x,+z),1(+x,+z),2(+x,-z),3(-x,-z)
+                    if (!xPos && zPos) return 0;
+                    if (xPos && zPos) return 1;
+                    if (xPos && !zPos) return 2;
+                    return 3;
+                case 3: // +Y: 0(-x,-z),1(+x,-z),2(+x,+z),3(-x,+z)
+                    if (!xPos && !zPos) return 0;
+                    if (xPos && !zPos) return 1;
+                    if (xPos && zPos) return 2;
+                    return 3;
+                case 4: // -Z: 0(-x,-y),1(+x,-y),2(+x,+y),3(-x,+y)
+                    if (!xPos && !yPos) return 0;
+                    if (xPos && !yPos) return 1;
+                    if (xPos && yPos) return 2;
+                    return 3;
+                default: // +Z: 0(+x,-y),1(-x,-y),2(-x,+y),3(+x,+y)
+                    if (xPos && !yPos) return 0;
+                    if (!xPos && !yPos) return 1;
+                    if (!xPos && yPos) return 2;
+                    return 3;
+            }
+        }
+
+        private static string BuildFaceSignatureKey(Vector4 st, int uvPattern)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "{0:F6}|{1:F6}|{2:F6}|{3:F6}|{4}",
+                st.x,
+                st.y,
+                st.z,
+                st.w,
+                uvPattern & 0xFF);
         }
 
         private static Vector4 ResolveStaticFaceSt(PreparedBlock prepared, int faceIndex)
@@ -1986,6 +2120,7 @@ namespace Box3Blocks.Editor
             int width,
             int height,
             Vector4 st,
+            int uvPattern,
             List<Vector3> vertices,
             List<Vector2> tiledUvs,
             List<Vector2> atlasUvMin,
@@ -2088,10 +2223,7 @@ namespace Box3Blocks.Editor
             vertices.Add(v2);
             vertices.Add(v3);
 
-            tiledUvs.Add(new Vector2(0f, 0f));
-            tiledUvs.Add(new Vector2(width, 0f));
-            tiledUvs.Add(new Vector2(width, height));
-            tiledUvs.Add(new Vector2(0f, height));
+            AddMappedTiledUv(tiledUvs, width, height, uvPattern);
 
             Vector2 min = new Vector2(st.z, st.w);
             Vector2 size = new Vector2(st.x, st.y);
@@ -2110,6 +2242,17 @@ namespace Box3Blocks.Editor
             triangles.Add(baseIndex + 0);
             triangles.Add(baseIndex + 3);
             triangles.Add(baseIndex + 2);
+        }
+
+        private static void AddMappedTiledUv(List<Vector2> tiledUvs, int width, int height, int uvPattern)
+        {
+            Vector2[] unit = { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) };
+            for (int worldCorner = 0; worldCorner < 4; worldCorner++)
+            {
+                int localUvCorner = (uvPattern >> (worldCorner * 2)) & 0x3;
+                Vector2 uv = unit[localUvCorner];
+                tiledUvs.Add(new Vector2(uv.x * width, uv.y * height));
+            }
         }
 
         private Mesh BuildTransparentChunkMesh(ChunkKey key, List<TransparentVoxel> voxels, HashSet<Vector3Int> allVoxels)
@@ -2136,8 +2279,14 @@ namespace Box3Blocks.Editor
                 }
             }
 
-            Dictionary<Vector4, int> signatureToId = new Dictionary<Vector4, int>();
+            Dictionary<string, int> signatureToId = new Dictionary<string, int>();
             List<Vector4> idToSt = new List<Vector4>(128);
+            List<int> idToUvPattern = new List<int>(128);
+            List<Vector3> vertices = new List<Vector3>(voxels.Count * 8);
+            List<Vector2> tiledUvs = new List<Vector2>(voxels.Count * 8);
+            List<Vector2> atlasUvMin = new List<Vector2>(voxels.Count * 8);
+            List<Vector2> atlasUvSize = new List<Vector2>(voxels.Count * 8);
+            List<int> triangles = new List<int>(voxels.Count * 12);
 
             for (int i = 0; i < voxels.Count; i++)
             {
@@ -2145,6 +2294,12 @@ namespace Box3Blocks.Editor
                 PreparedBlock prepared = voxel.prepared;
                 if (prepared == null || prepared.faceMainTexSt == null || prepared.faceMainTexSt.Length < SideOrder.Length)
                 {
+                    continue;
+                }
+
+                if (prepared.hasAnimation)
+                {
+                    AppendDirectFacesForTransparentAnimated(voxel, allVoxels, vertices, tiledUvs, atlasUvMin, atlasUvSize, triangles);
                     continue;
                 }
 
@@ -2164,16 +2319,18 @@ namespace Box3Blocks.Editor
                         continue;
                     }
 
-                    if (!TryGetFaceStForWorldDir(prepared, voxel.rot, worldDir, out Vector4 st))
+                    if (!TryGetFaceStForWorldDir(prepared, voxel.rot, dirIndex, worldDir, out Vector4 st, out int uvPattern))
                     {
                         continue;
                     }
 
-                    if (!signatureToId.TryGetValue(st, out int sigId))
+                    string sigKey = BuildFaceSignatureKey(st, uvPattern);
+                    if (!signatureToId.TryGetValue(sigKey, out int sigId))
                     {
                         sigId = idToSt.Count;
                         idToSt.Add(st);
-                        signatureToId.Add(st, sigId);
+                        idToUvPattern.Add(uvPattern);
+                        signatureToId.Add(sigKey, sigId);
                     }
 
                     MapFaceToMaskCoordinates(dirIndex, lx, ly, lz, out int layer, out int u, out int v);
@@ -2186,12 +2343,6 @@ namespace Box3Blocks.Editor
                     masks[dirIndex][idx] = sigId;
                 }
             }
-
-            List<Vector3> vertices = new List<Vector3>(voxels.Count * 8);
-            List<Vector2> tiledUvs = new List<Vector2>(voxels.Count * 8);
-            List<Vector2> atlasUvMin = new List<Vector2>(voxels.Count * 8);
-            List<Vector2> atlasUvSize = new List<Vector2>(voxels.Count * 8);
-            List<int> triangles = new List<int>(voxels.Count * 12);
 
             for (int dirIndex = 0; dirIndex < WorldFaceDirs.Length; dirIndex++)
             {
@@ -2246,6 +2397,7 @@ namespace Box3Blocks.Editor
                                 width,
                                 height,
                                 idToSt[sigId],
+                                idToUvPattern[sigId],
                                 vertices,
                                 tiledUvs,
                                 atlasUvMin,
@@ -2283,6 +2435,62 @@ namespace Box3Blocks.Editor
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
+        }
+
+        private void AppendDirectFacesForTransparentAnimated(
+            TransparentVoxel voxel,
+            HashSet<Vector3Int> allVoxels,
+            List<Vector3> vertices,
+            List<Vector2> tiledUvs,
+            List<Vector2> atlasUvMin,
+            List<Vector2> atlasUvSize,
+            List<int> triangles)
+        {
+            if (voxel.prepared == null || voxel.prepared.faceMainTexSt == null || voxel.prepared.faceMainTexSt.Length < SideOrder.Length)
+            {
+                return;
+            }
+
+            Quaternion rotQ = _rotLookup[voxel.rot & 3];
+            for (int localFace = 0; localFace < SideOrder.Length; localFace++)
+            {
+                Vector3 worldDirF = rotQ * FaceNormals[localFace];
+                Vector3Int worldDir = ToVector3Int(worldDirF);
+                if (allVoxels != null && allVoxels.Contains(voxel.pos + worldDir))
+                {
+                    continue;
+                }
+
+                Vector4 st = ResolveStaticFaceSt(voxel.prepared, localFace);
+                int baseIndex = vertices.Count;
+                for (int v = 0; v < 4; v++)
+                {
+                    Vector3 rotated = rotQ * FaceVertices[localFace][v];
+                    vertices.Add(rotated + (Vector3)voxel.pos);
+                }
+
+                tiledUvs.Add(new Vector2(0f, 0f));
+                tiledUvs.Add(new Vector2(1f, 0f));
+                tiledUvs.Add(new Vector2(1f, 1f));
+                tiledUvs.Add(new Vector2(0f, 1f));
+                Vector2 min = new Vector2(st.z, st.w);
+                Vector2 size = new Vector2(st.x, st.y);
+                atlasUvMin.Add(min);
+                atlasUvMin.Add(min);
+                atlasUvMin.Add(min);
+                atlasUvMin.Add(min);
+                atlasUvSize.Add(size);
+                atlasUvSize.Add(size);
+                atlasUvSize.Add(size);
+                atlasUvSize.Add(size);
+
+                triangles.Add(baseIndex + 0);
+                triangles.Add(baseIndex + 2);
+                triangles.Add(baseIndex + 1);
+                triangles.Add(baseIndex + 0);
+                triangles.Add(baseIndex + 3);
+                triangles.Add(baseIndex + 2);
+            }
         }
 
         private Mesh BuildCulledSingleBlockMesh(PreparedBlock prepared, Vector3Int pos, int rot, HashSet<Vector3Int> allVoxels)
