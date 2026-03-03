@@ -20,8 +20,8 @@ namespace Box3Blocks.Editor
         private const string BlockSpecPath = "Packages/com.box3lab.box3/Editor/SourceAssets/block-spec.json";
         private const string GeneratedMeshFolder = "Assets/Box3/Meshes/Import";
         private const string GeneratedMaterialFolder = "Assets/Box3/Materials";
-        private const string ChunkOpaqueMaterialPath = "Assets/Box3/Materials/M_Block.mat";
-        private const string ChunkTransparentMaterialPath = "Assets/Box3/Materials/M_Block_Transparent_Chunk.mat";
+        private const string ChunkOpaqueMaterialPath = "Assets/Box3/Materials/M_Block_Chunk_Opaque.mat";
+        private const string ChunkTransparentMaterialPath = "Assets/Box3/Materials/M_Block_Chunk_Transparent.mat";
         private const string ChunkOpaqueShaderName = "Box3Blocks/ChunkOpaqueTiled";
         private const string ChunkTransparentShaderName = "Box3Blocks/ChunkTransparentTiled";
         private static readonly string[] SideOrder = { "back", "bottom", "front", "left", "right", "top" };
@@ -335,13 +335,9 @@ namespace Box3Blocks.Editor
         {
             using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
+                _importMode = ImportMode.Chunk;
                 EditorGUILayout.LabelField(LOr("voxel.group.general", "通用选项"), _optionsGroupTitleStyle);
                 _ignoreBarrier = EditorGUILayout.ToggleLeft(L("voxel.option.ignore_barrier"), _ignoreBarrier);
-                int modeIndex = EditorGUILayout.Popup(
-                    L("voxel.option.import_mode"),
-                    (int)_importMode,
-                    new[] { L("voxel.mode.chunk"), L("voxel.mode.single_block") });
-                _importMode = (ImportMode)Mathf.Clamp(modeIndex, 0, 1);
                 _clearPrevious = EditorGUILayout.ToggleLeft(L("voxel.option.replace_previous"), _clearPrevious);
                 int lightModeIndex = EditorGUILayout.Popup(
                     LOr("voxel.option.realtime_light_mode", "点光源生成策略"),
@@ -356,7 +352,6 @@ namespace Box3Blocks.Editor
 
                 EditorGUILayout.Space(6f);
                 EditorGUILayout.LabelField(LOr("voxel.group.chunk", "Chunk 选项"), _optionsGroupTitleStyle);
-                EditorGUI.BeginDisabledGroup(_importMode != ImportMode.Chunk);
                 int colliderModeIndex = EditorGUILayout.Popup(
                     L("voxel.option.collider_mode"),
                     (int)_chunkColliderMode,
@@ -372,7 +367,6 @@ namespace Box3Blocks.Editor
                 _chunkUseAlphaClip = EditorGUILayout.ToggleLeft(L("voxel.option.alpha_clip"), _chunkUseAlphaClip);
                 _chunkAlphaCutoff = Mathf.Clamp01(EditorGUILayout.Slider(L("voxel.option.alpha_cutoff"), _chunkAlphaCutoff, 0.01f, 0.9f));
                 _chunkMergeAnimatedAsStatic = EditorGUILayout.ToggleLeft(L("voxel.option.chunk_merge_animated_static"), _chunkMergeAnimatedAsStatic);
-                EditorGUI.EndDisabledGroup();
 
                 EditorGUILayout.Space(6f);
                 EditorGUILayout.LabelField(LOr("voxel.group.performance", "性能选项"), _optionsGroupTitleStyle);
@@ -455,6 +449,7 @@ namespace Box3Blocks.Editor
         {
             try
             {
+                _importMode = ImportMode.Chunk;
                 CancelImport(clearStatus: false);
                 string json = _sourceType == SourceType.LocalFile ? ReadGzipJsonFromFile(_localGzPath) : ReadGzipJsonFromUrl(_url);
                 if (string.IsNullOrWhiteSpace(json))
@@ -619,8 +614,7 @@ namespace Box3Blocks.Editor
                 Quaternion worldRot = _rotLookup[rot];
                 bool isEmissive = IsEmissiveBlock(blockName);
                 bool hasLightData = TryGetPayloadLightData(i, idx, out Color payloadLightColor, out float payloadLightIntensity, out float payloadLightRange, out Vector3 payloadLightOffset);
-                bool forceSingleForAnimation = prepared.hasAnimation && (_importMode != ImportMode.Chunk || !_chunkMergeAnimatedAsStatic);
-                if (_importMode == ImportMode.SingleBlock || forceSingleForAnimation)
+                if (_importMode == ImportMode.SingleBlock)
                 {
                     bool isTransparent = IsTransparentBlock(blockName);
                     Vector3Int gridPos = new Vector3Int(wx, wy, wz);
@@ -654,7 +648,15 @@ namespace Box3Blocks.Editor
                         _chunkBuckets.Add(key, bucket);
                     }
 
-                    if (isTransparent)
+                    if (prepared.hasAnimation && !_chunkMergeAnimatedAsStatic)
+                    {
+                        bucket.animatedVoxels.Add(new AnimatedChunkVoxel(gridPos, rot, prepared, blockName, isTransparent));
+                        if (!isTransparent)
+                        {
+                            _opaqueVoxels?.Add(gridPos);
+                        }
+                    }
+                    else if (isTransparent)
                     {
                         bucket.transparentVoxels.Add(new TransparentVoxel(gridPos, rot, prepared));
                     }
@@ -789,7 +791,7 @@ namespace Box3Blocks.Editor
             {
                 ChunkKey key = _chunkKeys[i];
                 if (!_chunkBuckets.TryGetValue(key, out ChunkBucket bucket)
-                    || (bucket.opaqueVoxels.Count == 0 && bucket.transparentVoxels.Count == 0 && bucket.emissiveVoxels.Count == 0))
+                    || (bucket.opaqueVoxels.Count == 0 && bucket.transparentVoxels.Count == 0 && bucket.animatedVoxels.Count == 0 && bucket.emissiveVoxels.Count == 0))
                 {
                     continue;
                 }
@@ -845,6 +847,96 @@ namespace Box3Blocks.Editor
                     }
                 }
 
+                if (bucket.animatedVoxels.Count > 0)
+                {
+                    Dictionary<string, List<AnimatedChunkVoxel>> animatedGroups = new Dictionary<string, List<AnimatedChunkVoxel>>();
+                    for (int a = 0; a < bucket.animatedVoxels.Count; a++)
+                    {
+                        AnimatedChunkVoxel av = bucket.animatedVoxels[a];
+                        string groupKey = BuildAnimatedGroupKey(av);
+                        if (!animatedGroups.TryGetValue(groupKey, out List<AnimatedChunkVoxel> list))
+                        {
+                            list = new List<AnimatedChunkVoxel>(32);
+                            animatedGroups.Add(groupKey, list);
+                        }
+
+                        list.Add(av);
+                    }
+
+                    int groupIndex = 0;
+                    foreach (KeyValuePair<string, List<AnimatedChunkVoxel>> kv in animatedGroups)
+                    {
+                        List<AnimatedChunkVoxel> group = kv.Value;
+                        if (group == null || group.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        AnimatedChunkVoxel sample = group[0];
+                        GameObject animatedGo = new GameObject($"animated_{groupIndex}");
+                        animatedGo.transform.SetParent(go.transform, false);
+                        MeshFilter mf = animatedGo.AddComponent<MeshFilter>();
+                        MeshRenderer mr = animatedGo.AddComponent<MeshRenderer>();
+
+                        Mesh mesh = BuildAnimatedChunkGroupMesh(
+                            key,
+                            group,
+                            sample.isTransparent ? _allVoxels : _opaqueVoxels);
+                        if (mesh != null)
+                        {
+                            string assetPath = BuildChunkMeshAssetPath(key, i, $"animated_{groupIndex}");
+                            AssetDatabase.CreateAsset(mesh, assetPath);
+                            mf.sharedMesh = mesh;
+
+                            PreparedBlock prepared = sample.prepared;
+                            Material chunkMat = sample.isTransparent ? ResolveChunkTransparentMaterial() : ResolveChunkOpaqueMaterial();
+                            if (chunkMat != null)
+                            {
+                                Material[] shared = new Material[SideOrder.Length];
+                                for (int sm = 0; sm < shared.Length; sm++)
+                                {
+                                    shared[sm] = chunkMat;
+                                }
+
+                                mr.sharedMaterials = shared;
+                            }
+                            else if (prepared != null && prepared.materials != null && prepared.materials.Length > 0)
+                            {
+                                mr.sharedMaterials = prepared.materials;
+                            }
+
+                            if (prepared != null && prepared.animations != null && prepared.animations.Length > 0)
+                            {
+                                Box3BlocksTextureAnimator animator = animatedGo.GetComponent<Box3BlocksTextureAnimator>();
+                                if (animator == null)
+                                {
+                                    animator = animatedGo.AddComponent<Box3BlocksTextureAnimator>();
+                                }
+
+                                Vector4[] unitSt = BuildUnitFaceMainTexSt();
+                                Box3BlocksTextureAnimator.FaceAnimation[] tiledAnimations = CloneAnimationsForTiled(prepared.animations);
+                                animator.SetAnimations(tiledAnimations, unitSt);
+                            }
+
+                            AnimatedChunkGroupMeta meta = animatedGo.GetComponent<AnimatedChunkGroupMeta>();
+                            if (meta == null)
+                            {
+                                meta = animatedGo.AddComponent<AnimatedChunkGroupMeta>();
+                            }
+
+                            meta.groupKey = kv.Key;
+                            meta.faceMainTexSt = BuildUnitFaceMainTexSt();
+                            meta.animations = prepared != null && prepared.animations != null ? CloneAnimationsForTiled(prepared.animations) : null;
+                        }
+                        else
+                        {
+                            DestroyImmediate(animatedGo);
+                        }
+
+                        groupIndex++;
+                    }
+                }
+
                 if (_chunkColliderMode == Box3ColliderMode.TopOnly
                     && _chunkVoxelPositions != null
                     && _chunkVoxelPositions.TryGetValue(key, out HashSet<Vector3Int> chunkVoxels))
@@ -891,6 +983,11 @@ namespace Box3Blocks.Editor
             EditorApplication.update -= OnEditorUpdate;
             EditorUtility.ClearProgressBar();
 
+            if (_importMode == ImportMode.Chunk && !_chunkMergeAnimatedAsStatic)
+            {
+                MergeAnimatedChunkGroupsAcrossChunks();
+            }
+
             if (_importRoot != null)
             {
                 Selection.activeObject = _importRoot.gameObject;
@@ -913,6 +1010,233 @@ namespace Box3Blocks.Editor
             _status = summary.Replace("\n", " | ");
             EditorUtility.DisplayDialog(L("voxel.window.title"), summary, L("dialog.ok"));
             Repaint();
+        }
+
+        private void MergeAnimatedChunkGroupsAcrossChunks()
+        {
+            if (_importRoot == null)
+            {
+                return;
+            }
+
+            AnimatedChunkGroupMeta[] metas = _importRoot.GetComponentsInChildren<AnimatedChunkGroupMeta>(true);
+            if (metas == null || metas.Length <= 1)
+            {
+                return;
+            }
+
+            Dictionary<string, List<AnimatedChunkGroupMeta>> groups = new Dictionary<string, List<AnimatedChunkGroupMeta>>();
+            for (int i = 0; i < metas.Length; i++)
+            {
+                AnimatedChunkGroupMeta meta = metas[i];
+                if (meta == null || string.IsNullOrWhiteSpace(meta.groupKey) || meta.gameObject == null)
+                {
+                    continue;
+                }
+
+                if (!groups.TryGetValue(meta.groupKey, out List<AnimatedChunkGroupMeta> list))
+                {
+                    list = new List<AnimatedChunkGroupMeta>(8);
+                    groups.Add(meta.groupKey, list);
+                }
+
+                list.Add(meta);
+            }
+
+            int mergedIndex = 0;
+            foreach (KeyValuePair<string, List<AnimatedChunkGroupMeta>> kv in groups)
+            {
+                List<AnimatedChunkGroupMeta> list = kv.Value;
+                if (list == null || list.Count <= 1)
+                {
+                    continue;
+                }
+
+                MeshRenderer sampleRenderer = list[0] != null ? list[0].GetComponent<MeshRenderer>() : null;
+                if (sampleRenderer == null || sampleRenderer.sharedMaterials == null || sampleRenderer.sharedMaterials.Length == 0)
+                {
+                    continue;
+                }
+
+                List<CombineInstance>[] bySubmesh = new List<CombineInstance>[SideOrder.Length];
+                for (int s = 0; s < SideOrder.Length; s++)
+                {
+                    bySubmesh[s] = new List<CombineInstance>(list.Count);
+                }
+
+                for (int i = 0; i < list.Count; i++)
+                {
+                    AnimatedChunkGroupMeta meta = list[i];
+                    if (meta == null || meta.gameObject == null)
+                    {
+                        continue;
+                    }
+
+                    MeshFilter mf = meta.GetComponent<MeshFilter>();
+                    if (mf == null || mf.sharedMesh == null)
+                    {
+                        continue;
+                    }
+
+                    Mesh mesh = mf.sharedMesh;
+                    int subCount = Mathf.Min(mesh.subMeshCount, SideOrder.Length);
+                    Matrix4x4 trs = _importRoot.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+                    for (int s = 0; s < subCount; s++)
+                    {
+                        bySubmesh[s].Add(new CombineInstance
+                        {
+                            mesh = mesh,
+                            subMeshIndex = s,
+                            transform = trs
+                        });
+                    }
+                }
+
+                Mesh merged = CombineAnimatedSubmeshes(bySubmesh);
+                if (merged == null)
+                {
+                    continue;
+                }
+
+                string mergedName = $"animated_merged_{SanitizeName(kv.Key)}";
+                GameObject mergedGo = new GameObject(mergedName);
+                mergedGo.transform.SetParent(_importRoot, false);
+                MeshFilter mergedFilter = mergedGo.AddComponent<MeshFilter>();
+                MeshRenderer mergedRenderer = mergedGo.AddComponent<MeshRenderer>();
+
+                string assetPath = $"{GeneratedMeshFolder}/{mergedName}_{mergedIndex}.asset";
+                if (AssetDatabase.LoadAssetAtPath<Mesh>(assetPath) != null)
+                {
+                    AssetDatabase.DeleteAsset(assetPath);
+                }
+                AssetDatabase.CreateAsset(merged, assetPath);
+                mergedFilter.sharedMesh = merged;
+                mergedRenderer.sharedMaterials = sampleRenderer.sharedMaterials;
+
+                AnimatedChunkGroupMeta mergedMeta = mergedGo.AddComponent<AnimatedChunkGroupMeta>();
+                mergedMeta.groupKey = kv.Key;
+                mergedMeta.faceMainTexSt = list[0].faceMainTexSt;
+                mergedMeta.animations = list[0].animations;
+
+                if (mergedMeta.animations != null && mergedMeta.animations.Length > 0)
+                {
+                    Box3BlocksTextureAnimator animator = mergedGo.AddComponent<Box3BlocksTextureAnimator>();
+                    animator.SetAnimations(mergedMeta.animations, mergedMeta.faceMainTexSt);
+                }
+
+                for (int i = 0; i < list.Count; i++)
+                {
+                    AnimatedChunkGroupMeta meta = list[i];
+                    if (meta != null && meta.gameObject != null)
+                    {
+                        DestroyImmediate(meta.gameObject);
+                    }
+                }
+
+                mergedIndex++;
+            }
+        }
+
+        private static Mesh CombineAnimatedSubmeshes(List<CombineInstance>[] bySubmesh)
+        {
+            if (bySubmesh == null || bySubmesh.Length == 0)
+            {
+                return null;
+            }
+
+            List<Vector3> vertices = new List<Vector3>();
+            List<Vector2> uvs0 = new List<Vector2>();
+            List<Vector2> uvs1 = new List<Vector2>();
+            List<Vector2> uvs2 = new List<Vector2>();
+            List<int>[] trisBySub = new List<int>[SideOrder.Length];
+            for (int s = 0; s < SideOrder.Length; s++)
+            {
+                trisBySub[s] = new List<int>();
+            }
+
+            for (int s = 0; s < SideOrder.Length; s++)
+            {
+                List<CombineInstance> combines = bySubmesh[s];
+                if (combines == null || combines.Count == 0)
+                {
+                    continue;
+                }
+
+                Mesh temp = new Mesh { indexFormat = IndexFormat.UInt32 };
+                temp.CombineMeshes(combines.ToArray(), true, true, false);
+
+                int baseIndex = vertices.Count;
+                Vector3[] tempVerts = temp.vertices;
+                Vector2[] tempUv0 = temp.uv;
+                List<Vector2> tempUv1 = new List<Vector2>();
+                List<Vector2> tempUv2 = new List<Vector2>();
+                temp.GetUVs(1, tempUv1);
+                temp.GetUVs(2, tempUv2);
+                int[] tempTris = temp.triangles;
+                vertices.AddRange(tempVerts);
+                if (tempUv0 != null && tempUv0.Length == tempVerts.Length)
+                {
+                    uvs0.AddRange(tempUv0);
+                }
+                else
+                {
+                    for (int i = 0; i < tempVerts.Length; i++)
+                    {
+                        uvs0.Add(Vector2.zero);
+                    }
+                }
+
+                if (tempUv1 != null && tempUv1.Count == tempVerts.Length)
+                {
+                    uvs1.AddRange(tempUv1);
+                }
+                else
+                {
+                    for (int i = 0; i < tempVerts.Length; i++)
+                    {
+                        uvs1.Add(Vector2.zero);
+                    }
+                }
+
+                if (tempUv2 != null && tempUv2.Count == tempVerts.Length)
+                {
+                    uvs2.AddRange(tempUv2);
+                }
+                else
+                {
+                    for (int i = 0; i < tempVerts.Length; i++)
+                    {
+                        uvs2.Add(Vector2.zero);
+                    }
+                }
+
+                for (int i = 0; i < tempTris.Length; i++)
+                {
+                    trisBySub[s].Add(baseIndex + tempTris[i]);
+                }
+
+                DestroyImmediate(temp);
+            }
+
+            if (vertices.Count == 0)
+            {
+                return null;
+            }
+
+            Mesh mesh = new Mesh { indexFormat = IndexFormat.UInt32 };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs0);
+            mesh.SetUVs(1, uvs1);
+            mesh.SetUVs(2, uvs2);
+            mesh.subMeshCount = SideOrder.Length;
+            for (int s = 0; s < SideOrder.Length; s++)
+            {
+                mesh.SetTriangles(trisBySub[s], s, true);
+            }
+
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         private void ExportGz()
@@ -1501,7 +1825,7 @@ namespace Box3Blocks.Editor
 
             Material m = new Material(shader)
             {
-                name = "M_Block_Transparent_Chunk"
+                name = "M_Block_Chunk_Transparent"
             };
             if (source.mainTexture != null)
             {
@@ -1559,7 +1883,7 @@ namespace Box3Blocks.Editor
             }
             if (shader == null)
             {
-                _chunkOpaqueMaterialInstance = new Material(source) { name = "M_Block" };
+                _chunkOpaqueMaterialInstance = new Material(source) { name = "M_Block_Chunk_Opaque" };
                 _chunkOpaqueMaterialInstance.renderQueue = (int)RenderQueue.Geometry;
                 _chunkOpaqueMaterialInstance.SetInt("_ZWrite", 1);
                 ApplyBumpToChunkOpaque(_chunkOpaqueMaterialInstance);
@@ -1570,7 +1894,7 @@ namespace Box3Blocks.Editor
 
             Material m = new Material(shader)
             {
-                name = "M_Block"
+                name = "M_Block_Chunk_Opaque"
             };
             if (source.mainTexture != null)
             {
@@ -1708,6 +2032,201 @@ namespace Box3Blocks.Editor
             return mesh;
         }
 
+        private static string BuildAnimatedGroupKey(AnimatedChunkVoxel voxel)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}|r{1}|t{2}",
+                voxel.blockName ?? string.Empty,
+                voxel.rot & 3,
+                voxel.isTransparent ? 1 : 0);
+        }
+
+        private Mesh BuildAnimatedChunkGroupMesh(ChunkKey key, List<AnimatedChunkVoxel> group, HashSet<Vector3Int> cullSet)
+        {
+            if (group == null || group.Count == 0)
+            {
+                return null;
+            }
+            int size = Mathf.Max(1, _chunkSize);
+            int baseX = key.x * size;
+            int baseY = key.y * size;
+            int baseZ = key.z * size;
+            int layers = size + 1;
+            int cellsPerLayer = size * size;
+            int rot = group[0].rot & 3;
+            PreparedBlock samplePrepared = group[0].prepared;
+            if (samplePrepared == null || samplePrepared.faceMainTexSt == null || samplePrepared.faceMainTexSt.Length < SideOrder.Length)
+            {
+                return null;
+            }
+
+            int[] localFaceByDir = new int[WorldFaceDirs.Length];
+            Vector4[] stByDir = new Vector4[WorldFaceDirs.Length];
+            int[] uvPatternByDir = new int[WorldFaceDirs.Length];
+            for (int d = 0; d < WorldFaceDirs.Length; d++)
+            {
+                int localFace = ResolveLocalFaceIndexForWorldDir(rot, WorldFaceDirs[d]);
+                localFaceByDir[d] = localFace;
+                stByDir[d] = localFace >= 0 && localFace < SideOrder.Length ? samplePrepared.faceMainTexSt[localFace] : new Vector4(1f, 1f, 0f, 0f);
+                uvPatternByDir[d] = localFace >= 0 && localFace < SideOrder.Length
+                    ? BuildUvPatternForFace(localFace, rot, d)
+                    : 0xE4;
+            }
+
+            int[][] masks = new int[WorldFaceDirs.Length][];
+            for (int d = 0; d < WorldFaceDirs.Length; d++)
+            {
+                masks[d] = new int[layers * cellsPerLayer];
+                for (int j = 0; j < masks[d].Length; j++)
+                {
+                    masks[d][j] = 0;
+                }
+            }
+
+            for (int i = 0; i < group.Count; i++)
+            {
+                AnimatedChunkVoxel voxel = group[i];
+                int lx = voxel.pos.x - baseX;
+                int ly = voxel.pos.y - baseY;
+                int lz = voxel.pos.z - baseZ;
+                if (lx < 0 || ly < 0 || lz < 0 || lx >= size || ly >= size || lz >= size)
+                {
+                    continue;
+                }
+
+                for (int d = 0; d < WorldFaceDirs.Length; d++)
+                {
+                    Vector3Int worldDir = WorldFaceDirs[d];
+                    if (cullSet != null && cullSet.Contains(voxel.pos + worldDir))
+                    {
+                        continue;
+                    }
+
+                    MapFaceToMaskCoordinates(d, lx, ly, lz, out int layer, out int u, out int v);
+                    if (layer < 0 || layer >= layers || u < 0 || u >= size || v < 0 || v >= size)
+                    {
+                        continue;
+                    }
+
+                    int idx = (layer * cellsPerLayer) + (v * size) + u;
+                    masks[d][idx] = 1;
+                }
+            }
+
+            List<Vector3> vertices = new List<Vector3>(group.Count * 8);
+            List<Vector2> uvs = new List<Vector2>(group.Count * 8);
+            List<Vector2> uvMin = new List<Vector2>(group.Count * 8);
+            List<Vector2> uvSize = new List<Vector2>(group.Count * 8);
+            List<int>[] subTris = new List<int>[SideOrder.Length];
+            for (int s = 0; s < SideOrder.Length; s++)
+            {
+                subTris[s] = new List<int>(group.Count * 6);
+            }
+
+            for (int d = 0; d < WorldFaceDirs.Length; d++)
+            {
+                int localFace = localFaceByDir[d];
+                if (localFace < 0 || localFace >= SideOrder.Length)
+                {
+                    continue;
+                }
+
+                int[] mask = masks[d];
+                for (int layer = 0; layer < layers; layer++)
+                {
+                    int layerOffset = layer * cellsPerLayer;
+                    for (int v = 0; v < size; v++)
+                    {
+                        for (int u = 0; u < size; u++)
+                        {
+                            int cellIndex = layerOffset + (v * size) + u;
+                            if (mask[cellIndex] == 0)
+                            {
+                                continue;
+                            }
+
+                            int width = 1;
+                            while (u + width < size && mask[layerOffset + (v * size) + (u + width)] != 0)
+                            {
+                                width++;
+                            }
+
+                            int height = 1;
+                            bool canGrow = true;
+                            while (v + height < size && canGrow)
+                            {
+                                int rowOffset = layerOffset + ((v + height) * size);
+                                for (int x = 0; x < width; x++)
+                                {
+                                    if (mask[rowOffset + u + x] == 0)
+                                    {
+                                        canGrow = false;
+                                        break;
+                                    }
+                                }
+
+                                if (canGrow)
+                                {
+                                    height++;
+                                }
+                            }
+
+                            AddGreedyAnimatedTiledQuad(
+                                d,
+                                key,
+                                size,
+                                layer,
+                                u,
+                                v,
+                                width,
+                                height,
+                                stByDir[d],
+                                uvPatternByDir[d],
+                                vertices,
+                                uvs,
+                                uvMin,
+                                uvSize,
+                                subTris[localFace]);
+
+                            for (int yy = 0; yy < height; yy++)
+                            {
+                                int rowOffset = layerOffset + ((v + yy) * size);
+                                for (int xx = 0; xx < width; xx++)
+                                {
+                                    mask[rowOffset + u + xx] = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (vertices.Count == 0)
+            {
+                return null;
+            }
+
+            Mesh mesh = new Mesh
+            {
+                name = $"VoxelChunk_{key.x}_{key.y}_{key.z}_animated",
+                indexFormat = IndexFormat.UInt32
+            };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.SetUVs(1, uvMin);
+            mesh.SetUVs(2, uvSize);
+            mesh.subMeshCount = SideOrder.Length;
+            for (int s = 0; s < SideOrder.Length; s++)
+            {
+                mesh.SetTriangles(subTris[s], s, true);
+            }
+
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
         private Mesh BuildOpaqueChunkMesh(ChunkKey key, List<OpaqueVoxel> voxels, HashSet<Vector3Int> opaqueVoxels)
         {
             if (voxels == null || voxels.Count == 0 || opaqueVoxels == null)
@@ -1732,8 +2251,14 @@ namespace Box3Blocks.Editor
                 }
             }
 
-            Dictionary<Vector4, int> signatureToId = new Dictionary<Vector4, int>();
+            Dictionary<string, int> signatureToId = new Dictionary<string, int>();
             List<Vector4> idToSt = new List<Vector4>(128);
+            List<int> idToUvPattern = new List<int>(128);
+            List<Vector3> vertices = new List<Vector3>(voxels.Count * 8);
+            List<Vector2> tiledUvs = new List<Vector2>(voxels.Count * 8);
+            List<Vector2> atlasUvMin = new List<Vector2>(voxels.Count * 8);
+            List<Vector2> atlasUvSize = new List<Vector2>(voxels.Count * 8);
+            List<int> triangles = new List<int>(voxels.Count * 12);
 
             for (int i = 0; i < voxels.Count; i++)
             {
@@ -1741,6 +2266,12 @@ namespace Box3Blocks.Editor
                 PreparedBlock prepared = voxel.prepared;
                 if (prepared == null || prepared.faceMainTexSt == null || prepared.faceMainTexSt.Length < SideOrder.Length)
                 {
+                    continue;
+                }
+
+                if (prepared.hasAnimation)
+                {
+                    AppendDirectFacesForOpaqueAnimated(voxel, opaqueVoxels, vertices, tiledUvs, atlasUvMin, atlasUvSize, triangles);
                     continue;
                 }
 
@@ -1760,16 +2291,18 @@ namespace Box3Blocks.Editor
                         continue;
                     }
 
-                    if (!TryGetFaceStForWorldDir(prepared, voxel.rot, worldDir, out Vector4 st))
+                    if (!TryGetFaceStForWorldDir(prepared, voxel.rot, dirIndex, worldDir, out Vector4 st, out int uvPattern))
                     {
                         continue;
                     }
 
-                    if (!signatureToId.TryGetValue(st, out int sigId))
+                    string sigKey = BuildFaceSignatureKey(st, uvPattern);
+                    if (!signatureToId.TryGetValue(sigKey, out int sigId))
                     {
                         sigId = idToSt.Count;
                         idToSt.Add(st);
-                        signatureToId.Add(st, sigId);
+                        idToUvPattern.Add(uvPattern);
+                        signatureToId.Add(sigKey, sigId);
                     }
 
                     MapFaceToMaskCoordinates(dirIndex, lx, ly, lz, out int layer, out int u, out int v);
@@ -1782,12 +2315,6 @@ namespace Box3Blocks.Editor
                     masks[dirIndex][idx] = sigId;
                 }
             }
-
-            List<Vector3> vertices = new List<Vector3>(voxels.Count * 8);
-            List<Vector2> tiledUvs = new List<Vector2>(voxels.Count * 8);
-            List<Vector2> atlasUvMin = new List<Vector2>(voxels.Count * 8);
-            List<Vector2> atlasUvSize = new List<Vector2>(voxels.Count * 8);
-            List<int> triangles = new List<int>(voxels.Count * 12);
 
             for (int dirIndex = 0; dirIndex < WorldFaceDirs.Length; dirIndex++)
             {
@@ -1842,6 +2369,7 @@ namespace Box3Blocks.Editor
                                 width,
                                 height,
                                 idToSt[sigId],
+                                idToUvPattern[sigId],
                                 vertices,
                                 tiledUvs,
                                 atlasUvMin,
@@ -1881,9 +2409,70 @@ namespace Box3Blocks.Editor
             return mesh;
         }
 
-        private bool TryGetFaceStForWorldDir(PreparedBlock prepared, int rot, Vector3Int worldDir, out Vector4 st)
+        private void AppendDirectFacesForOpaqueAnimated(
+            OpaqueVoxel voxel,
+            HashSet<Vector3Int> opaqueVoxels,
+            List<Vector3> vertices,
+            List<Vector2> tiledUvs,
+            List<Vector2> atlasUvMin,
+            List<Vector2> atlasUvSize,
+            List<int> triangles)
+        {
+            if (voxel.prepared == null || voxel.prepared.faceMainTexSt == null || voxel.prepared.faceMainTexSt.Length < SideOrder.Length)
+            {
+                return;
+            }
+
+            Quaternion rotQ = _rotLookup[voxel.rot & 3];
+            for (int localFace = 0; localFace < SideOrder.Length; localFace++)
+            {
+                Vector3 worldDirF = rotQ * FaceNormals[localFace];
+                Vector3Int worldDir = ToVector3Int(worldDirF);
+                if (opaqueVoxels != null && opaqueVoxels.Contains(voxel.pos + worldDir))
+                {
+                    continue;
+                }
+
+                int dirIndex = GetWorldDirIndex(worldDir);
+                if (dirIndex < 0)
+                {
+                    continue;
+                }
+
+                Vector4 st = ResolveStaticFaceSt(voxel.prepared, localFace);
+                int baseIndex = vertices.Count;
+                for (int v = 0; v < 4; v++)
+                {
+                    Vector3 rotated = rotQ * FaceVertices[localFace][v];
+                    vertices.Add(rotated + (Vector3)voxel.pos);
+                }
+
+                int uvPattern = BuildUvPatternForFace(localFace, voxel.rot & 3, dirIndex);
+                AddMappedTiledUv(tiledUvs, 1, 1, uvPattern);
+                Vector2 min = new Vector2(st.z, st.w);
+                Vector2 size = new Vector2(st.x, st.y);
+                atlasUvMin.Add(min);
+                atlasUvMin.Add(min);
+                atlasUvMin.Add(min);
+                atlasUvMin.Add(min);
+                atlasUvSize.Add(size);
+                atlasUvSize.Add(size);
+                atlasUvSize.Add(size);
+                atlasUvSize.Add(size);
+
+                triangles.Add(baseIndex + 0);
+                triangles.Add(baseIndex + 2);
+                triangles.Add(baseIndex + 1);
+                triangles.Add(baseIndex + 0);
+                triangles.Add(baseIndex + 3);
+                triangles.Add(baseIndex + 2);
+            }
+        }
+
+        private bool TryGetFaceStForWorldDir(PreparedBlock prepared, int rot, int dirIndex, Vector3Int worldDir, out Vector4 st, out int uvPattern)
         {
             st = default;
+            uvPattern = 0xE4;
             if (prepared == null || prepared.faceMainTexSt == null || prepared.faceMainTexSt.Length < SideOrder.Length)
             {
                 return false;
@@ -1896,11 +2485,79 @@ namespace Box3Blocks.Editor
                 if (dir == worldDir)
                 {
                     st = ResolveStaticFaceSt(prepared, i);
+                    uvPattern = BuildUvPatternForFace(i, rot, dirIndex);
                     return true;
                 }
             }
 
             return false;
+        }
+
+        private static int BuildUvPatternForFace(int localFaceIndex, int rot, int dirIndex)
+        {
+            Quaternion q = Quaternion.Euler(0f, (rot & 3) * 90f, 0f);
+            int pattern = 0;
+            for (int localVertexIndex = 0; localVertexIndex < 4; localVertexIndex++)
+            {
+                Vector3 rotated = q * FaceVertices[localFaceIndex][localVertexIndex];
+                int worldCorner = MapRotatedVertexToWorldCorner(dirIndex, rotated);
+                pattern |= (localVertexIndex & 0x3) << (worldCorner * 2);
+            }
+
+            return pattern;
+        }
+
+        private static int MapRotatedVertexToWorldCorner(int dirIndex, Vector3 rotated)
+        {
+            bool xPos = rotated.x >= 0f;
+            bool yPos = rotated.y >= 0f;
+            bool zPos = rotated.z >= 0f;
+
+            switch (dirIndex)
+            {
+                case 0: // -X: 0(-y,+z),1(-y,-z),2(+y,-z),3(+y,+z)
+                    if (!yPos && zPos) return 0;
+                    if (!yPos && !zPos) return 1;
+                    if (yPos && !zPos) return 2;
+                    return 3;
+                case 1: // +X: 0(-y,-z),1(-y,+z),2(+y,+z),3(+y,-z)
+                    if (!yPos && !zPos) return 0;
+                    if (!yPos && zPos) return 1;
+                    if (yPos && zPos) return 2;
+                    return 3;
+                case 2: // -Y: 0(-x,+z),1(+x,+z),2(+x,-z),3(-x,-z)
+                    if (!xPos && zPos) return 0;
+                    if (xPos && zPos) return 1;
+                    if (xPos && !zPos) return 2;
+                    return 3;
+                case 3: // +Y: 0(-x,-z),1(+x,-z),2(+x,+z),3(-x,+z)
+                    if (!xPos && !zPos) return 0;
+                    if (xPos && !zPos) return 1;
+                    if (xPos && zPos) return 2;
+                    return 3;
+                case 4: // -Z: 0(-x,-y),1(+x,-y),2(+x,+y),3(-x,+y)
+                    if (!xPos && !yPos) return 0;
+                    if (xPos && !yPos) return 1;
+                    if (xPos && yPos) return 2;
+                    return 3;
+                default: // +Z: 0(+x,-y),1(-x,-y),2(-x,+y),3(+x,+y)
+                    if (xPos && !yPos) return 0;
+                    if (!xPos && !yPos) return 1;
+                    if (!xPos && yPos) return 2;
+                    return 3;
+            }
+        }
+
+        private static string BuildFaceSignatureKey(Vector4 st, int uvPattern)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "{0:F6}|{1:F6}|{2:F6}|{3:F6}|{4}",
+                st.x,
+                st.y,
+                st.z,
+                st.w,
+                uvPattern & 0xFF);
         }
 
         private static Vector4 ResolveStaticFaceSt(PreparedBlock prepared, int faceIndex)
@@ -1937,6 +2594,19 @@ namespace Box3Blocks.Editor
             }
 
             return baseSt;
+        }
+
+        private static int GetWorldDirIndex(Vector3Int worldDir)
+        {
+            for (int i = 0; i < WorldFaceDirs.Length; i++)
+            {
+                if (WorldFaceDirs[i] == worldDir)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
         }
 
         private static void MapFaceToMaskCoordinates(int dirIndex, int lx, int ly, int lz, out int layer, out int u, out int v)
@@ -1986,6 +2656,7 @@ namespace Box3Blocks.Editor
             int width,
             int height,
             Vector4 st,
+            int uvPattern,
             List<Vector3> vertices,
             List<Vector2> tiledUvs,
             List<Vector2> atlasUvMin,
@@ -2088,10 +2759,7 @@ namespace Box3Blocks.Editor
             vertices.Add(v2);
             vertices.Add(v3);
 
-            tiledUvs.Add(new Vector2(0f, 0f));
-            tiledUvs.Add(new Vector2(width, 0f));
-            tiledUvs.Add(new Vector2(width, height));
-            tiledUvs.Add(new Vector2(0f, height));
+            AddMappedTiledUv(tiledUvs, width, height, uvPattern);
 
             Vector2 min = new Vector2(st.z, st.w);
             Vector2 size = new Vector2(st.x, st.y);
@@ -2110,6 +2778,211 @@ namespace Box3Blocks.Editor
             triangles.Add(baseIndex + 0);
             triangles.Add(baseIndex + 3);
             triangles.Add(baseIndex + 2);
+        }
+
+        private static void AddMappedTiledUv(List<Vector2> tiledUvs, int width, int height, int uvPattern)
+        {
+            Vector2[] unit = { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) };
+            int localAtWorld0 = (uvPattern >> 0) & 0x3;
+            int localAtWorld1 = (uvPattern >> 2) & 0x3;
+            bool worldUMapsToLocalV = Mathf.Abs(unit[localAtWorld1].y - unit[localAtWorld0].y) > 0.5f;
+            int uScale = worldUMapsToLocalV ? height : width;
+            int vScale = worldUMapsToLocalV ? width : height;
+            for (int worldCorner = 0; worldCorner < 4; worldCorner++)
+            {
+                int localUvCorner = (uvPattern >> (worldCorner * 2)) & 0x3;
+                Vector2 uv = unit[localUvCorner];
+                tiledUvs.Add(new Vector2(uv.x * uScale, uv.y * vScale));
+            }
+        }
+
+        private int ResolveLocalFaceIndexForWorldDir(int rot, Vector3Int worldDir)
+        {
+            Quaternion q = _rotLookup[rot & 3];
+            for (int i = 0; i < SideOrder.Length; i++)
+            {
+                Vector3Int dir = ToVector3Int(q * FaceNormals[i]);
+                if (dir == worldDir)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private static void AddGreedyAnimatedTiledQuad(
+            int dirIndex,
+            ChunkKey key,
+            int chunkSize,
+            int layer,
+            int u,
+            int v,
+            int width,
+            int height,
+            Vector4 st,
+            int uvPattern,
+            List<Vector3> vertices,
+            List<Vector2> tiledUv,
+            List<Vector2> uvMin,
+            List<Vector2> uvSize,
+            List<int> triangles)
+        {
+            float bx = key.x * chunkSize;
+            float by = key.y * chunkSize;
+            float bz = key.z * chunkSize;
+
+            Vector3 v0;
+            Vector3 v1;
+            Vector3 v2;
+            Vector3 v3;
+            switch (dirIndex)
+            {
+                case 0:
+                {
+                    float x = (key.x * chunkSize) + layer - 0.5f;
+                    float yy0 = by + v - 0.5f;
+                    float yy1 = by + v + height - 0.5f;
+                    float zz0 = bz + u - 0.5f;
+                    float zz1 = bz + u + width - 0.5f;
+                    v0 = new Vector3(x, yy0, zz1);
+                    v1 = new Vector3(x, yy0, zz0);
+                    v2 = new Vector3(x, yy1, zz0);
+                    v3 = new Vector3(x, yy1, zz1);
+                    break;
+                }
+                case 1:
+                {
+                    float x = (key.x * chunkSize) + layer - 0.5f;
+                    float yy0 = by + v - 0.5f;
+                    float yy1 = by + v + height - 0.5f;
+                    float zz0 = bz + u - 0.5f;
+                    float zz1 = bz + u + width - 0.5f;
+                    v0 = new Vector3(x, yy0, zz0);
+                    v1 = new Vector3(x, yy0, zz1);
+                    v2 = new Vector3(x, yy1, zz1);
+                    v3 = new Vector3(x, yy1, zz0);
+                    break;
+                }
+                case 2:
+                {
+                    float y = (key.y * chunkSize) + layer - 0.5f;
+                    float xx0 = bx + u - 0.5f;
+                    float xx1 = bx + u + width - 0.5f;
+                    float zz0 = bz + v - 0.5f;
+                    float zz1 = bz + v + height - 0.5f;
+                    v0 = new Vector3(xx0, y, zz1);
+                    v1 = new Vector3(xx1, y, zz1);
+                    v2 = new Vector3(xx1, y, zz0);
+                    v3 = new Vector3(xx0, y, zz0);
+                    break;
+                }
+                case 3:
+                {
+                    float y = (key.y * chunkSize) + layer - 0.5f;
+                    float xx0 = bx + u - 0.5f;
+                    float xx1 = bx + u + width - 0.5f;
+                    float zz0 = bz + v - 0.5f;
+                    float zz1 = bz + v + height - 0.5f;
+                    v0 = new Vector3(xx0, y, zz0);
+                    v1 = new Vector3(xx1, y, zz0);
+                    v2 = new Vector3(xx1, y, zz1);
+                    v3 = new Vector3(xx0, y, zz1);
+                    break;
+                }
+                case 4:
+                {
+                    float z = (key.z * chunkSize) + layer - 0.5f;
+                    float xx0 = bx + u - 0.5f;
+                    float xx1 = bx + u + width - 0.5f;
+                    float yy0 = by + v - 0.5f;
+                    float yy1 = by + v + height - 0.5f;
+                    v0 = new Vector3(xx0, yy0, z);
+                    v1 = new Vector3(xx1, yy0, z);
+                    v2 = new Vector3(xx1, yy1, z);
+                    v3 = new Vector3(xx0, yy1, z);
+                    break;
+                }
+                default:
+                {
+                    float z = (key.z * chunkSize) + layer - 0.5f;
+                    float xx0 = bx + u - 0.5f;
+                    float xx1 = bx + u + width - 0.5f;
+                    float yy0 = by + v - 0.5f;
+                    float yy1 = by + v + height - 0.5f;
+                    v0 = new Vector3(xx1, yy0, z);
+                    v1 = new Vector3(xx0, yy0, z);
+                    v2 = new Vector3(xx0, yy1, z);
+                    v3 = new Vector3(xx1, yy1, z);
+                    break;
+                }
+            }
+
+            int baseIndex = vertices.Count;
+            vertices.Add(v0);
+            vertices.Add(v1);
+            vertices.Add(v2);
+            vertices.Add(v3);
+
+            AddMappedTiledUv(tiledUv, width, height, uvPattern);
+
+            Vector2 min = new Vector2(st.z, st.w);
+            Vector2 size = new Vector2(st.x, st.y);
+            uvMin.Add(min);
+            uvMin.Add(min);
+            uvMin.Add(min);
+            uvMin.Add(min);
+            uvSize.Add(size);
+            uvSize.Add(size);
+            uvSize.Add(size);
+            uvSize.Add(size);
+
+            triangles.Add(baseIndex + 0);
+            triangles.Add(baseIndex + 2);
+            triangles.Add(baseIndex + 1);
+            triangles.Add(baseIndex + 0);
+            triangles.Add(baseIndex + 3);
+            triangles.Add(baseIndex + 2);
+        }
+
+        private static Vector4[] BuildUnitFaceMainTexSt()
+        {
+            Vector4[] unit = new Vector4[SideOrder.Length];
+            for (int i = 0; i < unit.Length; i++)
+            {
+                unit[i] = new Vector4(1f, 1f, 0f, 0f);
+            }
+
+            return unit;
+        }
+
+        private static Box3BlocksTextureAnimator.FaceAnimation[] CloneAnimationsForTiled(Box3BlocksTextureAnimator.FaceAnimation[] source)
+        {
+            if (source == null || source.Length == 0)
+            {
+                return Array.Empty<Box3BlocksTextureAnimator.FaceAnimation>();
+            }
+
+            Box3BlocksTextureAnimator.FaceAnimation[] cloned = new Box3BlocksTextureAnimator.FaceAnimation[source.Length];
+            for (int i = 0; i < source.Length; i++)
+            {
+                Box3BlocksTextureAnimator.FaceAnimation s = source[i];
+                if (s == null)
+                {
+                    continue;
+                }
+
+                cloned[i] = new Box3BlocksTextureAnimator.FaceAnimation
+                {
+                    materialIndex = s.materialIndex,
+                    frameCount = Mathf.Max(1, s.frameCount),
+                    frameDuration = Mathf.Max(0.01f, s.frameDuration),
+                    frames = s.frames != null ? (int[])s.frames.Clone() : Array.Empty<int>(),
+                    baseMainTexSt = new Vector4(1f, 1f, 0f, 0f)
+                };
+            }
+
+            return cloned;
         }
 
         private Mesh BuildTransparentChunkMesh(ChunkKey key, List<TransparentVoxel> voxels, HashSet<Vector3Int> allVoxels)
@@ -2136,8 +3009,14 @@ namespace Box3Blocks.Editor
                 }
             }
 
-            Dictionary<Vector4, int> signatureToId = new Dictionary<Vector4, int>();
+            Dictionary<string, int> signatureToId = new Dictionary<string, int>();
             List<Vector4> idToSt = new List<Vector4>(128);
+            List<int> idToUvPattern = new List<int>(128);
+            List<Vector3> vertices = new List<Vector3>(voxels.Count * 8);
+            List<Vector2> tiledUvs = new List<Vector2>(voxels.Count * 8);
+            List<Vector2> atlasUvMin = new List<Vector2>(voxels.Count * 8);
+            List<Vector2> atlasUvSize = new List<Vector2>(voxels.Count * 8);
+            List<int> triangles = new List<int>(voxels.Count * 12);
 
             for (int i = 0; i < voxels.Count; i++)
             {
@@ -2145,6 +3024,12 @@ namespace Box3Blocks.Editor
                 PreparedBlock prepared = voxel.prepared;
                 if (prepared == null || prepared.faceMainTexSt == null || prepared.faceMainTexSt.Length < SideOrder.Length)
                 {
+                    continue;
+                }
+
+                if (prepared.hasAnimation)
+                {
+                    AppendDirectFacesForTransparentAnimated(voxel, allVoxels, vertices, tiledUvs, atlasUvMin, atlasUvSize, triangles);
                     continue;
                 }
 
@@ -2164,16 +3049,18 @@ namespace Box3Blocks.Editor
                         continue;
                     }
 
-                    if (!TryGetFaceStForWorldDir(prepared, voxel.rot, worldDir, out Vector4 st))
+                    if (!TryGetFaceStForWorldDir(prepared, voxel.rot, dirIndex, worldDir, out Vector4 st, out int uvPattern))
                     {
                         continue;
                     }
 
-                    if (!signatureToId.TryGetValue(st, out int sigId))
+                    string sigKey = BuildFaceSignatureKey(st, uvPattern);
+                    if (!signatureToId.TryGetValue(sigKey, out int sigId))
                     {
                         sigId = idToSt.Count;
                         idToSt.Add(st);
-                        signatureToId.Add(st, sigId);
+                        idToUvPattern.Add(uvPattern);
+                        signatureToId.Add(sigKey, sigId);
                     }
 
                     MapFaceToMaskCoordinates(dirIndex, lx, ly, lz, out int layer, out int u, out int v);
@@ -2186,12 +3073,6 @@ namespace Box3Blocks.Editor
                     masks[dirIndex][idx] = sigId;
                 }
             }
-
-            List<Vector3> vertices = new List<Vector3>(voxels.Count * 8);
-            List<Vector2> tiledUvs = new List<Vector2>(voxels.Count * 8);
-            List<Vector2> atlasUvMin = new List<Vector2>(voxels.Count * 8);
-            List<Vector2> atlasUvSize = new List<Vector2>(voxels.Count * 8);
-            List<int> triangles = new List<int>(voxels.Count * 12);
 
             for (int dirIndex = 0; dirIndex < WorldFaceDirs.Length; dirIndex++)
             {
@@ -2246,6 +3127,7 @@ namespace Box3Blocks.Editor
                                 width,
                                 height,
                                 idToSt[sigId],
+                                idToUvPattern[sigId],
                                 vertices,
                                 tiledUvs,
                                 atlasUvMin,
@@ -2283,6 +3165,66 @@ namespace Box3Blocks.Editor
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
+        }
+
+        private void AppendDirectFacesForTransparentAnimated(
+            TransparentVoxel voxel,
+            HashSet<Vector3Int> allVoxels,
+            List<Vector3> vertices,
+            List<Vector2> tiledUvs,
+            List<Vector2> atlasUvMin,
+            List<Vector2> atlasUvSize,
+            List<int> triangles)
+        {
+            if (voxel.prepared == null || voxel.prepared.faceMainTexSt == null || voxel.prepared.faceMainTexSt.Length < SideOrder.Length)
+            {
+                return;
+            }
+
+            Quaternion rotQ = _rotLookup[voxel.rot & 3];
+            for (int localFace = 0; localFace < SideOrder.Length; localFace++)
+            {
+                Vector3 worldDirF = rotQ * FaceNormals[localFace];
+                Vector3Int worldDir = ToVector3Int(worldDirF);
+                if (allVoxels != null && allVoxels.Contains(voxel.pos + worldDir))
+                {
+                    continue;
+                }
+
+                int dirIndex = GetWorldDirIndex(worldDir);
+                if (dirIndex < 0)
+                {
+                    continue;
+                }
+
+                Vector4 st = ResolveStaticFaceSt(voxel.prepared, localFace);
+                int baseIndex = vertices.Count;
+                for (int v = 0; v < 4; v++)
+                {
+                    Vector3 rotated = rotQ * FaceVertices[localFace][v];
+                    vertices.Add(rotated + (Vector3)voxel.pos);
+                }
+
+                int uvPattern = BuildUvPatternForFace(localFace, voxel.rot & 3, dirIndex);
+                AddMappedTiledUv(tiledUvs, 1, 1, uvPattern);
+                Vector2 min = new Vector2(st.z, st.w);
+                Vector2 size = new Vector2(st.x, st.y);
+                atlasUvMin.Add(min);
+                atlasUvMin.Add(min);
+                atlasUvMin.Add(min);
+                atlasUvMin.Add(min);
+                atlasUvSize.Add(size);
+                atlasUvSize.Add(size);
+                atlasUvSize.Add(size);
+                atlasUvSize.Add(size);
+
+                triangles.Add(baseIndex + 0);
+                triangles.Add(baseIndex + 2);
+                triangles.Add(baseIndex + 1);
+                triangles.Add(baseIndex + 0);
+                triangles.Add(baseIndex + 3);
+                triangles.Add(baseIndex + 2);
+            }
         }
 
         private Mesh BuildCulledSingleBlockMesh(PreparedBlock prepared, Vector3Int pos, int rot, HashSet<Vector3Int> allVoxels)
