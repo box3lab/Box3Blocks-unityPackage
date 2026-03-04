@@ -126,9 +126,9 @@ namespace Box3Blocks.Editor
 
             if (_insetPanelStyle == null)
             {
-                _insetPanelStyle = new GUIStyle("HelpBox")
+                _insetPanelStyle = new GUIStyle(GUIStyle.none)
                 {
-                    padding = new RectOffset(8, 8, 8, 8),
+                    padding = new RectOffset(4, 4, 4, 4),
                     margin = new RectOffset(0, 0, 0, 0)
                 };
             }

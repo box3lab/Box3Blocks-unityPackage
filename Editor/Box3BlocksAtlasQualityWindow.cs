@@ -54,7 +54,7 @@ namespace Box3Blocks.Editor
             {
                 _sectionBoxStyle = new GUIStyle(EditorStyles.helpBox)
                 {
-                    padding = new RectOffset(12, 12, 10, 10),
+                    padding = new RectOffset(10, 10, 10, 10),
                     margin = new RectOffset(0, 0, 0, 0)
                 };
             }
@@ -83,9 +83,9 @@ namespace Box3Blocks.Editor
 
             if (_primaryButtonStyle == null)
             {
-                _primaryButtonStyle = new GUIStyle(GUI.skin.button)
+                _primaryButtonStyle = new GUIStyle(EditorStyles.miniButton)
                 {
-                    fixedHeight = 28f,
+                    fixedHeight = 24f,
                     fontStyle = FontStyle.Bold
                 };
             }
