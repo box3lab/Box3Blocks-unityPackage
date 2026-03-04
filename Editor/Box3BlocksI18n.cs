@@ -89,14 +89,8 @@ namespace Box3Blocks.Editor
             EnsureLoaded();
 
             Dictionary<string, string> primary = IsChineseUI() ? _zhEntries : _enEntries;
-            Dictionary<string, string> fallback = IsChineseUI() ? _enEntries : _zhEntries;
 
             if (primary != null && primary.TryGetValue(key, out string value))
-            {
-                return value;
-            }
-
-            if (fallback != null && fallback.TryGetValue(key, out value))
             {
                 return value;
             }
@@ -119,14 +113,8 @@ namespace Box3Blocks.Editor
             EnsureLoaded();
 
             Dictionary<string, string> primary = IsChineseUI() ? _zhCategories : _enCategories;
-            Dictionary<string, string> fallback = IsChineseUI() ? _enCategories : _zhCategories;
 
             if (primary != null && primary.TryGetValue(categoryKey, out string value))
-            {
-                return value;
-            }
-
-            if (fallback != null && fallback.TryGetValue(categoryKey, out value))
             {
                 return value;
             }
@@ -134,24 +122,18 @@ namespace Box3Blocks.Editor
             return categoryKey;
         }
 
-        public static string GetBlockDisplayName(string blockKey, string fallback)
+        public static string GetBlockDisplayName(string blockKey)
         {
             if (string.IsNullOrWhiteSpace(blockKey))
             {
-                return fallback;
+                return blockKey;
             }
 
             EnsureLoaded();
 
             Dictionary<string, string> primary = IsChineseUI() ? _zhBlocks : _enBlocks;
-            Dictionary<string, string> fallbackMap = IsChineseUI() ? _enBlocks : _zhBlocks;
 
             if (primary != null && primary.TryGetValue(blockKey, out string value) && !string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-
-            if (fallbackMap != null && fallbackMap.TryGetValue(blockKey, out value) && !string.IsNullOrWhiteSpace(value))
             {
                 return value;
             }
@@ -165,7 +147,7 @@ namespace Box3Blocks.Editor
                 }
             }
 
-            return fallback;
+            return blockKey;
         }
 
         private static bool IsChineseUI()

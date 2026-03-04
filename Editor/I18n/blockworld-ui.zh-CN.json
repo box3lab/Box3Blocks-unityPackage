@@ -88,9 +88,6 @@
     { "key": "voxel.group.general", "value": "通用选项" },
     { "key": "voxel.group.chunk", "value": "Chunk 选项" },
     { "key": "voxel.group.performance", "value": "性能选项" },
-    { "key": "voxel.option.import_mode", "value": "导入模式" },
-    { "key": "voxel.mode.chunk", "value": "Chunk（推荐）" },
-    { "key": "voxel.mode.single_block", "value": "单个方块（可编辑）" },
     {
       "key": "voxel.option.replace_previous",
       "value": "替换上一次 __VoxelImportGz"
@@ -106,11 +103,6 @@
     { "key": "voxel.collider_mode.full", "value": "完整 MeshCollider" },
     { "key": "voxel.option.chunk_size", "value": "Chunk 尺寸" },
     { "key": "voxel.option.chunks_per_tick", "value": "每 Tick Chunk 数" },
-    {
-      "key": "voxel.option.alpha_clip",
-      "value": "Chunk 使用 Alpha Clip（修复透明伪影）"
-    },
-    { "key": "voxel.option.alpha_cutoff", "value": "Chunk Alpha 阈值" },
     {
       "key": "voxel.option.chunk_merge_animated_static",
       "value": "Chunk 合并动画方块为静态"
@@ -157,6 +149,34 @@
     { "key": "voxel.err.gz_path_empty", "value": "GZ 文件路径为空。" },
     { "key": "voxel.err.gz_not_found", "value": "未找到 GZ 文件。" },
     { "key": "voxel.err.url_empty", "value": "URL 为空。" },
+    { "key": "builder.chunk.window.title", "value": "生成Chunk" },
+    { "key": "builder.chunk.section.title", "value": "Chunk 生成配置" },
+    { "key": "builder.chunk.source_root", "value": "源根节点" },
+    { "key": "builder.chunk.target_parent", "value": "目标父节点" },
+    { "key": "builder.chunk.origin_offset", "value": "原点偏移" },
+    { "key": "builder.chunk.group.basic", "value": "基础选项" },
+    { "key": "builder.chunk.ignore_barrier", "value": "忽略屏障方块" },
+    { "key": "builder.chunk.clear_previous", "value": "清理旧的 Chunk 结果" },
+    {
+      "key": "builder.chunk.delete_source_after_build",
+      "value": "生成后删除源方块"
+    },
+    { "key": "builder.chunk.group.build", "value": "生成参数" },
+    { "key": "builder.chunk.realtime_light", "value": "点光源生成策略" },
+    { "key": "builder.chunk.collider_mode", "value": "碰撞模式" },
+    { "key": "builder.chunk.chunk_size", "value": "Chunk 尺寸" },
+    { "key": "builder.chunk.chunks_per_tick", "value": "每 Tick Chunk 数" },
+    { "key": "builder.chunk.voxels_per_tick", "value": "每 Tick 方块数" },
+    { "key": "builder.chunk.run", "value": "开始生成" },
+    {
+      "key": "builder.chunk.err.source_root_empty",
+      "value": "Source Root 不能为空。"
+    },
+    { "key": "builder.chunk.done", "value": "Chunk 生成完成。" },
+    {
+      "key": "builder.chunk.err.failed",
+      "value": "生成失败，请检查 Root 或输入参数。"
+    },
     { "key": "atlas.window.title", "value": "图集质量设置" },
     {
       "key": "atlas.window.help",
