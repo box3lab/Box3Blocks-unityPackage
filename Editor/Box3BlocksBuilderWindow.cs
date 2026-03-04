@@ -66,6 +66,7 @@ namespace Box3Blocks.Editor
         private GUIStyle _toolTabStyle;
         private GUIStyle _toolTabSelectedStyle;
         private GUIStyle _insetPanelStyle;
+        private GUIStyle _groupHeaderStyle;
         private GUIStyle _cardBoxStyle;
         private GUIStyle _cardTitleStyle;
         private GUIStyle _cardSubtitleStyle;
@@ -169,10 +170,14 @@ namespace Box3Blocks.Editor
 
         private void DrawTopToolsSection()
         {
-            EditorGUILayout.LabelField(L("section.world_root"), _sectionTitleStyle);
+            EditorGUILayout.LabelField(L("section.world_root"), _groupHeaderStyle);
+            DrawTopDivider();
+            EditorGUILayout.Space(2f);
             DrawRootSection();
-            EditorGUILayout.Space(6f);
-            EditorGUILayout.LabelField(L("section.editor_tool"), _sectionTitleStyle);
+            EditorGUILayout.Space(8f);
+            EditorGUILayout.LabelField(L("section.editor_tool"), _groupHeaderStyle);
+            DrawTopDivider();
+            EditorGUILayout.Space(2f);
             DrawToolSection();
         }
 
@@ -272,6 +277,16 @@ namespace Box3Blocks.Editor
                 };
             }
 
+            if (_groupHeaderStyle == null)
+            {
+                _groupHeaderStyle = new GUIStyle(EditorStyles.boldLabel)
+                {
+                    fontSize = 11,
+                    fontStyle = FontStyle.Bold
+                };
+                _groupHeaderStyle.normal.textColor = new Color(0.84f, 0.9f, 1f, 1f);
+            }
+
             if (_cardBoxStyle == null)
             {
                 _cardBoxStyle = new GUIStyle("HelpBox")
@@ -306,7 +321,7 @@ namespace Box3Blocks.Editor
                 _cardSubtitleStyle = new GUIStyle(EditorStyles.miniLabel)
                 {
                     alignment = TextAnchor.UpperCenter,
-                    wordWrap = true
+                    wordWrap = true,
                 };
                 _cardSubtitleStyle.normal.textColor = new Color(0.78f, 0.78f, 0.78f, 1f);
             }
@@ -350,6 +365,12 @@ namespace Box3Blocks.Editor
                 EditorGUILayout.Space(4f);
                 body?.Invoke();
             }
+        }
+
+        private static void DrawTopDivider()
+        {
+            Rect rect = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true));
+            EditorGUI.DrawRect(rect, new Color(1f, 1f, 1f, 0.12f));
         }
 
         private void DrawRootSection()
@@ -609,8 +630,8 @@ namespace Box3Blocks.Editor
                 DestroyImmediate(cardPreview);
             }
 
-            Rect titleRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, 34f);
-            Rect subtitleRect = new Rect(rect.x + 6f, previewRect.yMax + 36f, rect.width - 12f, rect.height - (PreviewSize + 46f));
+            Rect titleRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, 30f);
+            Rect subtitleRect = new Rect(rect.x + 6f, previewRect.yMax + 28f, rect.width - 12f, rect.height - (PreviewSize + 37f));
             GUIStyle titleStyle = _selectedIndex == index ? _cardTitleSelectedStyle : _cardTitleStyle;
             GUIStyle subtitleStyle = _selectedIndex == index ? _cardSubtitleSelectedStyle : _cardSubtitleStyle;
             EditorGUI.LabelField(titleRect, title, titleStyle);
