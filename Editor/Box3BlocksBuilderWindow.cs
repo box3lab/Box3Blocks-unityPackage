@@ -66,6 +66,7 @@ namespace Box3Blocks.Editor
         private GUIStyle _toolTabStyle;
         private GUIStyle _toolTabSelectedStyle;
         private GUIStyle _insetPanelStyle;
+        private GUIStyle _groupHeaderStyle;
         private GUIStyle _cardBoxStyle;
         private GUIStyle _cardTitleStyle;
         private GUIStyle _cardSubtitleStyle;
@@ -87,6 +88,7 @@ namespace Box3Blocks.Editor
         private PreviewRenderUtility _blockCardPreviewUtility;
         private double _nextAnimatedPreviewRepaintTime;
         private readonly EditorCoreBackend _apiCoreBackend;
+        private bool _expandTopTools = true;
 
         public Box3BlocksBuilderWindow()
         {
@@ -161,11 +163,22 @@ namespace Box3Blocks.Editor
             EnsureStyles();
             HandleToolHotkeys(Event.current);
             titleContent = new GUIContent(L("window.title"));
-            DrawSection(L("section.world_root"), DrawRootSection);
-            EditorGUILayout.Space(6f);
-            DrawSection(L("section.editor_tool"), DrawToolSection);
+            DrawFoldoutSection($"{L("section.world_root")} / {L("section.editor_tool")}", DrawTopToolsSection, ref _expandTopTools);
             EditorGUILayout.Space(6f);
             DrawSection(L("section.block_library"), DrawBlockListSection);
+        }
+
+        private void DrawTopToolsSection()
+        {
+            EditorGUILayout.LabelField(L("section.world_root"), _groupHeaderStyle);
+            DrawTopDivider();
+            EditorGUILayout.Space(2f);
+            DrawRootSection();
+            EditorGUILayout.Space(8f);
+            EditorGUILayout.LabelField(L("section.editor_tool"), _groupHeaderStyle);
+            DrawTopDivider();
+            EditorGUILayout.Space(2f);
+            DrawToolSection();
         }
 
         private void EnsureStyles()
@@ -257,11 +270,21 @@ namespace Box3Blocks.Editor
 
             if (_insetPanelStyle == null)
             {
-                _insetPanelStyle = new GUIStyle("HelpBox")
+                _insetPanelStyle = new GUIStyle(GUIStyle.none)
                 {
-                    padding = new RectOffset(8, 8, 8, 8),
+                    padding = new RectOffset(4, 4, 4, 4),
                     margin = new RectOffset(0, 0, 0, 0)
                 };
+            }
+
+            if (_groupHeaderStyle == null)
+            {
+                _groupHeaderStyle = new GUIStyle(EditorStyles.boldLabel)
+                {
+                    fontSize = 11,
+                    fontStyle = FontStyle.Bold
+                };
+                _groupHeaderStyle.normal.textColor = new Color(0.84f, 0.9f, 1f, 1f);
             }
 
             if (_cardBoxStyle == null)
@@ -298,7 +321,7 @@ namespace Box3Blocks.Editor
                 _cardSubtitleStyle = new GUIStyle(EditorStyles.miniLabel)
                 {
                     alignment = TextAnchor.UpperCenter,
-                    wordWrap = true
+                    wordWrap = true,
                 };
                 _cardSubtitleStyle.normal.textColor = new Color(0.78f, 0.78f, 0.78f, 1f);
             }
@@ -320,6 +343,20 @@ namespace Box3Blocks.Editor
             }
         }
 
+        private void DrawFoldoutSection(string title, Action body, ref bool expanded)
+        {
+            expanded = EditorGUILayout.BeginFoldoutHeaderGroup(expanded, title);
+            if (expanded)
+            {
+                using (new EditorGUILayout.VerticalScope(_sectionBoxStyle))
+                {
+                    EditorGUILayout.Space(2f);
+                    body?.Invoke();
+                }
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+        }
+
         private void DrawSection(string title, Action body)
         {
             using (new EditorGUILayout.VerticalScope(_sectionBoxStyle))
@@ -328,6 +365,12 @@ namespace Box3Blocks.Editor
                 EditorGUILayout.Space(4f);
                 body?.Invoke();
             }
+        }
+
+        private static void DrawTopDivider()
+        {
+            Rect rect = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true));
+            EditorGUI.DrawRect(rect, new Color(1f, 1f, 1f, 0.12f));
         }
 
         private void DrawRootSection()
@@ -408,6 +451,7 @@ namespace Box3Blocks.Editor
         {
             using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
+                bool showCategorySidebar = _categories.Count > 0 && position.width >= 860f;
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     string newSearch = EditorGUILayout.TextField(L("library.search"), _search, _searchFieldStyle);
@@ -418,10 +462,30 @@ namespace Box3Blocks.Editor
                     }
                 }
 
+                EditorGUILayout.Space(4f);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (!showCategorySidebar && _categories.Count > 0)
+                    {
+                        string[] categoryLabels = new string[_categories.Count];
+                        for (int i = 0; i < _categories.Count; i++)
+                        {
+                            categoryLabels[i] = LocalizeCategoryLabel(_categories[i]);
+                        }
+
+                        int nextCategory = EditorGUILayout.Popup(_selectedCategory, categoryLabels, GUILayout.Width(180f));
+                        if (nextCategory != _selectedCategory)
+                        {
+                            _selectedCategory = nextCategory;
+                            ApplyFilter();
+                        }
+                    }
+                }
+
                 EditorGUILayout.Space(6f);
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    if (_categories.Count > 0)
+                    if (showCategorySidebar)
                     {
                         DrawCategoryTabsSidebar();
                         GUILayout.Space(8f);
@@ -429,7 +493,7 @@ namespace Box3Blocks.Editor
 
                     using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
                     {
-                        float rightPaneWidth = Mathf.Max(220f, position.width - (_categories.Count > 0 ? 158f : 34f));
+                        float rightPaneWidth = Mathf.Max(220f, position.width - (showCategorySidebar ? 145f : 34f));
                         int columns = CalculateColumnCount(rightPaneWidth);
                         Vector2 prevScroll = _scroll;
                         _scroll = GUILayout.BeginScrollView(
@@ -566,8 +630,8 @@ namespace Box3Blocks.Editor
                 DestroyImmediate(cardPreview);
             }
 
-            Rect titleRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, 34f);
-            Rect subtitleRect = new Rect(rect.x + 6f, previewRect.yMax + 36f, rect.width - 12f, rect.height - (PreviewSize + 46f));
+            Rect titleRect = new Rect(rect.x + 6f, previewRect.yMax + 6f, rect.width - 12f, 30f);
+            Rect subtitleRect = new Rect(rect.x + 6f, previewRect.yMax + 28f, rect.width - 12f, rect.height - (PreviewSize + 37f));
             GUIStyle titleStyle = _selectedIndex == index ? _cardTitleSelectedStyle : _cardTitleStyle;
             GUIStyle subtitleStyle = _selectedIndex == index ? _cardSubtitleSelectedStyle : _cardSubtitleStyle;
             EditorGUI.LabelField(titleRect, title, titleStyle);
