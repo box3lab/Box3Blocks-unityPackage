@@ -345,16 +345,15 @@ namespace Box3Blocks.Editor
                 {
                     CreateRoot();
                 }
-
+                if (GUILayout.Button(L("builder.chunk.window.title"), _primaryButtonStyle))
+                {
+                    Box3BlocksChunkBuildWindow.OpenFromBuilder(_root, _generateCollider, _toolColliderMode);
+                }
                 if (GUILayout.Button(L("root.clear"), _dangerButtonStyle))
                 {
                     ClearRoot();
                 }
 
-                if (GUILayout.Button(L("builder.chunk.window.title"), _primaryButtonStyle))
-                {
-                    Box3BlocksChunkBuildWindow.OpenFromBuilder(_root, _generateCollider, _toolColliderMode);
-                }
             }
 
         }
