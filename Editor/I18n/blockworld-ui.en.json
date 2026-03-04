@@ -261,18 +261,7 @@
       "key": "voxel.group.performance",
       "value": "Performance"
     },
-    {
-      "key": "voxel.option.import_mode",
-      "value": "Import Mode"
-    },
-    {
-      "key": "voxel.mode.chunk",
-      "value": "Chunk (Recommended)"
-    },
-    {
-      "key": "voxel.mode.single_block",
-      "value": "Single Block (Editable)"
-    },
+
     {
       "key": "voxel.option.replace_previous",
       "value": "Replace previous __VoxelImportGz"
@@ -309,14 +298,7 @@
       "key": "voxel.option.chunks_per_tick",
       "value": "Chunks per Tick"
     },
-    {
-      "key": "voxel.option.alpha_clip",
-      "value": "Chunk: Use Alpha Clip (fix transparent artifacts)"
-    },
-    {
-      "key": "voxel.option.alpha_cutoff",
-      "value": "Chunk Alpha Cutoff"
-    },
+
     {
       "key": "voxel.option.chunk_merge_animated_static",
       "value": "Chunk: merge animated blocks as static"
@@ -448,6 +430,82 @@
     {
       "key": "voxel.err.url_empty",
       "value": "URL is empty."
+    },
+    {
+      "key": "builder.chunk.window.title",
+      "value": "Generate Chunk"
+    },
+    {
+      "key": "builder.chunk.section.title",
+      "value": "Chunk Build Settings"
+    },
+    {
+      "key": "builder.chunk.source_root",
+      "value": "Source Root"
+    },
+    {
+      "key": "builder.chunk.target_parent",
+      "value": "Target Parent"
+    },
+    {
+      "key": "builder.chunk.origin_offset",
+      "value": "Origin Offset"
+    },
+    {
+      "key": "builder.chunk.group.basic",
+      "value": "Basic Options"
+    },
+    {
+      "key": "builder.chunk.ignore_barrier",
+      "value": "Ignore Barrier"
+    },
+    {
+      "key": "builder.chunk.clear_previous",
+      "value": "Clear Previous"
+    },
+    {
+      "key": "builder.chunk.delete_source_after_build",
+      "value": "Delete Source Blocks After Build"
+    },
+    {
+      "key": "builder.chunk.group.build",
+      "value": "Build Parameters"
+    },
+    {
+      "key": "builder.chunk.realtime_light",
+      "value": "Realtime Light"
+    },
+    {
+      "key": "builder.chunk.collider_mode",
+      "value": "Collider Mode"
+    },
+    {
+      "key": "builder.chunk.chunk_size",
+      "value": "Chunk Size"
+    },
+    {
+      "key": "builder.chunk.chunks_per_tick",
+      "value": "Chunks Per Tick"
+    },
+    {
+      "key": "builder.chunk.voxels_per_tick",
+      "value": "Voxels Per Tick"
+    },
+    {
+      "key": "builder.chunk.run",
+      "value": "Start Build"
+    },
+    {
+      "key": "builder.chunk.err.source_root_empty",
+      "value": "Source Root cannot be empty."
+    },
+    {
+      "key": "builder.chunk.done",
+      "value": "Chunk build completed."
+    },
+    {
+      "key": "builder.chunk.err.failed",
+      "value": "Build failed. Please check Root or input settings."
     },
     {
       "key": "atlas.window.title",

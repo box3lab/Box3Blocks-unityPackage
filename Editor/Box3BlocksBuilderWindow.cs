@@ -350,6 +350,11 @@ namespace Box3Blocks.Editor
                 {
                     ClearRoot();
                 }
+
+                if (GUILayout.Button(L("builder.chunk.window.title"), _primaryButtonStyle))
+                {
+                    Box3BlocksChunkBuildWindow.OpenFromBuilder(_root, _generateCollider, _toolColliderMode);
+                }
             }
 
         }
@@ -529,8 +534,7 @@ namespace Box3Blocks.Editor
                 info = string.IsNullOrEmpty(info) ? L("card.transparent") : $"{info} | {L("card.transparent")}";
             }
 
-            string fallbackTitle = string.IsNullOrWhiteSpace(block.displayName) ? block.id : block.displayName;
-            string title = Box3BlocksI18n.GetBlockDisplayName(block.id, fallbackTitle);
+            string title = Box3BlocksI18n.GetBlockDisplayName(block.id);
             string categoryLabel = LocalizeCategoryLabel(block.category);
             string subtitle = string.IsNullOrWhiteSpace(info) ? categoryLabel : $"{categoryLabel} | {info}";
             Rect rect = GUILayoutUtility.GetRect(width, _cardBoxStyle.fixedHeight, GUILayout.Width(width), GUILayout.Height(_cardBoxStyle.fixedHeight));
@@ -2989,6 +2993,17 @@ namespace Box3Blocks.Editor
         {
             Box3BlocksBuilderWindow window = GetApiWindowInstance();
             return window != null && window._spawnPointLightForEmissive;
+        }
+
+        public static Transform GetCurrentRootApi()
+        {
+            Box3BlocksBuilderWindow[] existing = Resources.FindObjectsOfTypeAll<Box3BlocksBuilderWindow>();
+            if (existing == null || existing.Length == 0)
+            {
+                return null;
+            }
+
+            return existing[0]._root;
         }
 
         private static Box3BlocksBuilderWindow GetApiWindowInstance()
