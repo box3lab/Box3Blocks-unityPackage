@@ -87,6 +87,7 @@ namespace Box3Blocks.Editor
         private PreviewRenderUtility _blockCardPreviewUtility;
         private double _nextAnimatedPreviewRepaintTime;
         private readonly EditorCoreBackend _apiCoreBackend;
+        private bool _expandTopTools = true;
 
         public Box3BlocksBuilderWindow()
         {
@@ -161,11 +162,18 @@ namespace Box3Blocks.Editor
             EnsureStyles();
             HandleToolHotkeys(Event.current);
             titleContent = new GUIContent(L("window.title"));
-            DrawSection(L("section.world_root"), DrawRootSection);
-            EditorGUILayout.Space(6f);
-            DrawSection(L("section.editor_tool"), DrawToolSection);
+            DrawFoldoutSection($"{L("section.world_root")} / {L("section.editor_tool")}", DrawTopToolsSection, ref _expandTopTools);
             EditorGUILayout.Space(6f);
             DrawSection(L("section.block_library"), DrawBlockListSection);
+        }
+
+        private void DrawTopToolsSection()
+        {
+            EditorGUILayout.LabelField(L("section.world_root"), _sectionTitleStyle);
+            DrawRootSection();
+            EditorGUILayout.Space(6f);
+            EditorGUILayout.LabelField(L("section.editor_tool"), _sectionTitleStyle);
+            DrawToolSection();
         }
 
         private void EnsureStyles()
@@ -320,6 +328,20 @@ namespace Box3Blocks.Editor
             }
         }
 
+        private void DrawFoldoutSection(string title, Action body, ref bool expanded)
+        {
+            expanded = EditorGUILayout.BeginFoldoutHeaderGroup(expanded, title);
+            if (expanded)
+            {
+                using (new EditorGUILayout.VerticalScope(_sectionBoxStyle))
+                {
+                    EditorGUILayout.Space(2f);
+                    body?.Invoke();
+                }
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+        }
+
         private void DrawSection(string title, Action body)
         {
             using (new EditorGUILayout.VerticalScope(_sectionBoxStyle))
@@ -408,6 +430,7 @@ namespace Box3Blocks.Editor
         {
             using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
             {
+                bool showCategorySidebar = _categories.Count > 0 && position.width >= 860f;
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     string newSearch = EditorGUILayout.TextField(L("library.search"), _search, _searchFieldStyle);
@@ -418,10 +441,30 @@ namespace Box3Blocks.Editor
                     }
                 }
 
+                EditorGUILayout.Space(4f);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (!showCategorySidebar && _categories.Count > 0)
+                    {
+                        string[] categoryLabels = new string[_categories.Count];
+                        for (int i = 0; i < _categories.Count; i++)
+                        {
+                            categoryLabels[i] = LocalizeCategoryLabel(_categories[i]);
+                        }
+
+                        int nextCategory = EditorGUILayout.Popup(_selectedCategory, categoryLabels, GUILayout.Width(180f));
+                        if (nextCategory != _selectedCategory)
+                        {
+                            _selectedCategory = nextCategory;
+                            ApplyFilter();
+                        }
+                    }
+                }
+
                 EditorGUILayout.Space(6f);
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    if (_categories.Count > 0)
+                    if (showCategorySidebar)
                     {
                         DrawCategoryTabsSidebar();
                         GUILayout.Space(8f);
@@ -429,7 +472,7 @@ namespace Box3Blocks.Editor
 
                     using (new EditorGUILayout.VerticalScope(_insetPanelStyle))
                     {
-                        float rightPaneWidth = Mathf.Max(220f, position.width - (_categories.Count > 0 ? 158f : 34f));
+                        float rightPaneWidth = Mathf.Max(220f, position.width - (showCategorySidebar ? 145f : 34f));
                         int columns = CalculateColumnCount(rightPaneWidth);
                         Vector2 prevScroll = _scroll;
                         _scroll = GUILayout.BeginScrollView(
