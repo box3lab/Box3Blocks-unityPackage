@@ -250,6 +250,42 @@
       "value": "Export complete. Blocks: {0}, Skipped unknown: {1}"
     },
     {
+      "key": "voxel.cleanup_import.title",
+      "value": "Cleanup Import Meshes"
+    },
+    {
+      "key": "voxel.cleanup_import.err.folder_missing",
+      "value": "Folder not found: {0}"
+    },
+    {
+      "key": "voxel.cleanup_import.none",
+      "value": "No meshes found in Import folder."
+    },
+    {
+      "key": "voxel.cleanup_import.confirm",
+      "value": "Scan and clean unreferenced meshes in Import folder.\nFolder: {0}\nMesh count: {1}"
+    },
+    {
+      "key": "voxel.cleanup_import.run",
+      "value": "Clean"
+    },
+    {
+      "key": "voxel.cleanup_import.cancel",
+      "value": "Cancel"
+    },
+    {
+      "key": "voxel.cleanup_import.scan_only",
+      "value": "Scan Only"
+    },
+    {
+      "key": "voxel.cleanup_import.result_cleanup",
+      "value": "Cleanup finished.\nTotal: {0}\nDeleted: {1}\nReferenced kept: {2}"
+    },
+    {
+      "key": "voxel.cleanup_import.result_scan",
+      "value": "Scan finished.\nTotal: {0}\nUnreferenced: {1}\nReferenced: {2}"
+    },
+    {
       "key": "voxel.option.ignore_barrier",
       "value": "Ignore Barrier blocks"
     },

@@ -155,6 +155,68 @@ namespace Box3Blocks.Editor
             GetWindow<Box3BlocksGzImportWindow>(L("voxel.window.title"));
         }
 
+        [MenuItem("Box3/资源/清理未引用 Import 网格", false, 41)]
+        public static void CleanupUnreferencedImportMeshesMenu()
+        {
+            if (!AssetDatabase.IsValidFolder(GeneratedMeshFolder))
+            {
+                EditorUtility.DisplayDialog(L("voxel.cleanup_import.title"), Lf("voxel.cleanup_import.err.folder_missing", GeneratedMeshFolder), L("dialog.ok"));
+                return;
+            }
+
+            string[] guids = AssetDatabase.FindAssets("t:Mesh", new[] { GeneratedMeshFolder });
+            if (guids == null || guids.Length == 0)
+            {
+                EditorUtility.DisplayDialog(L("voxel.cleanup_import.title"), L("voxel.cleanup_import.none"), L("dialog.ok"));
+                return;
+            }
+
+            int confirm = EditorUtility.DisplayDialogComplex(
+                L("voxel.cleanup_import.title"),
+                Lf("voxel.cleanup_import.confirm", GeneratedMeshFolder, guids.Length),
+                L("voxel.cleanup_import.run"),
+                L("voxel.cleanup_import.cancel"),
+                L("voxel.cleanup_import.scan_only"));
+            if (confirm == 1)
+            {
+                return;
+            }
+
+            HashSet<string> used = CollectUsedImportMeshPaths();
+            int total = 0;
+            int deleted = 0;
+            for (int i = 0; i < guids.Length; i++)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guids[i]);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+
+                total++;
+                if (used.Contains(path))
+                {
+                    continue;
+                }
+
+                if (confirm == 0 && AssetDatabase.DeleteAsset(path))
+                {
+                    deleted++;
+                }
+            }
+
+            if (confirm == 0 && deleted > 0)
+            {
+                AssetDatabase.Refresh();
+            }
+
+            int unreferenced = Mathf.Max(0, total - used.Count);
+            string detail = confirm == 0
+                ? Lf("voxel.cleanup_import.result_cleanup", total, deleted, Mathf.Max(0, total - deleted))
+                : Lf("voxel.cleanup_import.result_scan", total, unreferenced, Mathf.Max(0, total - unreferenced));
+            EditorUtility.DisplayDialog(L("voxel.cleanup_import.title"), detail, L("dialog.ok"));
+        }
+
         public static bool ImportChunkFromFileApi(
             string gzFilePath,
             Transform parent,
@@ -1846,6 +1908,96 @@ namespace Box3Blocks.Editor
             }
 
             return fileName.StartsWith(GeneratedMeshNamePrefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static HashSet<string> CollectUsedImportMeshPaths()
+        {
+            HashSet<string> used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            MeshFilter[] meshFilters = UnityEngine.Object.FindObjectsOfType<MeshFilter>(true);
+            for (int i = 0; i < meshFilters.Length; i++)
+            {
+                MeshFilter mf = meshFilters[i];
+                if (mf == null || mf.sharedMesh == null)
+                {
+                    continue;
+                }
+
+                string path = AssetDatabase.GetAssetPath(mf.sharedMesh);
+                if (!string.IsNullOrWhiteSpace(path) && path.StartsWith(GeneratedMeshFolder, StringComparison.OrdinalIgnoreCase))
+                {
+                    used.Add(path);
+                }
+            }
+
+            MeshCollider[] meshColliders = UnityEngine.Object.FindObjectsOfType<MeshCollider>(true);
+            for (int i = 0; i < meshColliders.Length; i++)
+            {
+                MeshCollider mc = meshColliders[i];
+                if (mc == null || mc.sharedMesh == null)
+                {
+                    continue;
+                }
+
+                string path = AssetDatabase.GetAssetPath(mc.sharedMesh);
+                if (!string.IsNullOrWhiteSpace(path) && path.StartsWith(GeneratedMeshFolder, StringComparison.OrdinalIgnoreCase))
+                {
+                    used.Add(path);
+                }
+            }
+
+            SkinnedMeshRenderer[] skinnedRenderers = UnityEngine.Object.FindObjectsOfType<SkinnedMeshRenderer>(true);
+            for (int i = 0; i < skinnedRenderers.Length; i++)
+            {
+                SkinnedMeshRenderer sr = skinnedRenderers[i];
+                if (sr == null || sr.sharedMesh == null)
+                {
+                    continue;
+                }
+
+                string path = AssetDatabase.GetAssetPath(sr.sharedMesh);
+                if (!string.IsNullOrWhiteSpace(path) && path.StartsWith(GeneratedMeshFolder, StringComparison.OrdinalIgnoreCase))
+                {
+                    used.Add(path);
+                }
+            }
+
+            string[] allAssetPaths = AssetDatabase.GetAllAssetPaths();
+            for (int i = 0; i < allAssetPaths.Length; i++)
+            {
+                string assetPath = allAssetPaths[i];
+                if (!assetPath.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (assetPath.StartsWith(GeneratedMeshFolder, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!(assetPath.EndsWith(".unity", StringComparison.OrdinalIgnoreCase)
+                    || assetPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase)
+                    || assetPath.EndsWith(".asset", StringComparison.OrdinalIgnoreCase)
+                    || assetPath.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)
+                    || assetPath.EndsWith(".controller", StringComparison.OrdinalIgnoreCase)
+                    || assetPath.EndsWith(".overrideController", StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                string[] deps = AssetDatabase.GetDependencies(assetPath, true);
+                for (int d = 0; d < deps.Length; d++)
+                {
+                    string dep = deps[d];
+                    if (!string.IsNullOrWhiteSpace(dep) && dep.StartsWith(GeneratedMeshFolder, StringComparison.OrdinalIgnoreCase))
+                    {
+                        used.Add(dep);
+                    }
+                }
+            }
+
+            return used;
         }
 
         private PreparedBlock GetOrBuildPreparedBlock(string blockName)
