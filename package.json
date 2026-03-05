@@ -1,8 +1,8 @@
 {
   "name": "com.box3lab.box3",
   "version": "0.1.0",
-  "displayName": "Box3Blocks（神岛材质包）",
-  "description": "Box3 方块编辑工具包 / Box3 Blocks Toolkit\n▪ 可视化搭建与编辑\n▪ 地形导入/导出\n▪ 图集与材质自动生成\n▪ 支持编辑器与运行时 API 二次开发\n▪ Visual block world building and editing\n▪ Import/export terrain data\n▪ Automatic atlas and material generation\n▪ Reusable APIs for both Editor and Runtime",
+  "displayName": "Box3Blocks",
+  "description": "Box3 方块编辑工具包 / Box3 Blocks Toolkit\n▪ 可视化搭建与编辑\n▪ 地形导入/导出\n▪ 图集与材质自动生成\n▪ 支持编辑器与运行时 API 二次开发\n\n▪ Visual block world building and editing\n▪ Import/export terrain data\n▪ Automatic atlas and material generation\n▪ Reusable APIs for both Editor and Runtime",
   "unity": "2022.3",
   "license": "Apache-2.0",
   "hideInEditor": false,
@@ -10,13 +10,13 @@
   "documentationUrl": "https://docs.box3lab.com/unity-package",
   "samples": [
     {
-      "displayName": "Editor Noise Terrain Demo",
-      "description": "Editor sample for noise-based terrain generation with Box3Api.",
+      "displayName": "编辑器噪声地形示例",
+      "description": "基于噪声的地形生成的编辑器示例。",
       "path": "Samples~/EditorApiDemo"
     },
     {
-      "displayName": "Runtime Place/Erase Demo",
-      "description": "Runtime sample for block placement and erase testing with Box3Api.",
+      "displayName": "运行时放置/删除示例",
+      "description": "方块放置与删除测试的运行时示例。",
       "path": "Samples~/RuntimeApiDemo"
     }
   ],
