@@ -9,6 +9,7 @@
     { "key": "root.clear", "value": "清空根节点" },
     { "key": "root.clean_materials", "value": "清理材质" },
     { "key": "root.chunk_size", "value": "Chunk 尺寸" },
+    { "key": "root.auto_chunk_preview", "value": "实时自动 Chunk 预览（编辑时自动重建）" },
     { "key": "dialog.ok", "value": "确定" },
     { "key": "runtime.catalog.dialog.title", "value": "Box3 运行时" },
     {
@@ -83,6 +84,27 @@
     {
       "key": "voxel.export.done",
       "value": "导出完成。方块数: {0}，跳过未知: {1}"
+    },
+    { "key": "voxel.cleanup_import.title", "value": "清理 Import 网格" },
+    {
+      "key": "voxel.cleanup_import.err.folder_missing",
+      "value": "目录不存在：{0}"
+    },
+    { "key": "voxel.cleanup_import.none", "value": "Import 目录没有可清理的 Mesh。" },
+    {
+      "key": "voxel.cleanup_import.confirm",
+      "value": "将检测并清理未被引用的 Import Mesh。\n目录：{0}\n当前 Mesh 数量：{1}"
+    },
+    { "key": "voxel.cleanup_import.run", "value": "开始清理" },
+    { "key": "voxel.cleanup_import.cancel", "value": "取消" },
+    { "key": "voxel.cleanup_import.scan_only", "value": "仅检测" },
+    {
+      "key": "voxel.cleanup_import.result_cleanup",
+      "value": "清理完成。\n总数: {0}\n已删除: {1}\n仍被引用: {2}"
+    },
+    {
+      "key": "voxel.cleanup_import.result_scan",
+      "value": "检测完成。\n总数: {0}\n未引用: {1}\n被引用: {2}"
     },
     { "key": "voxel.option.ignore_barrier", "value": "忽略屏障方块" },
     { "key": "voxel.group.general", "value": "通用选项" },

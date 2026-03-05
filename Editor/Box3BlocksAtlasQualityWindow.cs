@@ -26,7 +26,7 @@ namespace Box3Blocks.Editor
             Box3AtlasQuality.Q256
         };
 
-        [MenuItem("Box3/图集质量", false, 250)]
+        [MenuItem("Box3/资源/图集质量", false, 250)]
         private static void Open()
         {
             GetWindow<Box3BlocksAtlasQualityWindow>(L("atlas.window.title"));

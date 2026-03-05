@@ -89,6 +89,16 @@ namespace Box3Blocks.Editor
         private double _nextAnimatedPreviewRepaintTime;
         private readonly EditorCoreBackend _apiCoreBackend;
         private bool _expandTopTools = true;
+        private bool _autoChunkPreviewEnabled;
+        private int _autoChunkSize = 32;
+        private bool _autoChunkDirty;
+        private double _autoChunkNextRebuildTime;
+        private bool _autoChunkRebuilding;
+        private Transform _autoChunkPreviewParent;
+        private const string AutoChunkPreviewRootName = "__AutoChunkPreview";
+        private const double AutoChunkDebounceSec = 0.2d;
+        private const int AutoChunkChunksPerTick = 16;
+        private const int AutoChunkVoxelsPerTick = 120000;
 
         public Box3BlocksBuilderWindow()
         {
@@ -104,6 +114,7 @@ namespace Box3Blocks.Editor
         private void OnEnable()
         {
             SceneView.duringSceneGui += OnSceneGUI;
+            EditorApplication.update += OnAutoChunkUpdate;
             _blockLookupDirty = true;
             ReloadBlockLibrary();
         }
@@ -111,6 +122,7 @@ namespace Box3Blocks.Editor
         private void OnDisable()
         {
             SceneView.duringSceneGui -= OnSceneGUI;
+            EditorApplication.update -= OnAutoChunkUpdate;
             _blockLookup.Clear();
             _blockLookupRoot = null;
             _blockLookupDirty = true;
@@ -378,8 +390,13 @@ namespace Box3Blocks.Editor
             Transform newRoot = (Transform)EditorGUILayout.ObjectField(L("root.root"), _root, typeof(Transform), true);
             if (newRoot != _root)
             {
+                RestoreSourceRenderersVisibility();
                 _root = newRoot;
                 _blockLookupDirty = true;
+                if (_autoChunkPreviewEnabled)
+                {
+                    MarkAutoChunkDirty();
+                }
             }
 
             using (new EditorGUILayout.HorizontalScope())
@@ -397,6 +414,20 @@ namespace Box3Blocks.Editor
                     ClearRoot();
                 }
 
+            }
+
+            EditorGUILayout.Space(4f);
+            _autoChunkPreviewEnabled = EditorGUILayout.ToggleLeft(L("root.auto_chunk_preview"), _autoChunkPreviewEnabled);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField(L("root.chunk_size"), _subtleLabelStyle, GUILayout.Width(74f));
+                _autoChunkSize = Mathf.Clamp(EditorGUILayout.IntField(_autoChunkSize, GUILayout.Width(58f)), 8, 64);
+            }
+
+            if (!_autoChunkPreviewEnabled)
+            {
+                ClearAutoChunkPreview();
+                RestoreSourceRenderersVisibility();
             }
 
         }
@@ -1215,6 +1246,7 @@ namespace Box3Blocks.Editor
             RefreshTransparentAround(position);
             RefreshOcclusionAround(position);
             EditorUtility.SetDirty(go);
+            MarkAutoChunkDirty();
             return true;
         }
 
@@ -1242,6 +1274,7 @@ namespace Box3Blocks.Editor
             Vector3Int origin = hitBlock != null ? Vector3Int.RoundToInt(hitBlock.transform.position) : fallbackPosition;
             List<Vector3Int> positions = BuildPlaceBrushPositions(origin, brushNormal);
             HashSet<Vector3Int> refresh = new HashSet<Vector3Int>();
+            bool erasedAny = false;
             for (int i = 0; i < positions.Count; i++)
             {
                 GameObject target = FindBlockAt(positions[i]);
@@ -1253,12 +1286,18 @@ namespace Box3Blocks.Editor
                 UnregisterBlockInLookup(positions[i], target);
                 Undo.DestroyObjectImmediate(target);
                 refresh.Add(positions[i]);
+                erasedAny = true;
             }
 
             foreach (Vector3Int pos in refresh)
             {
                 RefreshTransparentAround(pos);
                 RefreshOcclusionAround(pos);
+            }
+
+            if (erasedAny)
+            {
+                MarkAutoChunkDirty();
             }
         }
 
@@ -1315,6 +1354,7 @@ namespace Box3Blocks.Editor
         {
             Vector3Int origin = hitBlock != null ? Vector3Int.RoundToInt(hitBlock.transform.position) : fallbackPosition;
             List<Vector3Int> positions = BuildBrushPositions(origin);
+            bool rotatedAny = false;
             for (int i = 0; i < positions.Count; i++)
             {
                 GameObject target = FindBlockAt(positions[i]);
@@ -1327,6 +1367,12 @@ namespace Box3Blocks.Editor
                 target.transform.Rotate(0f, 90f, 0f, Space.World);
                 EditorUtility.SetDirty(target.transform);
                 UpdateTransparentBlockMesh(target);
+                rotatedAny = true;
+            }
+
+            if (rotatedAny)
+            {
+                MarkAutoChunkDirty();
             }
         }
 
@@ -1564,6 +1610,7 @@ namespace Box3Blocks.Editor
             _root = go.transform;
             _blockLookupDirty = true;
             Selection.activeObject = go;
+            MarkAutoChunkDirty();
         }
 
         private void ClearRoot()
@@ -1579,6 +1626,172 @@ namespace Box3Blocks.Editor
             }
 
             _blockLookupDirty = true;
+            MarkAutoChunkDirty();
+        }
+
+        private void OnAutoChunkUpdate()
+        {
+            if (!_autoChunkPreviewEnabled || _root == null)
+            {
+                return;
+            }
+
+            if (!_autoChunkDirty || _autoChunkRebuilding)
+            {
+                return;
+            }
+
+            if (EditorApplication.timeSinceStartup < _autoChunkNextRebuildTime)
+            {
+                return;
+            }
+
+            RebuildAutoChunkPreviewNow();
+        }
+
+        private void MarkAutoChunkDirty(bool forceImmediate = false)
+        {
+            if (!_autoChunkPreviewEnabled || _root == null)
+            {
+                return;
+            }
+
+            _autoChunkDirty = true;
+            _autoChunkNextRebuildTime = forceImmediate
+                ? EditorApplication.timeSinceStartup
+                : EditorApplication.timeSinceStartup + AutoChunkDebounceSec;
+            SetSourceRenderersVisible(false);
+        }
+
+        private void RebuildAutoChunkPreviewNow()
+        {
+            if (_root == null)
+            {
+                return;
+            }
+
+            if (Box3BlocksAssetFactory.GetOrCreateCubeMesh() == null || Box3BlocksAssetFactory.GetAtlasMaterial() == null)
+            {
+                return;
+            }
+
+            _autoChunkRebuilding = true;
+            try
+            {
+                Transform previewParent = GetOrCreateAutoChunkPreviewParent();
+                if (previewParent == null)
+                {
+                    return;
+                }
+
+                bool ok = Box3BlocksGzImportWindow.ImportChunkFromRootApi(
+                    _root,
+                    previewParent,
+                    Vector3Int.zero,
+                    false,
+                    true,
+                    0,
+                    Box3ColliderMode.None,
+                    Mathf.Clamp(_autoChunkSize, 8, 64),
+                    Mathf.Clamp(AutoChunkChunksPerTick, 1, 64),
+                    Mathf.Clamp(AutoChunkVoxelsPerTick, 4000, 200000),
+                    false);
+                if (!ok)
+                {
+                    return;
+                }
+
+                _autoChunkDirty = false;
+                SetSourceRenderersVisible(false);
+            }
+            finally
+            {
+                _autoChunkRebuilding = false;
+            }
+        }
+
+        private Transform GetOrCreateAutoChunkPreviewParent()
+        {
+            if (_root == null)
+            {
+                return null;
+            }
+
+            if (_autoChunkPreviewParent != null)
+            {
+                return _autoChunkPreviewParent;
+            }
+
+            Transform existing = _root.Find(AutoChunkPreviewRootName);
+            if (existing != null)
+            {
+                _autoChunkPreviewParent = existing;
+                return _autoChunkPreviewParent;
+            }
+
+            GameObject go = new GameObject(AutoChunkPreviewRootName);
+            go.transform.SetParent(_root, false);
+            _autoChunkPreviewParent = go.transform;
+            return _autoChunkPreviewParent;
+        }
+
+        private void ClearAutoChunkPreview()
+        {
+            if (_root == null)
+            {
+                _autoChunkPreviewParent = null;
+                return;
+            }
+
+            Transform p = _autoChunkPreviewParent != null ? _autoChunkPreviewParent : _root.Find(AutoChunkPreviewRootName);
+            if (p != null)
+            {
+                Undo.DestroyObjectImmediate(p.gameObject);
+            }
+
+            _autoChunkPreviewParent = null;
+            _autoChunkDirty = false;
+            _autoChunkRebuilding = false;
+        }
+
+        private void SetSourceRenderersVisible(bool visible)
+        {
+            if (_root == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < _root.childCount; i++)
+            {
+                Transform child = _root.GetChild(i);
+                if (child == null || string.Equals(child.name, AutoChunkPreviewRootName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                Box3BlocksPlacedBlock marker = child.GetComponent<Box3BlocksPlacedBlock>();
+                if (marker == null)
+                {
+                    continue;
+                }
+
+                MeshRenderer renderer = child.GetComponent<MeshRenderer>();
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                if (renderer.enabled != visible)
+                {
+                    renderer.enabled = visible;
+                    EditorUtility.SetDirty(renderer);
+                }
+            }
+        }
+
+        private void RestoreSourceRenderersVisibility()
+        {
+            SetSourceRenderersVisible(true);
         }
 
         private List<Box3BlocksPlacedBlock> CollectPlacedBlocksFromRoot()
