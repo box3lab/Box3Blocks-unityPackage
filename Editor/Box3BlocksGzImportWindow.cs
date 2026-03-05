@@ -19,6 +19,7 @@ namespace Box3Blocks.Editor
         private const string BlockIdPath = "Packages/com.box3lab.box3/Editor/SourceAssets/block-id.json";
         private const string BlockSpecPath = "Packages/com.box3lab.box3/Editor/SourceAssets/block-spec.json";
         private const string GeneratedMeshFolder = "Assets/Box3/Meshes/Import";
+        private const string GeneratedMeshNamePrefix = "__box3gen__";
         private const string GeneratedMaterialFolder = "Assets/Box3/Materials";
         private const string ChunkOpaqueMaterialPath = "Assets/Box3/Materials/M_Block_Chunk_Opaque.mat";
         private const string ChunkTransparentMaterialPath = "Assets/Box3/Materials/M_Block_Chunk_Transparent.mat";
@@ -1293,7 +1294,8 @@ namespace Box3Blocks.Editor
                 MeshFilter mergedFilter = mergedGo.AddComponent<MeshFilter>();
                 MeshRenderer mergedRenderer = mergedGo.AddComponent<MeshRenderer>();
 
-                string assetPath = $"{GeneratedMeshFolder}/{mergedName}_{mergedIndex}.asset";
+                string parentName = _parent != null ? SanitizeName(_parent.name) : "Root";
+                string assetPath = $"{GeneratedMeshFolder}/{GeneratedMeshNamePrefix}{parentName}_{mergedName}_{mergedIndex}.asset";
                 if (AssetDatabase.LoadAssetAtPath<Mesh>(assetPath) != null)
                 {
                     AssetDatabase.DeleteAsset(assetPath);
@@ -1802,17 +1804,13 @@ namespace Box3Blocks.Editor
             _importRoot = importRootGo.transform;
 
             EnsureAssetFolderPath(GeneratedMeshFolder);
-            if (_clearPrevious)
-            {
-                CleanupGeneratedChunkMeshes();
-            }
         }
 
         private string BuildChunkMeshAssetPath(ChunkKey key, int index, string suffix)
         {
             string parentName = _parent != null ? SanitizeName(_parent.name) : "Root";
             string safeSuffix = string.IsNullOrWhiteSpace(suffix) ? "chunk" : suffix;
-            string name = $"{parentName}_chunk_{key.x}_{key.y}_{key.z}_{safeSuffix}_{index}.asset";
+            string name = $"{GeneratedMeshNamePrefix}{parentName}_chunk_{key.x}_{key.y}_{key.z}_{safeSuffix}_{index}.asset";
             return $"{GeneratedMeshFolder}/{name}";
         }
 
@@ -1822,11 +1820,32 @@ namespace Box3Blocks.Editor
             for (int i = 0; i < guids.Length; i++)
             {
                 string path = AssetDatabase.GUIDToAssetPath(guids[i]);
-                if (!string.IsNullOrWhiteSpace(path))
+                if (IsManagedGeneratedChunkMeshPath(path))
                 {
                     AssetDatabase.DeleteAsset(path);
                 }
             }
+        }
+
+        private static bool IsManagedGeneratedChunkMeshPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            if (!path.StartsWith(GeneratedMeshFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            string fileName = Path.GetFileName(path);
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return false;
+            }
+
+            return fileName.StartsWith(GeneratedMeshNamePrefix, StringComparison.OrdinalIgnoreCase);
         }
 
         private PreparedBlock GetOrBuildPreparedBlock(string blockName)

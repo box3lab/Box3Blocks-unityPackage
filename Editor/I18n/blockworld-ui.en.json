@@ -37,6 +37,10 @@
       "value": "Chunk Size"
     },
     {
+      "key": "root.auto_chunk_preview",
+      "value": "Realtime Auto Chunk Preview (Rebuild While Editing)"
+    },
+    {
       "key": "dialog.ok",
       "value": "OK"
     },
